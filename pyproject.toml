@@ -1,0 +1,78 @@
+[tool.poetry]
+name = "django-async-backend"
+version = "0.0.1"
+description = "Django extension providing async capabilities for database and other components"
+readme = "README.md"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache License",
+    "Operating System :: OS Independent",
+
+    "Framework :: AsyncIO",
+
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+
+    "Topic :: Internet",
+    "Topic :: Utilities",
+    "Topic :: Software Development :: Libraries",
+
+    "Typing :: Typed"
+]
+keywords = [
+  "django",
+  "asyncio",
+  "database",
+]
+license = "MIT"
+homepage = "https://github.com/Arfey/django-async-backend"
+documentation = "https://github.com/Arfey/django-async-backend/blob/main/README.md"
+repository = "https://github.com/Arfey/django-async-backend"
+
+[tool.poetry.dependencies]
+python = ">=3.12"
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 79
+
+[tool.isort]
+line_length = 80
+multi_line_output = 3
+include_trailing_comma = true
+use_parentheses = true
+ensure_newline_before_comments = true
+force_grid_wrap = 2
+extend_skip_glob = ["*/migrations/*", "env/*"]
+
+[tool.flake8]
+max-line-length = 80
+max-complexity = 12
+exclude = [
+    ".git",
+    "env/",
+]
+
+[tool.bandit]
+exclude_dirs = ["env", ".cache", "tests", ".mypy_cache"]
+
+[tool.mypy]
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_untyped_defs = true
+follow_imports = "silent"
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "*.tests.*"
+ignore_errors = true
