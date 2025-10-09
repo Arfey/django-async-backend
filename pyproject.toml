@@ -63,6 +63,7 @@ exclude = [
     ".git",
     "env/",
 ]
+extend-ignore = ["S001"]
 
 [tool.bandit]
 exclude_dirs = ["env", ".cache", "tests", ".mypy_cache"]
