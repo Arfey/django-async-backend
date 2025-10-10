@@ -36,6 +36,7 @@ repos:
                 'flake8-print==3.1.4',
                 'flake8-string-format==0.2.3',
                 'flake8-type-checking==3.0.0',
+                'flake8-pyproject==1.2.3',
             ]
     -   repo: https://github.com/PyCQA/bandit
         rev: '1.8.3'
