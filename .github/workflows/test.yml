@@ -76,16 +76,3 @@ jobs:
       run: |
         source .venv/bin/activate
         DJANGO_SETTINGS_MODULE=settings python -m unittest discover -s tests
-
-
-
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "5432:5432"
