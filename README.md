@@ -19,6 +19,7 @@ This project uses a comprehensive test suite powered by `unittest`.
 
 **To run tests:**
 ```bash
+docker-compose up postgres -d
 DJANGO_SETTINGS_MODULE=settings poetry run python -m unittest discover -s tests
 ```
 

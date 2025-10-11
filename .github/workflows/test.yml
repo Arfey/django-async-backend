@@ -27,6 +27,20 @@ jobs:
         os: [ubuntu-latest]
         # os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.12"]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
     steps:
     - uses: actions/checkout@v4
 
@@ -62,3 +76,16 @@ jobs:
       run: |
         source .venv/bin/activate
         DJANGO_SETTINGS_MODULE=settings python -m unittest discover -s tests
+
+
+
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"

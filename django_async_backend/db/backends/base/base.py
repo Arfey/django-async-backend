@@ -20,7 +20,6 @@ from django.db import (
     NotSupportedError,
 )
 
-# from django.db.backends.base.validation import BaseDatabaseValidation
 from django.db.backends.signals import connection_created
 from django.db.backends.utils import debug_transaction
 from django.db.transaction import TransactionManagementError
@@ -52,14 +51,8 @@ class BaseAsyncDatabaseWrapper:
     ops = None
     vendor = "unknown"
     display_name = "unknown"
-    # SchemaEditorClass = None
-    # Classes instantiated in __init__().
-    # client_class = None
-    # creation_class = None
     features_class = None
-    # introspection_class = None
     ops_class = None
-    # validation_class = BaseDatabaseValidation
 
     queries_limit = 9000
 
@@ -124,12 +117,8 @@ class BaseAsyncDatabaseWrapper:
         # call execute(sql, params, many, context).
         self.execute_wrappers = []
 
-        # self.client = self.client_class(self)
-        # self.creation = self.creation_class(self)
         self.features = self.features_class(self)
-        # self.introspection = self.introspection_class(self)
         self.ops = self.ops_class(self)
-        # self.validation = self.validation_class(self)
 
     def __repr__(self):
         return (
@@ -306,11 +295,16 @@ class BaseAsyncDatabaseWrapper:
             wrapped_cursor = self.make_cursor(cursor)
         return wrapped_cursor
 
+    @asynccontextmanager
     async def _cursor(self, name=None):
         await self.close_if_health_check_failed()
         await self.ensure_connection()
+
         with self.wrap_database_errors:
-            return self._prepare_cursor(await self.create_cursor(name))
+            async with self._prepare_cursor(
+                self.create_cursor(name)
+            ) as cursor:
+                yield cursor
 
     async def _commit(self):
         if self.connection is not None:
@@ -535,43 +529,6 @@ class BaseAsyncDatabaseWrapper:
                 "execute queries until the end of the 'atomic' block."
             ) from self.rollback_exc
 
-    # ##### Foreign key constraints checks handling #####
-
-    # @contextmanager
-    # def constraint_checks_disabled(self):
-    #     """
-    #     Disable foreign key constraint checking.
-    #     """
-    #     disabled = self.disable_constraint_checking()
-    #     try:
-    #         yield
-    #     finally:
-    #         if disabled:
-    #             self.enable_constraint_checking()
-
-    # def disable_constraint_checking(self):
-    #     """
-    #     Backends can implement as needed to temporarily disable foreign key
-    #     constraint checking. Should return True if the constraints were
-    #     disabled and will need to be reenabled.
-    #     """
-    #     return False
-
-    # def enable_constraint_checking(self):
-    #     """
-    #     Backends can implement as needed to re-enable foreign key constraint
-    #     checking.
-    #     """
-    #     pass
-
-    # def check_constraints(self, table_names=None):
-    #     """
-    #     Backends can override this method if they can apply constraint
-    #     checking (e.g. via "SET CONSTRAINTS ALL IMMEDIATE"). Should raise an
-    #     IntegrityError if any invalid foreign key references are encountered.
-    #     """
-    #     pass
-
     # ##### Connection termination handling #####
 
     async def is_usable(self):
@@ -667,13 +624,6 @@ class BaseAsyncDatabaseWrapper:
             )
 
     # ##### Miscellaneous #####
-
-    # def prepare_database(self):
-    #     """
-    #     Hook to do any database check or preparation, generally called before
-    #     migrating a project or an app.
-    #     """
-    #     pass
 
     @cached_property
     def wrap_database_errors(self):

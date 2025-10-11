@@ -1,4 +1,6 @@
 from asgiref.sync import iscoroutinefunction
+from django.core.exceptions import ImproperlyConfigured
+from django.db import DEFAULT_DB_ALIAS
 from django.db.utils import ConnectionHandler
 from django.db.utils import DatabaseErrorWrapper as _DatabaseErrorWrapper
 from django.db.utils import load_backend
@@ -26,7 +28,7 @@ class DatabaseErrorWrapper(_DatabaseErrorWrapper):
 
 
 class AsyncConnectionHandler(BaseAsyncConnectionHandler):
-    settings_name = "DATABASES"
+    settings_name = ConnectionHandler.settings_name
     # Connections needs to still be an actual thread local, as it's truly
     # thread-critical. Database backends should use @async_unsafe to protect
     # their code from async contexts, but this will give those contexts
@@ -35,7 +37,43 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
     thread_critical = True
 
     def configure_settings(self, databases):
-        return ConnectionHandler.configure_settings(self, databases)
+        databases = super().configure_settings(databases)
+        if databases == {}:
+            databases[DEFAULT_DB_ALIAS] = {
+                "ENGINE": "django.db.backends.dummy"
+            }
+        elif DEFAULT_DB_ALIAS not in databases:
+            raise ImproperlyConfigured(
+                f"You must define a '{DEFAULT_DB_ALIAS}' database."
+            )
+        elif databases[DEFAULT_DB_ALIAS] == {}:
+            databases[DEFAULT_DB_ALIAS]["ENGINE"] = "django.db.backends.dummy"
+
+        # Configure default settings.
+        for conn in databases.values():
+            conn.setdefault("ATOMIC_REQUESTS", False)
+            conn.setdefault("AUTOCOMMIT", True)
+            conn.setdefault("ENGINE", "django.db.backends.dummy")
+            if conn["ENGINE"] == "django.db.backends." or not conn["ENGINE"]:
+                conn["ENGINE"] = "django.db.backends.dummy"
+            conn.setdefault("CONN_MAX_AGE", 0)
+            conn.setdefault("CONN_HEALTH_CHECKS", False)
+            conn.setdefault("OPTIONS", {})
+            conn.setdefault("TIME_ZONE", None)
+            for setting in ["NAME", "USER", "PASSWORD", "HOST", "PORT"]:
+                conn.setdefault(setting, "")
+
+            test_settings = conn.setdefault("TEST", {})
+            default_test_settings = [
+                ("CHARSET", None),
+                ("COLLATION", None),
+                ("MIGRATE", True),
+                ("MIRROR", None),
+                ("NAME", None),
+            ]
+            for key, value in default_test_settings:
+                test_settings.setdefault(key, value)
+        return databases
 
     def create_connection(self, alias):
         db = self.settings[alias]
