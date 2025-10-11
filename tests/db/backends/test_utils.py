@@ -1,33 +1,25 @@
-from contextlib import asynccontextmanager
-from unittest.mock import MagicMock
+from unittest.mock import (
+    MagicMock,
+    patch,
+)
 
 from django.db import DEFAULT_DB_ALIAS
-from django.test import TestCase
+from django.db.transaction import TransactionManagementError
+from django.test import override_settings
 
 from django_async_backend.db import async_connections
 from django_async_backend.db.transaction import async_atomic
+from django_async_backend.test import AsyncioTestCase
 
 
-@asynccontextmanager
-async def atomic_test(name=DEFAULT_DB_ALIAS):
-    async with async_atomic(name):
-        try:
-            yield
-        finally:
-            async_connections[name].set_rollback(True)
-
-
-class AsyncCursorTest(TestCase):
+class AsyncCursorTest(AsyncioTestCase):
 
     async def create_table(self):
-        connection = async_connections[DEFAULT_DB_ALIAS]
-
-        async with connection.cursor() as cursor:
+        async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
             await cursor.execute(
                 "CREATE TABLE test_table_tmp (name VARCHAR(255) NOT NULL);"
             )
 
-    @atomic_test()
     async def test_execute(self):
         await self.create_table()
 
@@ -41,7 +33,15 @@ class AsyncCursorTest(TestCase):
 
             self.assertEqual(await res.fetchone(), ("1",))
 
-    @atomic_test()
+    async def test_execute_broken_transaction(self):
+        async with async_atomic(DEFAULT_DB_ALIAS):
+            connection = async_connections[DEFAULT_DB_ALIAS]
+            async with connection.cursor() as cursor:
+                connection.set_rollback(True)
+
+                with self.assertRaises(TransactionManagementError):
+                    await cursor.executemany("""SELECT %s;""", [(1,)])
+
     async def test_executemany(self):
         await self.create_table()
 
@@ -53,7 +53,15 @@ class AsyncCursorTest(TestCase):
 
             self.assertEqual(await res.fetchall(), [("1",), ("2",)])
 
-    @atomic_test()
+    async def test_executemany_broken_transaction(self):
+        async with async_atomic(DEFAULT_DB_ALIAS):
+            connection = async_connections[DEFAULT_DB_ALIAS]
+            async with connection.cursor() as cursor:
+                connection.set_rollback(True)
+
+                with self.assertRaises(TransactionManagementError):
+                    await cursor.execute("""SELECT 1;""")
+
     async def test_iterator(self):
         await self.create_table()
 
@@ -69,7 +77,6 @@ class AsyncCursorTest(TestCase):
                 [i async for i in cursor], [("1",), ("2",), ("3",)]
             )
 
-    @atomic_test()
     async def test_execution_wrapper(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
@@ -86,3 +93,30 @@ class AsyncCursorTest(TestCase):
         wrapper_spy.assert_called_once_with(
             sql="select 1", params=None, many=False
         )
+
+
+class AsyncCursorDebugWrapperTest(AsyncioTestCase):
+    @override_settings(DEBUG=True)
+    @patch("django_async_backend.db.backends.utils.logger.debug")
+    async def test_execute(self, debug_mock):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+        async with connection.cursor() as cursor:
+            res = await cursor.execute("""select 1;""")
+            self.assertEqual(await res.fetchone(), (1,))
+
+        self.assertEqual(len(connection.queries_log), 1)
+        self.assertEqual(connection.queries_log[0]["sql"], "select 1;")
+        debug_mock.assert_called()
+
+    @override_settings(DEBUG=True)
+    @patch("django_async_backend.db.backends.utils.logger.debug")
+    async def test_executemany(self, debug_mock):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+        async with connection.cursor() as cursor:
+            await cursor.executemany("""SELECT %s;""", [(1,)])
+
+        self.assertEqual(len(connection.queries_log), 1)
+        self.assertEqual(
+            connection.queries_log[0]["sql"], "1 times: SELECT %s;"
+        )
+        debug_mock.assert_called()

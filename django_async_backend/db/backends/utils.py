@@ -128,9 +128,9 @@ class AsyncCursorDebugWrapper(AsyncCursorWrapper):
                 }
             )
             logger.debug(
-                "(%.3f) %s; args=%s; alias=%s async",
+                "(%.3f) %s; args=%s; alias=%s",
                 duration,
-                self.db.ops.format_debug_sql(sql),
+                sql,
                 params,
                 self.db.alias,
                 extra={
