@@ -1,3 +1,5 @@
+import django
+
 DATABASES = {
     "default": {
         "ENGINE": "django_async_backend.db.backends.postgresql",
@@ -8,3 +10,6 @@ DATABASES = {
         "PORT": 5432,
     }
 }
+
+
+django.setup()
