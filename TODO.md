@@ -1,1 +1,3 @@
 - async signals
+- code coverage
+- async query manager
