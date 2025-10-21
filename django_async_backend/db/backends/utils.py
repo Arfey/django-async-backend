@@ -6,6 +6,7 @@ from contextlib import contextmanager
 
 from django.apps import apps
 from django.db.backends.utils import CursorWrapper
+from django_async_backend.utils.await_maybe import await_maybe
 
 logger = logging.getLogger("django_async_backend.db.backends")
 
@@ -61,7 +62,8 @@ class AsyncCursorWrapper:
         context = {"connection": self.db, "cursor": self}
         for wrapper in reversed(self.db.execute_wrappers):
             executor = functools.partial(wrapper, executor)
-        return await executor(sql, params, many, context)
+
+        return await await_maybe(executor(sql, params, many, context))
 
     async def _execute(self, sql, params, *ignored_wrapper_args):
         # Raise a warning during app initialization (stored_app_configs is only

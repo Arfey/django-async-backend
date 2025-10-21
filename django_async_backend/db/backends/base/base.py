@@ -185,7 +185,7 @@ class BaseAsyncDatabaseWrapper:
     async def get_database_version(self):
         """Return a tuple of the database's version."""
         raise NotImplementedError(
-            "subclasses of BaseDatabaseWrapper may require "
+            "subclasses of BaseAsyncDatabaseWrapper may require "
             "a get_database_version() method."
         )
 
@@ -213,14 +213,14 @@ class BaseAsyncDatabaseWrapper:
     def get_connection_params(self):
         """Return a dict of parameters suitable for get_new_connection."""
         raise NotImplementedError(
-            "subclasses of BaseDatabaseWrapper may require a "
+            "subclasses of BaseAsyncDatabaseWrapper may require a "
             "get_connection_params() method"
         )
 
     async def get_new_connection(self, conn_params):
         """Open a connection to the database."""
         raise NotImplementedError(
-            "subclasses of BaseDatabaseWrapper may require "
+            "subclasses of BaseAsyncDatabaseWrapper may require "
             "a get_new_connection() method"
         )
 
@@ -233,7 +233,7 @@ class BaseAsyncDatabaseWrapper:
     def create_cursor(self, name=None):
         """Create a cursor. Assume that a connection is established."""
         raise NotImplementedError(
-            "subclasses of BaseDatabaseWrapper may require "
+            "subclasses of BaseAsyncDatabaseWrapper may require "
             "a create_cursor() method"
         )
 
@@ -449,7 +449,7 @@ class BaseAsyncDatabaseWrapper:
         Backend-specific implementation to enable or disable autocommit.
         """
         raise NotImplementedError(
-            "subclasses of BaseDatabaseWrapper may require "
+            "subclasses of BaseAsyncDatabaseWrapper may require "
             "a _set_autocommit() method"
         )
 
@@ -541,7 +541,7 @@ class BaseAsyncDatabaseWrapper:
         as that may prevent Django from recycling unusable connections.
         """
         raise NotImplementedError(
-            "subclasses of BaseDatabaseWrapper may "
+            "subclasses of BaseAsyncDatabaseWrapper may "
             "require an is_usable() method"
         )
 
