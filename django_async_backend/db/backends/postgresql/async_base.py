@@ -7,6 +7,7 @@ from django.db.backends.base.base import NO_DB_ALIAS
 from django.db.backends.postgresql.base import DatabaseWrapper
 from django.db.backends.postgresql.psycopg_any import (
     IsolationLevel,
+    errors,
     get_adapters_template,
     is_psycopg3,
     register_tzloader,
@@ -33,6 +34,27 @@ if not is_psycopg3:
 TIMESTAMPTZ_OID = Database.adapters.types["timestamptz"].oid
 
 
+async def async_mogrify(sql, params, connection):
+    async with connection.cursor() as cursor:
+        return AsyncCursor(cursor.connection).mogrify(sql, params)
+
+
+class AsyncDatabaseOperations(DatabaseWrapper.ops_class):
+    async def compose_sql(self, sql, params):
+        return await async_mogrify(sql, params, self.connection)
+
+    async def last_executed_query(self, cursor, sql, params):
+        if self.connection.features.uses_server_side_binding:
+            try:
+                return await self.compose_sql(sql, params)
+            except errors.DataError:
+                return None
+        else:
+            if cursor._query and cursor._query.query is not None:
+                return cursor._query.query.decode()
+            return None
+
+
 class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
     vendor = DatabaseWrapper.vendor
     display_name = DatabaseWrapper.display_name
@@ -45,7 +67,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
 
     Database = Database
     features_class = DatabaseWrapper.features_class
-    ops_class = DatabaseWrapper.ops_class
+    ops_class = AsyncDatabaseOperations
 
     # PostgreSQL backend-specific attributes.
     _named_cursor_idx = 0
@@ -146,6 +168,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
 
         conn_params.pop("assume_role", None)
         conn_params.pop("isolation_level", None)
+        conn_params.pop("pool", None)
 
         server_side_binding = conn_params.pop("server_side_binding", None)
         conn_params.setdefault(
@@ -208,7 +231,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
                 **conn_params
             )
         if set_isolation_level:
-            connection.isolation_level = self.isolation_level
+            await connection.set_isolation_level(self.isolation_level)
 
         return connection
 
@@ -233,7 +256,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
     async def _configure_role(self, connection):
         if new_role := self.settings_dict["OPTIONS"].get("assume_role"):
             async with connection.cursor() as cursor:
-                sql = self.ops.compose_sql("SET ROLE %s", [new_role])
+                sql = await self.ops.compose_sql("SET ROLE %s", [new_role])
                 await cursor.execute(sql)
             return True
         return False
@@ -399,5 +422,7 @@ class AsyncServerSideCursor(
 
 class AsyncCursorDebugWrapper(BaseAsyncCursorDebugWrapper):
     async def copy(self, statement):
-        with self.debug_sql(statement):
-            return await self.cursor.copy(statement)
+        async with self.debug_sql(statement):
+            async with self.cursor.copy(statement) as copy:
+                async for row in copy:
+                    yield row

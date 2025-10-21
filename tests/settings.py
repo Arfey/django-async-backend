@@ -19,5 +19,7 @@ DATABASES = {
     }
 }
 
+USE_TZ = False
+
 
 django.setup()

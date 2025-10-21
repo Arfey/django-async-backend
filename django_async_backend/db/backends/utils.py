@@ -2,10 +2,11 @@ import functools
 import logging
 import time
 import warnings
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 
 from django.apps import apps
 from django.db.backends.utils import CursorWrapper
+
 from django_async_backend.utils.await_maybe import await_maybe
 
 logger = logging.getLogger("django_async_backend.db.backends")
@@ -99,15 +100,15 @@ class AsyncCursorWrapper:
 class AsyncCursorDebugWrapper(AsyncCursorWrapper):
 
     async def execute(self, sql, params=None):
-        with self.debug_sql(sql, params, use_last_executed_query=True):
+        async with self.debug_sql(sql, params, use_last_executed_query=True):
             return await super().execute(sql, params)
 
     async def executemany(self, sql, param_list):
-        with self.debug_sql(sql, param_list, many=True):
+        async with self.debug_sql(sql, param_list, many=True):
             return await super().executemany(sql, param_list)
 
-    @contextmanager
-    def debug_sql(
+    @asynccontextmanager
+    async def debug_sql(
         self, sql=None, params=None, use_last_executed_query=False, many=False
     ):
         start = time.monotonic()
@@ -117,7 +118,9 @@ class AsyncCursorDebugWrapper(AsyncCursorWrapper):
             stop = time.monotonic()
             duration = stop - start
             if use_last_executed_query:
-                sql = self.db.ops.last_executed_query(self.cursor, sql, params)
+                sql = await await_maybe(
+                    self.db.ops.last_executed_query(self.cursor, sql, params)
+                )
             try:
                 times = len(params) if many else ""
             except TypeError:

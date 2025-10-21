@@ -83,7 +83,7 @@ pre-commit install
 
 **Install dependencies:**
 ```bash
-poetry install
+poetry install --with dev
 ```
 
 ## 🧪 Running Tests
