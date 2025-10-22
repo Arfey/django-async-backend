@@ -1,4 +1,5 @@
 import copy
+from collections import namedtuple
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
@@ -578,3 +579,64 @@ class Tests(AsyncioTestCase):
             ),
             False,
         )
+
+
+class ServerSideCursorsPostgresTests(AsyncioTestCase):
+    cursor_fields = (
+        "name, statement, is_holdable, is_binary, is_scrollable, creation_time"
+    )
+    PostgresCursor = namedtuple("PostgresCursor", cursor_fields)
+
+    async def asyncSetUp(self):
+        await create_table()
+
+        self.p0 = await create_instance(0)
+        self.p1 = await create_instance(1)
+
+    async def asyncTearDown(self):
+        await drop_table()
+
+    async def inspect_cursors(self):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+
+        async with connection.cursor() as cursor:
+            await cursor.execute(
+                "SELECT {fields} FROM pg_cursors;".format(
+                    fields=self.cursor_fields
+                )
+            )
+            cursors = await cursor.fetchall()
+        return [self.PostgresCursor._make(cursor) for cursor in cursors]
+
+    async def assertUsesCursor(self, query, num_expected=1):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+        cursor_name = "my_server_side_cursor"
+        async with connection.create_cursor(name=cursor_name) as cursor:
+            # await cursor.execute("SELECT * FROM reporter_table_tmp")
+            await cursor.execute(query)
+            # Open the cursor by fetching a row
+            await cursor.fetchone()
+
+            # Now inspect open cursors
+            cursors = await self.inspect_cursors()
+            self.assertEqual(len(cursors), num_expected)
+            self.assertIn(cursor_name, cursors[0].name)
+            self.assertFalse(cursors[0].is_scrollable)
+            self.assertFalse(cursors[0].is_holdable)
+            self.assertFalse(cursors[0].is_binary)
+
+    async def test_server_side_cursor(self):
+        await self.assertUsesCursor("SELECT * FROM reporter_table_tmp")
+
+    async def test_server_side_cursor_many_cursors(self):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+        query = "SELECT * FROM reporter_table_tmp"
+        async with connection.create_cursor(
+            name="my_server_side_cursor2"
+        ) as cursor:
+            # await cursor.execute("SELECT * FROM reporter_table_tmp")
+            await cursor.execute(query)
+            # Open the cursor by fetching a row
+            await cursor.fetchone()
+
+            await self.assertUsesCursor(query, num_expected=2)
