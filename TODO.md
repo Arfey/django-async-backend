@@ -1,3 +1,6 @@
 - async signals
 - code coverage
 - async query manager
+- connection_created.asend
+- close_old_connections + signals.request_started | signals.request_finished
+- test AsyncConnectionHandler + thread_critical (.set context var)
