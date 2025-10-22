@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "django-async-backend"
-version = "0.0.1"
+version = "0.0.2"
 description = "Django extension providing async capabilities for database and other components"
 readme = "README.md"
 classifiers = [
