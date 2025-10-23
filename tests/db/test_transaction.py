@@ -546,3 +546,47 @@ class NonAsyncAutocommitTests(AsyncioTransactionTestCase):
         #24921 -- ORM queries must be possible after set_autocommit(False).
         """
         await create_instance(1)
+
+
+class IndependentConnectionTransaction(AsyncioTransactionTestCase):
+    async def asyncSetUp(self):
+        await create_table()
+
+    async def asyncTearDown(self):
+        await drop_table()
+
+    async def test_nested_independent_connection(self):
+        async with async_connections.independent_connection():
+            await create_instance(1)
+
+            self.assertEqual(len(await get_all()), 1)
+
+            async with async_connections.independent_connection():
+                await create_instance(2)
+
+                self.assertEqual(len(await get_all()), 2)
+
+    async def test_nested_independent_connection_with_transaction(self):
+        async with async_connections.independent_connection():
+            async with async_atomic():
+                await create_instance(1)
+
+                self.assertEqual(len(await get_all()), 1)
+
+                async with async_connections.independent_connection():
+                    await create_instance(2)
+
+                    self.assertEqual(len(await get_all()), 1)
+
+    async def test_nested_independent_connection_with_nested_transaction(self):
+        async with async_connections.independent_connection():
+            async with async_atomic():
+                await create_instance(1)
+
+                self.assertEqual(len(await get_all()), 1)
+
+                async with async_connections.independent_connection():
+                    async with async_atomic():
+                        await create_instance(2)
+
+                        self.assertEqual(len(await get_all()), 1)
