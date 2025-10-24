@@ -3,6 +3,7 @@ name = "django-async-backend"
 version = "0.0.2"
 description = "Django extension providing async capabilities for database and other components"
 readme = "README.md"
+authors = ["Arfey <arfey@gmail.com>"]
 classifiers = [
     "Environment :: Web Environment",
     "Development Status :: 5 - Production/Stable",
