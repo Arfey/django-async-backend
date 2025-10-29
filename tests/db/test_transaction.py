@@ -556,36 +556,36 @@ class IndependentConnectionTransaction(AsyncioTransactionTestCase):
         await drop_table()
 
     async def test_nested_independent_connection(self):
-        async with async_connections.independent_connection():
+        async with async_connections._independent_connection():
             await create_instance(1)
 
             self.assertEqual(len(await get_all()), 1)
 
-            async with async_connections.independent_connection():
+            async with async_connections._independent_connection():
                 await create_instance(2)
 
                 self.assertEqual(len(await get_all()), 2)
 
     async def test_nested_independent_connection_with_transaction(self):
-        async with async_connections.independent_connection():
+        async with async_connections._independent_connection():
             async with async_atomic():
                 await create_instance(1)
 
                 self.assertEqual(len(await get_all()), 1)
 
-                async with async_connections.independent_connection():
+                async with async_connections._independent_connection():
                     await create_instance(2)
 
                     self.assertEqual(len(await get_all()), 1)
 
     async def test_nested_independent_connection_with_nested_transaction(self):
-        async with async_connections.independent_connection():
+        async with async_connections._independent_connection():
             async with async_atomic():
                 await create_instance(1)
 
                 self.assertEqual(len(await get_all()), 1)
 
-                async with async_connections.independent_connection():
+                async with async_connections._independent_connection():
                     async with async_atomic():
                         await create_instance(2)
 

@@ -12,7 +12,7 @@ class BaseAsyncConnectionHandler(BaseConnectionHandler):
         )
 
     @asynccontextmanager
-    async def independent_connection(self):
+    async def _independent_connection(self):
         """
         Creates an isolated connection to enable parallel queries.
         Django reuses connections per-thread, which can block concurrent async
@@ -20,7 +20,7 @@ class BaseAsyncConnectionHandler(BaseConnectionHandler):
         allowing new, independent ones to be used inside the block.
         Example:
             async def load():
-                async with connections.independent_connection():
+                async with connections._independent_connection():
                     await fetch_data(connections['default'])
             await asyncio.gather(load(), load(), load())
         """

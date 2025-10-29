@@ -113,7 +113,7 @@ class BaseAsyncConnectionHandlerTest(SimpleTestCase):
         async def load():
             self.assertEqual(origin_conn, self.handler["first"])
 
-            async with self.handler.independent_connection():
+            async with self.handler._independent_connection():
                 connections.append(self.handler["first"])
 
         await asyncio.gather(load(), load(), load())
@@ -131,18 +131,18 @@ class BaseAsyncConnectionHandlerTest(SimpleTestCase):
         connections = []
         origin_conn = self.handler["first"]
 
-        async with self.handler.independent_connection():
+        async with self.handler._independent_connection():
             conn1 = self.handler["first"]
             connections.append(conn1)
 
-            async with self.handler.independent_connection():
+            async with self.handler._independent_connection():
                 conn2 = self.handler["first"]
                 connections.append(conn2)
                 self.assertNotEqual(conn1, conn2)
 
             self.assertEqual(conn1, self.handler["first"])
 
-            async with self.handler.independent_connection():
+            async with self.handler._independent_connection():
                 conn3 = self.handler["first"]
                 connections.append(conn3)
                 self.assertNotEqual(conn1, conn3)
@@ -177,14 +177,14 @@ class BaseAsyncConnectionHandlerTest(SimpleTestCase):
         connections = []
 
         async def load():
-            async with handler.independent_connection():
+            async with handler._independent_connection():
                 connections.append(handler["first"])
 
         with self.assertRaises(Exception):
             await asyncio.create_task(load())
 
         with self.assertRaises(Exception):
-            async with handler.independent_connection():
+            async with handler._independent_connection():
                 connections.append(handler["first"])
 
         connections_ids = set([id(conn) for conn in connections])

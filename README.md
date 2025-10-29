@@ -45,27 +45,12 @@ connection = async_connections['default']
 async with connection.cursor() as cursor:
     await cursor.execute("SELECT ...")
     rows = await cursor.fetchall()
+
+await connection.close()
 ```
 
 - Connections are reused and managed automatically.
 - Use await connection.close() to manually close a connection if needed.
-
-Independent Connections & Parallel Queries
-You can create a temporary, isolated connection for parallel or independent operations:
-
-```python
-import asyncio
-from django_async_backend.db import async_connections
-
-async def run_query():
-    async with async_connections.independent_connection():
-        conn = async_connections['default']
-        async with conn.cursor() as cursor:
-            await cursor.execute("SELECT ...")
-            return await cursor.fetchall()
-
-results = await asyncio.gather(run_query(), run_query(), run_query())
-```
 
 ## Cursor
 
@@ -300,3 +285,27 @@ To execute them:
 cd tests_django
 docker-compose run --build --rm test_django_integration
 ```
+
+## DEP 0009
+
+https://github.com/django/deps/blob/main/accepted/0009-async.rst
+
+> Whenever a new_connections() block is entered, Django sets a new context with new database connections.
+
+To show show an example how it might looks like with a current implementation we have the `independent_connection` context manager.
+
+```python
+import asyncio
+from django_async_backend.db import async_connections
+
+async def run_query():
+    async with async_connections._independent_connection():
+        conn = async_connections['default']
+        async with conn.cursor() as cursor:
+            await cursor.execute("SELECT ...")
+            return await cursor.fetchall()
+
+results = await asyncio.gather(run_query(), run_query(), run_query())
+```
+
+It's just a concept that is not ready for production usage.
