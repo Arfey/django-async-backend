@@ -53,3 +53,4 @@ urlpatterns = [
 
 
 # PYTHONPATH=. poetry run django-admin runserver 0.0.0.0:8000 --settings=app
+# PYTHONPATH=. DJANGO_SETTINGS_MODULE=app poetry run uvicorn asgi:application --reload --host 0.0.0.0 --port 8000  # noqa
