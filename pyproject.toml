@@ -43,6 +43,7 @@ psycopg = {extras = ["binary"], version = "^3"}
 
 [tool.poetry.group.dev.dependencies]
 psycopg = {extras = ["pool"], version = "^3"}
+uvicorn = "^0.38.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

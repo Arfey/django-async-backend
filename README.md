@@ -33,6 +33,12 @@ INSTALLED_APPS = [
 
 ---
 
+## Connection Pooling
+
+> ⚠️ Connection pooling is not supported when running under a WSGI server (including the Django development server), because WSGI creates a new event loop for each request. This prevents reliable management of connection pool state. To disable the warning, set `ASYNC_BACKEND_DISABLE_POOL_WARNING=True`
+
+---
+
 ## Connection Handler
 
 The connection handler manages database connections for your async backend.
