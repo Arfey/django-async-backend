@@ -1,8 +1,12 @@
 # flake8: noqa
+import operator
 from weakref import ref as weak_ref
 
 from django.db.models.fetch_modes import FETCH_ONE
-from django.db.models.query import QuerySet
+from django.db.models.query import (
+    QuerySet,
+    get_related_populators,
+)
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE
 
 from django_async_backend.db.models.sql.query import AsyncQuery
@@ -17,33 +21,6 @@ class BaseIterable:
         self.chunked_fetch = chunked_fetch
         self.chunk_size = chunk_size
 
-    # async def _async_generator(self):
-    #     # Generators don't actually start running until the first time you call
-    #     # next() on them, so make the generator object in the async thread and
-    #     # then repeatedly dispatch to it in a sync thread.
-    #     sync_generator = self.__iter__()
-
-    #     def next_slice(gen):
-    #         return list(islice(gen, self.chunk_size))
-
-    #     while True:
-    #         chunk = await sync_to_async(next_slice)(sync_generator)
-    #         for item in chunk:
-    #             yield item
-    #         if len(chunk) < self.chunk_size:
-    #             break
-
-    # # __aiter__() is a *synchronous* method that has to then return an
-    # # *asynchronous* iterator/generator. Thus, nest an async generator inside
-    # # it.
-    # # This is a generic iterable converter for now, and is going to suffer a
-    # # performance penalty on large sets of items due to the cost of crossing
-    # # over the sync barrier for each chunk. Custom __aiter__() methods should
-    # # be added to each Iterable subclass, but that needs some work in the
-    # # Compiler first.
-    # def __aiter__(self):
-    #     return self._async_generator()
-
 
 class AsyncModelIterable(BaseIterable):
     """Iterable that yields a model instance for each row."""
@@ -55,7 +32,7 @@ class AsyncModelIterable(BaseIterable):
         fetch_mode = queryset._fetch_mode
         # Execute the query. This will also fill compiler.select, klass_info,
         # and annotations.
-        results = await compiler.execute_sql(  #########################
+        results = await compiler.execute_sql(
             chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
         )
         select, klass_info, annotation_col_map = (
@@ -73,26 +50,30 @@ class AsyncModelIterable(BaseIterable):
             f[0].target.attname
             for f in select[model_fields_start:model_fields_end]
         ]
-        # related_populators = get_related_populators(klass_info, select, db, fetch_mode)
-        # known_related_objects = [
-        #     (
-        #         field,
-        #         related_objs,
-        #         operator.attrgetter(
-        #             *[
-        #                 (
-        #                     field.attname
-        #                     if from_field == "self"
-        #                     else queryset.model._meta.get_field(from_field).attname
-        #                 )
-        #                 for from_field in field.from_fields
-        #             ]
-        #         ),
-        #     )
-        #     for field, related_objs in queryset._known_related_objects.items()
-        # ]
+        related_populators = get_related_populators(
+            klass_info, select, db, fetch_mode
+        )
+        known_related_objects = [
+            (
+                field,
+                related_objs,
+                operator.attrgetter(
+                    *[
+                        (
+                            field.attname
+                            if from_field == "self"
+                            else queryset.model._meta.get_field(
+                                from_field
+                            ).attname
+                        )
+                        for from_field in field.from_fields
+                    ]
+                ),
+            )
+            for field, related_objs in queryset._known_related_objects.items()
+        ]
         peers = []
-        for row in compiler.results_iter(results):  #########################
+        for row in compiler.results_iter(results):
             obj = model_cls.from_db(
                 db,
                 init_list,
@@ -102,24 +83,24 @@ class AsyncModelIterable(BaseIterable):
             if fetch_mode.track_peers:
                 peers.append(weak_ref(obj))
                 obj._state.peers = peers
-            # for rel_populator in related_populators:
-            #     rel_populator.populate(row, obj)
-            # if annotation_col_map:
-            #     for attr_name, col_pos in annotation_col_map.items():
-            #         setattr(obj, attr_name, row[col_pos])
+            for rel_populator in related_populators:
+                rel_populator.populate(row, obj)
+            if annotation_col_map:
+                for attr_name, col_pos in annotation_col_map.items():
+                    setattr(obj, attr_name, row[col_pos])
 
             # Add the known related objects to the model.
-            # for field, rel_objs, rel_getter in known_related_objects:
-            #     # Avoid overwriting objects loaded by, e.g., select_related().
-            #     if field.is_cached(obj):
-            #         continue
-            #     rel_obj_id = rel_getter(obj)
-            #     try:
-            #         rel_obj = rel_objs[rel_obj_id]
-            #     except KeyError:
-            #         pass  # May happen in qs1 | qs2 scenarios.
-            #     else:
-            #         setattr(obj, field.name, rel_obj)
+            for field, rel_objs, rel_getter in known_related_objects:
+                # Avoid overwriting objects loaded by, e.g., select_related().
+                if field.is_cached(obj):
+                    continue
+                rel_obj_id = rel_getter(obj)
+                try:
+                    rel_obj = rel_objs[rel_obj_id]
+                except KeyError:
+                    pass  # May happen in qs1 | qs2 scenarios.
+                else:
+                    setattr(obj, field.name, rel_obj)
 
             yield obj
 
@@ -158,7 +139,6 @@ def not_implemented_method(reason):
         "__iter__",
         "__len__",
         "__bool__",
-        "__getitem__",
         "explain",
     ],
 )

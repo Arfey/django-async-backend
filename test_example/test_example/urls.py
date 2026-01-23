@@ -12,11 +12,19 @@ from django_async_backend.db import async_connections
 async def index(request: HttpRequest) -> HttpResponse:
     connection = async_connections[DEFAULT_DB_ALIAS]
 
-    # async with connection.cursor() as cursor:
-    #     await cursor.execute("select 1")
+    async with connection.cursor() as cursor:
+        await cursor.execute("select 1")
 
-    async for i in Book.async_object.filter(id=1).all():
-        print(i)  # noqa
+    query = (
+        Book.async_object.select_related("author")
+        .filter(id__gte=0)
+        .exclude(id=1)
+    )
+
+    # print(query.query)
+
+    async for i in query:
+        print(i, i.author)  # noqa
 
     # to release a connection back to the pool
     await connection.close()
