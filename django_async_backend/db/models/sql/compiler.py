@@ -1,0 +1,101 @@
+from django.core.exceptions import EmptyResultSet
+from django.db.models.sql.compiler import SQLCompiler
+from django.db.models.sql.constants import (
+    CURSOR,
+    GET_ITERATOR_CHUNK_SIZE,
+    MULTI,
+    NO_RESULTS,
+    ROW_COUNT,
+    SINGLE,
+)
+
+
+async def empty_aiter():
+    if False:
+        yield
+
+
+class AsyncSQLCompiler(SQLCompiler):
+
+    async def execute_sql(
+        self,
+        result_type=MULTI,
+        chunked_fetch=False,
+        chunk_size=GET_ITERATOR_CHUNK_SIZE,
+    ):
+        """
+        Run the query against the database and return the result(s). The
+        return value depends on the value of result_type.
+
+        When result_type is:
+        - MULTI: Retrieves all rows using fetchmany(). Wraps in an iterator for
+        chunked reads when supported.
+        - SINGLE: Retrieves a single row using fetchone().
+        - ROW_COUNT: Retrieves the number of rows in the result.
+        - CURSOR: Runs the query, and returns the cursor object. It is the
+        caller's responsibility to close the cursor.
+        """
+
+        result_type = result_type or NO_RESULTS
+        try:
+            sql, params = self.as_sql()
+            if not sql:
+                raise EmptyResultSet
+        except EmptyResultSet:
+            if result_type == MULTI:
+                return empty_aiter()
+            else:
+                return
+        if chunked_fetch:
+            cursor_ctx = self.connection.chunked_cursor()
+        else:
+            cursor_ctx = self.connection.cursor()
+
+        async with cursor_ctx as cursor:
+            await cursor.execute(sql, params)
+
+            if result_type == ROW_COUNT:
+                return cursor.rowcount
+            if result_type == CURSOR:
+                raise NotImplementedError
+            if result_type == SINGLE:
+                val = await cursor.fetchone()
+                if val:
+                    return val[0 : self.col_count]  # noqa
+                return val
+            if result_type == NO_RESULTS:
+                return
+
+            result = async_cursor_iter(
+                cursor,
+                self.connection.features.empty_fetchmany_value,
+                self.col_count if self.has_extra_select else None,
+                chunk_size,
+            )
+            if (
+                not chunked_fetch
+                or not self.connection.features.can_use_chunked_reads
+            ):
+                # If we are using non-chunked reads, we return the same data
+                # structure as normally, but ensure it is all read into memory
+                # before going any further. Use chunked_fetch if requested,
+                # unless the database doesn't support it.
+                return [i async for i in result]
+            return result
+
+
+async def async_cursor_iter(cursor, sentinel, col_count, itersize):
+    """
+    Yield blocks of rows from a cursor and ensure the cursor is closed when
+    done.
+    """
+
+    async def fetchmany_iter():
+        while True:
+            rows = await cursor.fetchmany(itersize)
+            if rows == sentinel:
+                break
+            yield rows
+
+    async for rows in fetchmany_iter():
+        yield rows if col_count is None else [r[:col_count] for r in rows]

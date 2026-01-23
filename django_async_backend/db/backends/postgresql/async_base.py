@@ -40,6 +40,8 @@ async def async_mogrify(sql, params, connection):
 
 
 class AsyncDatabaseOperations(DatabaseWrapper.ops_class):
+    compiler_module = "django_async_backend.db.models.sql.compiler"
+
     async def compose_sql(self, sql, params):
         return await async_mogrify(sql, params, self.connection)
 
