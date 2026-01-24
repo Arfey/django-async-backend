@@ -18,10 +18,10 @@ async def index(request: HttpRequest) -> HttpResponse:
     query = (
         Book.async_object.select_related("author")
         .filter(id__gte=0)
-        .exclude(id=1)
+        .exclude(id=1)[:1]
     )
 
-    # print(query.query)
+    print(query.query)  # noqa
 
     async for i in query:
         print(i, i.author)  # noqa
