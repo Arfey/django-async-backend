@@ -26,6 +26,8 @@ async def index(request: HttpRequest) -> HttpResponse:
     async for i in query:
         print(i, i.author)  # noqa
 
+    print("aget", await Book.async_object.aget(id=1))  # noqa
+
     # to release a connection back to the pool
     await connection.close()
 

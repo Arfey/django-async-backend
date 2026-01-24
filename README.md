@@ -172,13 +172,12 @@ class MyTransactionTests(AsyncioTransactionTestCase):
             await do_db_stuff()
 ```
 
-<!--
 # ORM support:
 ### Manager:
 
 | methods                             | supported | comments |
 | ----------------------------------- | --------- | -------- |
-| `Model.objects.aget`                | ❌        |          |
+| `Model.objects.aget`                | ✅        |          |
 | `Model.objects.acreate`             | ❌        |          |
 | `Model.objects.acount`              | ❌        |          |
 | `Model.objects.anone`               | ❌        |          |
@@ -216,12 +215,13 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | `Model.objects.ausing`              | ❌        |          |
 | `Model.objects.aresolve_expression` | ❌        |          |
 | `Model.objects.aordered`            | ❌        |          |
-| `__aiter__`                         | ❌        |          |
-| `__repr__`                          | ❌        |          |
-| `__len__`                           | ❌        |          |
-| `__getitem__`                       | ❌        |          |
+| `__aiter__`                         | ✅        |          |
+| `__repr__`                          | ✅        |          |
+| `__len__`                           | ✅        |  removed |
+| `__getitem__`                       | ✅        |          |
 | `Model.objects.aiterator`           | ❌        |          |
 
+<!--
 ### RawQuerySet
 
 Not supported ❌

@@ -2,13 +2,16 @@
 import operator
 from weakref import ref as weak_ref
 
+from django.db import NotSupportedError
 from django.db.models.fetch_modes import FETCH_ONE
 from django.db.models.query import (
+    MAX_GET_RESULTS,
     QuerySet,
     get_related_populators,
 )
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE
 
+from django_async_backend.db import async_connections
 from django_async_backend.db.models.sql.query import AsyncQuery
 from django_async_backend.utils.decorators import method_decorators
 
@@ -108,7 +111,7 @@ class AsyncModelIterable(BaseIterable):
 def not_implemented_method(reason):
     def decorator(fn):
         def inner(*args, **kwargs):
-            raise NotImplementedError(reason)
+            raise NotImplementedError(f"{reason} <{fn.__name__}>")
 
         return inner
 
@@ -146,7 +149,6 @@ def not_implemented_method(reason):
     not_implemented_method("This method is not implemented yet"),
     names=[
         # Asynchronous methods
-        "aget",
         "acreate",
         "abulk_create",
         "abulk_update",
@@ -262,6 +264,52 @@ class AsyncQuerySet(QuerySet):
             return qs._result_cache[0]
 
         return get_item()
+
+    async def aget(self, *args, **kwargs):
+        """
+        Perform the query and return a single object matching the given
+        keyword arguments.
+        """
+        if self.query.combinator and (args or kwargs):
+            raise NotSupportedError(
+                "Calling QuerySet.get(...) with filters after %s() is not "
+                "supported." % self.query.combinator
+            )
+        clone = (
+            self._chain()
+            if self.query.combinator
+            else self.filter(*args, **kwargs)
+        )
+        if self.query.can_filter() and not self.query.distinct_fields:
+            clone = clone.order_by()
+        limit = None
+        if (
+            not clone.query.select_for_update
+            or async_connections[
+                clone.db
+            ].features.supports_select_for_update_with_limit
+        ):
+            limit = MAX_GET_RESULTS
+            clone.query.set_limits(high=limit)
+        num = len([i async for i in clone])
+        if num == 1:
+            return clone._result_cache[0]
+        if not num:
+            raise self.model.DoesNotExist(
+                "%s matching query does not exist."
+                % self.model._meta.object_name
+            )
+        raise self.model.MultipleObjectsReturned(
+            "get() returned more than one %s -- it returned %s!"
+            % (
+                self.model._meta.object_name,
+                (
+                    num
+                    if not limit or num < limit
+                    else "more than %s" % (limit - 1)
+                ),
+            )
+        )
 
     # __getstate__ ##########################################################################
     # __getstate__
