@@ -1,3 +1,5 @@
+import json
+
 from django.core.exceptions import EmptyResultSet
 from django.db.models.sql.compiler import SQLCompiler
 from django.db.models.sql.constants import (
@@ -82,6 +84,28 @@ class AsyncSQLCompiler(SQLCompiler):
                 # unless the database doesn't support it.
                 return [i async for i in result]
             return result
+
+    async def has_results(self):
+        """
+        Backends (e.g. NoSQL) can override this in order to use optimized
+        versions of "query has any results."
+        """
+        return bool(await self.execute_sql(SINGLE))
+
+    async def explain_query(self):
+        result = list(await self.execute_sql())
+        # Some backends return 1 item tuples with strings, and others return
+        # tuples with integers and strings. Flatten them out into strings.
+        format_ = self.query.explain_info.format
+        output_formatter = (
+            json.dumps if format_ and format_.lower() == "json" else str
+        )
+        for row in result:
+            for value in row:
+                if not isinstance(value, str):
+                    yield " ".join([output_formatter(c) for c in value])
+                else:
+                    yield value
 
 
 async def async_cursor_iter(cursor, sentinel, col_count, itersize):

@@ -154,9 +154,6 @@ def not_implemented_method(reason):
         "abulk_update",
         "aget_or_create",
         "aupdate_or_create",
-        "aaggregate",
-        "acount",
-        "aexists",
         "afirst",
         "alast",
         "aearliest",
@@ -165,7 +162,6 @@ def not_implemented_method(reason):
         "adelete",
         "aupdate",
         "aiterator",
-        "aexplain",
     ],
 )
 class AsyncQuerySet(QuerySet):
@@ -310,6 +306,45 @@ class AsyncQuerySet(QuerySet):
                 ),
             )
         )
+
+    async def acount(self):
+        """
+        Perform a SELECT COUNT() and return the number of records as an
+        integer.
+
+        If the QuerySet is already fully cached, return the length of the
+        cached results set to avoid multiple SELECT COUNT(*) calls.
+        """
+        if self._result_cache is not None:
+            return len(self._result_cache)
+
+        return await self.query.get_count(using=self.db)
+
+    async def aexists(self):
+        """
+        Return True if the QuerySet would have any results, False otherwise.
+        """
+        if self._result_cache is None:
+            return await self.query.has_results(using=self.db)
+        return bool(self._result_cache)
+
+    async def aexplain(self, *, format=None, **options):
+        """
+        Runs an EXPLAIN on the SQL query this QuerySet would perform, and
+        returns the results.
+        """
+        return await self.query.explain(
+            using=self.db, format=format, **options
+        )
+
+    async def aaggregate(self, *args, **kwargs):
+        return await super().aggregate(*args, **kwargs)
+
+    # "afirst",
+    #     "alast",
+    #     "aearliest",
+    #     "alatest",
+    #     "aiterator",
 
     # __getstate__ ##########################################################################
     # __getstate__

@@ -179,7 +179,7 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | ----------------------------------- | --------- | -------- |
 | `Model.objects.aget`                | ✅        |          |
 | `Model.objects.acreate`             | ❌        |          |
-| `Model.objects.acount`              | ❌        |          |
+| `Model.objects.acount`              | ✅        |          |
 | `Model.objects.anone`               | ❌        |          |
 | `Model.objects.abulk_create`        | ❌        |          |
 | `Model.objects.abulk_update`        | ❌        |          |
@@ -192,8 +192,8 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | `Model.objects.ain_bulk`            | ❌        |          |
 | `Model.objects.adelete`             | ❌        |          |
 | `Model.objects.aupdate`             | ❌        |          |
-| `Model.objects.aexists`             | ❌        |          |
-| `Model.objects.aexplain`            | ❌        |          |
+| `Model.objects.aexists`             | ✅        |          |
+| `Model.objects.aexplain`            | ✅        |          |
 | `Model.objects.araw`                | ❌        |          |
 | `Model.objects.aall`                | ❌        |          |
 | `Model.objects.afilter`             | ❌        |          |
@@ -212,12 +212,11 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | `Model.objects.areverse`            | ❌        |          |
 | `Model.objects.adefer`              | ❌        |          |
 | `Model.objects.aonly`               | ❌        |          |
-| `Model.objects.ausing`              | ❌        |          |
 | `Model.objects.aresolve_expression` | ❌        |          |
-| `Model.objects.aordered`            | ❌        |          |
+| `Model.objects.aaggregate`          | ✅        |          |
 | `__aiter__`                         | ✅        |          |
 | `__repr__`                          | ✅        |          |
-| `__len__`                           | ✅        |  removed |
+| `__len__`                           | ❌        | removed  |
 | `__getitem__`                       | ✅        |          |
 | `Model.objects.aiterator`           | ❌        |          |
 

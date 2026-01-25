@@ -1,5 +1,9 @@
 from books.models import Book
 from django.db import DEFAULT_DB_ALIAS
+from django.db.models import (
+    Count,
+    Max,
+)
 from django.http import (
     HttpRequest,
     HttpResponse,
@@ -27,6 +31,24 @@ async def index(request: HttpRequest) -> HttpResponse:
         print(i, i.author)  # noqa
 
     print("aget", await Book.async_object.aget(id=1))  # noqa
+
+    annotated_query = Book.async_object.select_related("author").annotate(
+        author_book_count=Count("author__book")
+    )
+
+    async for book in annotated_query:
+        print(book, book.author, book.author_book_count)  # noqa
+
+    print("exist", await Book.async_object.filter(id=1).aexists())  # noqa
+    print(  # noqa
+        "count", await Book.async_object.filter(author_id=1).acount()
+    )
+    print(  # noqa
+        "explain", await Book.async_object.filter(author_id=1).aexplain()
+    )
+    print(  # noqa
+        "Max id:", await Book.async_object.aaggregate(max_id=Max("id"))
+    )
 
     # to release a connection back to the pool
     await connection.close()
