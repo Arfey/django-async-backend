@@ -49,6 +49,8 @@ async def index(request: HttpRequest) -> HttpResponse:
     print(  # noqa
         "Max id:", await Book.async_object.aaggregate(max_id=Max("id"))
     )
+    print("first:", await Book.async_object.afirst())  # noqa
+    print("alast:", await Book.async_object.alast())  # noqa
 
     # to release a connection back to the pool
     await connection.close()

@@ -154,8 +154,6 @@ def not_implemented_method(reason):
         "abulk_update",
         "aget_or_create",
         "aupdate_or_create",
-        "afirst",
-        "alast",
         "aearliest",
         "alatest",
         "ain_bulk",
@@ -340,11 +338,28 @@ class AsyncQuerySet(QuerySet):
     async def aaggregate(self, *args, **kwargs):
         return await super().aggregate(*args, **kwargs)
 
-    # "afirst",
-    #     "alast",
-    #     "aearliest",
-    #     "alatest",
-    #     "aiterator",
+    async def afirst(self):
+        """Return the first object of a query or None if no match is found."""
+        if self.ordered:
+            queryset = self
+        else:
+            self._check_ordering_first_last_queryset_aggregation(
+                method="first"
+            )
+            queryset = self.order_by("pk")
+        async for obj in queryset[:1]:
+            return obj
+
+    async def alast(self):
+        """Return the last object of a query or None if no match is found."""
+        if self.ordered:
+            queryset = self.reverse()
+        else:
+            self._check_ordering_first_last_queryset_aggregation(method="last")
+            queryset = self.order_by("-pk")
+        async for obj in queryset[:1]:
+            return obj
+
 
     # __getstate__ ##########################################################################
     # __getstate__
