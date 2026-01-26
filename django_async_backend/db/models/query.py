@@ -1,15 +1,22 @@
 # flake8: noqa
 import operator
+from functools import wraps
 from weakref import ref as weak_ref
 
 from django.db import NotSupportedError
 from django.db.models.fetch_modes import FETCH_ONE
-from django.db.models.query import (
+from django.db.models.query import (  # RawModelIterable,
     MAX_GET_RESULTS,
+    FlatValuesListIterable,
+    ModelIterable,
+    NamedValuesListIterable,
     QuerySet,
+    ValuesIterable,
+    ValuesListIterable,
     get_related_populators,
 )
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE
+from django.db.models.utils import create_namedtuple_class
 
 from django_async_backend.db import async_connections
 from django_async_backend.db.models.sql.query import AsyncQuery
@@ -76,7 +83,7 @@ class AsyncModelIterable(BaseIterable):
             for field, related_objs in queryset._known_related_objects.items()
         ]
         peers = []
-        for row in compiler.results_iter(results):
+        for row in await compiler.results_iter(results):
             obj = model_cls.from_db(
                 db,
                 init_list,
@@ -106,6 +113,173 @@ class AsyncModelIterable(BaseIterable):
                     setattr(obj, field.name, rel_obj)
 
             yield obj
+
+
+# class AsyncRawModelIterable(BaseIterable):
+#     """
+#     Iterable that yields a model instance for each row from a raw queryset.
+#     """
+
+#     def __iter__(self):
+#         # Cache some things for performance reasons outside the loop.
+#         db = self.queryset.db
+#         query = self.queryset.query
+#         connection = connections[db]
+#         compiler = connection.ops.compiler("SQLCompiler")(query, connection, db)
+#         query_iterator = iter(query)
+
+#         try:
+#             (
+#                 model_init_names,
+#                 model_init_pos,
+#                 annotation_fields,
+#             ) = self.queryset.resolve_model_init_order()
+#             model_cls = self.queryset.model
+#             if any(
+#                 f.attname not in model_init_names for f in model_cls._meta.pk_fields
+#             ):
+#                 raise exceptions.FieldDoesNotExist(
+#                     "Raw query must include the primary key"
+#                 )
+#             fields = [self.queryset.model_fields.get(c) for c in self.queryset.columns]
+#             cols = [f.get_col(f.model._meta.db_table) if f else None for f in fields]
+#             converters = compiler.get_converters(cols)
+#             if converters:
+#                 query_iterator = compiler.apply_converters(query_iterator, converters)
+#             if compiler.has_composite_fields(cols):
+#                 query_iterator = compiler.composite_fields_to_tuples(
+#                     query_iterator, cols
+#                 )
+#             fetch_mode = self.queryset._fetch_mode
+#             peers = []
+#             for values in query_iterator:
+#                 # Associate fields to values
+#                 model_init_values = [values[pos] for pos in model_init_pos]
+#                 instance = model_cls.from_db(
+#                     db, model_init_names, model_init_values, fetch_mode=fetch_mode
+#                 )
+#                 if fetch_mode.track_peers:
+#                     peers.append(weak_ref(instance))
+#                     instance._state.peers = peers
+#                 if annotation_fields:
+#                     for column, pos in annotation_fields:
+#                         setattr(instance, column, values[pos])
+#                 yield instance
+#         finally:
+#             # Done iterating the Query. If it has its own cursor, close it.
+#             if hasattr(query, "cursor") and query.cursor:
+#                 query.cursor.close()
+
+
+class AsyncValuesIterable(BaseIterable):
+    """
+    Iterable returned by QuerySet.values() that yields a dict for each row.
+    """
+
+    async def __aiter__(self):
+        queryset = self.queryset
+        query = queryset.query
+        compiler = query.get_compiler(queryset.db)
+
+        if query.selected:
+            names = list(query.selected)
+        else:
+            # extra(select=...) cols are always at the start of the row.
+            names = [
+                *query.extra_select,
+                *query.values_select,
+                *query.annotation_select,
+            ]
+        indexes = range(len(names))
+        for row in await compiler.results_iter(
+            chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+        ):
+            yield {names[i]: row[i] for i in indexes}
+
+
+class AsyncValuesListIterable(BaseIterable):
+    """
+    Iterable returned by QuerySet.values_list(flat=False) that yields a tuple
+    for each row.
+    """
+
+    async def __aiter__(self):
+        queryset = self.queryset
+        query = queryset.query
+        compiler = query.get_compiler(queryset.db)
+        for obj in await compiler.results_iter(
+            tuple_expected=True,
+            chunked_fetch=self.chunked_fetch,
+            chunk_size=self.chunk_size,
+        ):
+            yield obj
+
+
+class AsyncNamedValuesListIterable(AsyncValuesListIterable):
+    """
+    Iterable returned by QuerySet.values_list(named=True) that yields a
+    namedtuple for each row.
+    """
+
+    async def __aiter__(self):
+        queryset = self.queryset
+        if queryset._fields:
+            names = queryset._fields
+        else:
+            query = queryset.query
+            names = [
+                *query.extra_select,
+                *query.values_select,
+                *query.annotation_select,
+            ]
+        tuple_class = create_namedtuple_class(*names)
+        new = tuple.__new__
+        async for row in super().__aiter__():
+            yield new(tuple_class, row)
+
+
+class AsyncFlatValuesListIterable(BaseIterable):
+    """
+    Iterable returned by QuerySet.values_list(flat=True) that yields single
+    values.
+    """
+
+    async def __aiter__(self):
+        queryset = self.queryset
+        compiler = queryset.query.get_compiler(queryset.db)
+        for row in await compiler.results_iter(
+            chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+        ):
+            yield row[0]
+
+
+_iterator_mapping = {
+    ModelIterable: AsyncModelIterable,
+    # RawModelIterable: AsyncRawModelIterable,
+    ValuesIterable: AsyncValuesIterable,
+    ValuesListIterable: AsyncValuesListIterable,
+    NamedValuesListIterable: AsyncNamedValuesListIterable,
+    FlatValuesListIterable: AsyncFlatValuesListIterable,
+}
+
+
+def iterable_class_patcher(fn):
+    @wraps(fn)
+    def decorator(*args, **kwargs):
+        query = fn(*args, **kwargs)
+        iterable_class = _iterator_mapping.get(query._iterable_class)
+
+        if iterable_class is None:
+            raise NotImplementedError(
+                f"{query._iterable_class.__name__} is not supported"
+            )
+
+        print(iterable_class)
+
+        query._iterable_class = iterable_class
+        return query
+
+    return decorator
 
 
 def not_implemented_method(reason):
@@ -142,6 +316,8 @@ def not_implemented_method(reason):
         "__iter__",
         "__len__",
         "__bool__",
+        "__getstate__",
+        "__setstate__",
         "explain",
     ],
 )
@@ -160,6 +336,14 @@ def not_implemented_method(reason):
         "adelete",
         "aupdate",
         "aiterator",
+    ],
+)
+@method_decorators(
+    iterable_class_patcher,
+    names=[
+        "values_list",
+        "raw",
+        "values",
     ],
 )
 class AsyncQuerySet(QuerySet):
@@ -359,7 +543,3 @@ class AsyncQuerySet(QuerySet):
             queryset = self.order_by("-pk")
         async for obj in queryset[:1]:
             return obj
-
-
-    # __getstate__ ##########################################################################
-    # __getstate__

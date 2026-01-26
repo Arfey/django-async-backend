@@ -180,7 +180,6 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | `Model.objects.aget`                | ✅        |          |
 | `Model.objects.acreate`             | ❌        |          |
 | `Model.objects.acount`              | ✅        |          |
-| `Model.objects.anone`               | ❌        |          |
 | `Model.objects.abulk_create`        | ❌        |          |
 | `Model.objects.abulk_update`        | ❌        |          |
 | `Model.objects.aget_or_create`      | ❌        |          |
@@ -195,28 +194,10 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | `Model.objects.aexists`             | ✅        |          |
 | `Model.objects.aexplain`            | ✅        |          |
 | `Model.objects.araw`                | ❌        |          |
-| `Model.objects.aall`                | ❌        |          |
-| `Model.objects.afilter`             | ❌        |          |
-| `Model.objects.aexclude`            | ❌        |          |
-| `Model.objects.acomplex_filter`     | ❌        |          |
-| `Model.objects.aunion`              | ❌        |          |
-| `Model.objects.aintersection`       | ❌        |          |
-| `Model.objects.adifference`         | ❌        |          |
-| `Model.objects.aselect_for_update`  | ❌        |          |
-| `Model.objects.aprefetch_related`   | ❌        |          |
-| `Model.objects.aannotate`           | ❌        |          |
-| `Model.objects.aorder_by`           | ❌        |          |
-| `Model.objects.adistinct`           | ❌        |          |
-| `Model.objects.adifference`         | ❌        |          |
-| `Model.objects.aextra`              | ❌        |          |
-| `Model.objects.areverse`            | ❌        |          |
-| `Model.objects.adefer`              | ❌        |          |
-| `Model.objects.aonly`               | ❌        |          |
-| `Model.objects.aresolve_expression` | ❌        |          |
 | `Model.objects.aaggregate`          | ✅        |          |
 | `__aiter__`                         | ✅        |          |
 | `__repr__`                          | ✅        |          |
-| `__len__`                           | ❌        | removed  |
+| `__len__`                           | ⚠️        | removed  |
 | `__getitem__`                       | ✅        |          |
 | `Model.objects.aiterator`           | ❌        |          |
 
