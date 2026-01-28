@@ -172,40 +172,46 @@ class MyTransactionTests(AsyncioTransactionTestCase):
             await do_db_stuff()
 ```
 
-# ORM support:
-### Manager:
+## ORM support
 
-| methods                             | supported | comments |
-| ----------------------------------- | --------- | -------- |
-| `Model.objects.aget`                | ✅        |          |
-| `Model.objects.acreate`             | ❌        |          |
-| `Model.objects.acount`              | ✅        |          |
-| `Model.objects.abulk_create`        | ❌        |          |
-| `Model.objects.abulk_update`        | ❌        |          |
-| `Model.objects.aget_or_create`      | ❌        |          |
-| `Model.objects.aupdate_or_create`   | ❌        |          |
-| `Model.objects.aearliest`           | ❌        |          |
-| `Model.objects.alatest`             | ❌        |          |
-| `Model.objects.afirst`              | ✅        |          |
-| `Model.objects.alast`               | ✅        |          |
-| `Model.objects.ain_bulk`            | ❌        |          |
-| `Model.objects.adelete`             | ❌        |          |
-| `Model.objects.aupdate`             | ❌        |          |
-| `Model.objects.aexists`             | ✅        |          |
-| `Model.objects.aexplain`            | ✅        |          |
-| `Model.objects.araw`                | ❌        |          |
-| `Model.objects.aaggregate`          | ✅        |          |
-| `__aiter__`                         | ✅        |          |
-| `__repr__`                          | ✅        |          |
-| `__len__`                           | ⚠️        | removed  |
-| `__getitem__`                       | ✅        |          |
-| `Model.objects.aiterator`           | ❌        |          |
+### Manager
 
-<!--
+`not planned` — These features are less commonly used and would require significant
+boilerplate to implement. To keep maintenance manageable, items marked with this label
+are not scheduled for implementation.
+
+| methods                                    | supported | comments      |
+| ------------------------------------------ | --------- | ------------- |
+| `Model.async_objects.aget`                 | ✅        |               |
+| `Model.async_objects.acreate`              | ❌        |               |
+| `Model.async_objects.acount`               | ✅        |               |
+| `Model.async_objects.abulk_create`         | ❌        |               |
+| `Model.async_objects.abulk_update`         | ❌        |               |
+| `Model.async_objects.aget_or_create`       | ❌        |               |
+| `Model.async_objects.aupdate_or_create`    | ❌        |               |
+| `Model.async_objects.aearliest`            | ❌        | not planned   |
+| `Model.async_objects.alatest`              | ❌        | not planned   |
+| `Model.async_objects.afirst`               | ✅        |               |
+| `Model.async_objects.alast`                | ✅        |               |
+| `Model.async_objects.ain_bulk`             | ❌        | not planned   |
+| `Model.async_objects.adelete`              | ❌        |               |
+| `Model.async_objects.aupdate`              | ❌        |               |
+| `Model.async_objects.aexists`              | ✅        |               |
+| `Model.async_objects.aexplain`             | ✅        |               |
+| `Model.async_objects.araw`                 | ❌        | not planned   |
+| `Model.async_objects.prefetch_related`     | ❌        | not planned   |
+| `Model.async_objects.aaggregate`           | ✅        |               |
+| `__aiter__`                                | ✅        |               |
+| `__repr__`                                 | ✅        |               |
+| `__len__`                                  | ❌        | not planned   |
+| `__getitem__`                              | ✅        |               |
+| `Model.objects.aiterator`                  | ❌        |               |
+
+
 ### RawQuerySet
 
 Not supported ❌
-
+<!--
 ### Model:
 
 | methods         | supported | comments |

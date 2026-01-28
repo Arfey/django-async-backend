@@ -18,6 +18,8 @@ class Author(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
 
+    async_object = AsyncManager()
+
     class Meta:
         db_table = "authors"
 
