@@ -1,0 +1,17 @@
+shell: bash
+
+init: |
+  [ -e ".lets/init" ] && exit 0
+  echo ✅ install pre-commit
+  pip install pre-commit --break-system-packages
+  echo ✅ init pre-commit
+  pre-commit install
+  echo ✅ setup .git-blame-ignore-revs
+  git config blame.ignoreRevsFile .git-blame-ignore-revs
+  echo ✅ Done!
+  touch .lets/init
+
+commands:
+  test_app:
+    description: Run test application
+    cmd: cd test_example && PYTHONPATH=. DJANGO_SETTINGS_MODULE='test_example.settings' poetry run uvicorn test_example.asgi:application --reload --host 0.0.0.0 --port 8000
