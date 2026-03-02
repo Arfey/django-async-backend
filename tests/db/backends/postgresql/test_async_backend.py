@@ -404,7 +404,7 @@ class Tests(AsyncioTestCase):
     async def _select(self, val):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.execute("SELECT %s::text[]", (val,))
             return (await cursor.fetchone())[0]
 
@@ -481,7 +481,7 @@ class Tests(AsyncioTestCase):
 
             copy_sql = "COPY reporter_table_tmp TO STDOUT (FORMAT CSV, HEADER)"
 
-            async with connection.cursor() as cursor:
+            async with await connection.cursor() as cursor:
                 async for row in cursor.copy(copy_sql):
                     pass
 
@@ -599,7 +599,7 @@ class ServerSideCursorsPostgresTests(AsyncioTestCase):
     async def inspect_cursors(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.execute(
                 "SELECT {fields} FROM pg_cursors;".format(
                     fields=self.cursor_fields

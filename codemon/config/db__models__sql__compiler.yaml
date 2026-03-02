@@ -1,0 +1,112 @@
+pathname: db/models/sql/compiler.py
+
+module:
+  add_raw_bottom:
+    - |
+        async def empty_aiter(_):
+            if False:
+                yield
+  functions:
+    cursor_iter:
+      to_async: true
+      calls:
+        - func:
+            attr: close
+          to_await: true
+        - name: iter
+          replace_raw: fetchmany_iter()
+      for_statements:
+        - target: rows
+          to_async: true
+      add_raw_top:
+        - |
+            async def fetchmany_iter():
+                while True:
+                    rows = await cursor.fetchmany(itersize)
+                    if rows == sentinel:
+                        break
+                    yield rows
+  classes:
+    SQLCompiler:
+      methods:
+        execute_sql:
+          to_async: true
+          return_blocks:
+            - replace_raw: '[i async for i in result]'
+              call:
+                name: list
+
+          calls:
+            - func:
+                attr: chunked_cursor
+              to_await: true
+            - func:
+                attr: cursor
+              to_await: true
+            - func:
+                attr: execute
+              to_await: true
+            - func:
+                attr: fetchone
+              to_await: true
+            - func:
+                value: cursor
+                attr: close
+              to_await: true
+            - name: iter
+              rename:
+                func:
+                  name: empty_aiter
+
+        has_results:
+          to_async: true
+          calls:
+            - func:
+                attr: execute_sql
+              to_await: true
+        results_iter:
+          to_async: true
+          calls:
+            - func:
+                attr: execute_sql
+              to_await: true
+        explain_query:
+          to_async: true
+          calls:
+            - func:
+                attr: execute_sql
+              to_await: true
+
+    SQLUpdateCompiler:
+      methods:
+        execute_sql:
+          to_async: true
+          calls:
+            - func:
+                attr: execute_sql
+              to_await: true
+              ## todo: fix
+              # - pre_sql_setup
+
+        execute_returning_sql:
+          to_async: true
+          context_managers:
+            - asname: cursor
+              to_async: true
+          calls:
+            - func:
+                attr: execute_sql
+              to_await: true
+
+    SQLInsertCompiler:
+      methods:
+        execute_sql:
+          to_async: True
+          context_managers:
+            - asname: cursor
+              to_async: true
+          calls:
+            - func:
+                value: cursor
+                attr: execute
+              to_await: true

@@ -35,11 +35,13 @@ TIMESTAMPTZ_OID = Database.adapters.types["timestamptz"].oid
 
 
 async def async_mogrify(sql, params, connection):
-    async with connection.cursor() as cursor:
+    async with await connection.cursor() as cursor:
         return AsyncCursor(cursor.connection).mogrify(sql, params)
 
 
 class AsyncDatabaseOperations(DatabaseWrapper.ops_class):
+    compiler_module = "django_async_backend.db.models.sql.compiler"
+
     async def compose_sql(self, sql, params):
         return await async_mogrify(sql, params, self.connection)
 

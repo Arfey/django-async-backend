@@ -15,3 +15,9 @@ commands:
   test_app:
     description: Run test application
     cmd: cd test_example && PYTHONPATH=. DJANGO_SETTINGS_MODULE='test_example.settings' poetry run uvicorn test_example.asgi:application --reload --host 0.0.0.0 --port 8000
+
+  test_generate:
+    description: Generate ORM
+    cmd: |
+      git restore django_async_backend/db/models/query.py django_async_backend/db/models/sql/compiler.py django_async_backend/db/models/sql/query.py
+      poetry run python -m codemon

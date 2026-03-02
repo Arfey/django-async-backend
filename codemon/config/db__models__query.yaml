@@ -1,0 +1,288 @@
+pathname: db/models/query.py
+
+module:
+  new_imports:
+    - "from django_async_backend.db.models import sql as async_sql"
+
+  classes:
+    QuerySet:
+      assigns:
+        - target:
+            name: create
+          remove: true
+
+        - target:
+            name: bulk_update
+          remove: true
+
+        - target:
+            name: get_or_create
+          remove: true
+
+        - target:
+            name: update
+          remove: true
+
+        - target:
+            name: update_or_create
+          remove: true
+
+        - target:
+            name: bulk_create
+          remove: true
+
+        - target:
+            name: delete
+          remove: true
+
+      methods:
+        __init__:
+          calls:
+            - func:
+                attr: Query
+              rename:
+                func:
+                  value: async_sql
+
+        aexplain:
+          remove: True
+
+        aget:
+          remove: true
+
+        acreate:
+          remove: true
+
+        abulk_create:
+          remove: true
+
+        abulk_update:
+          remove: true
+
+        aget_or_create:
+          remove: true
+
+        aupdate_or_create:
+          remove: true
+
+        aaggregate:
+          remove: true
+
+        acount:
+          remove: true
+
+        aexists:
+          remove: true
+
+        afirst:
+          remove: true
+
+        alast:
+          remove: true
+
+        aearliest:
+          remove: true
+
+        alatest:
+          remove: true
+
+        ain_bulk:
+          remove: true
+
+        adelete:
+          remove: true
+
+        aupdate:
+          remove: true
+
+        aiterator:
+          remove: true
+
+        __iter__:
+          remove: true
+
+        __len__:
+          remove: true
+
+        __bool__:
+          remove: true
+
+        __repr__:
+          remove: true
+
+        __getstate__:
+          remove: true
+
+        __setstate__:
+          remove: true
+
+        explain:
+          to_async: true
+          rename: aexplain
+
+        get:
+          to_async: true
+          rename: aget
+
+        create:
+          to_async: true
+          rename: acreate
+
+        bulk_create:
+          to_async: true
+          rename: abulk_create
+
+        bulk_update:
+          to_async: true
+          rename: abulk_update
+
+        get_or_create:
+          to_async: true
+          rename: aget_or_create
+
+        update_or_create:
+          to_async: true
+          rename: aupdate_or_create
+
+        aggregate:
+          to_async: true
+          rename: aaggregate
+
+        count:
+          to_async: true
+          rename: acount
+          calls:
+            - func:
+                attr: get_count
+              to_await: true
+
+        exists:
+          to_async: true
+          rename: aexists
+
+        first:
+          to_async: true
+          rename: afirst
+
+        last:
+          to_async: true
+          rename: alast
+
+        earliest:
+          to_async: true
+          rename: aearliest
+
+        latest:
+          to_async: true
+          rename: alatest
+
+        in_bulk:
+          to_async: true
+          rename: ain_bulk
+
+        delete:
+          to_async: true
+          rename: adelete
+
+        update:
+          to_async: true
+          rename: aupdate
+          calls:
+            - func:
+                attr: execute_sql
+              to_await: true
+
+        iterator:
+          to_async: true
+          rename: aiterator
+
+        _raw_delete:
+          to_async: true
+          calls:
+            - func:
+                attr: execute_sql
+              to_await: true
+
+        _update:
+          to_async: true
+          calls:
+            - func:
+                attr: execute_sql
+              to_await: true
+
+        _insert:
+          to_async: true
+          calls:
+            - func:
+                attr: execute_sql
+              to_await: true
+
+    BaseIterable:
+      methods:
+        _async_generator:
+          remove: true
+
+        __aiter__:
+          remove: true
+
+    ModelIterable:
+      methods:
+        __iter__:
+          rename: __aiter__
+          to_async: true
+          calls:
+            - func:
+                attr: results_iter
+              to_await: true
+            - func:
+                attr: execute_sql
+              to_await: true
+
+    RawModelIterable:
+      methods:
+        __iter__:
+          rename: __aiter__
+          to_async: true
+
+    ValuesIterable:
+      methods:
+        __iter__:
+          rename: __aiter__
+          to_async: true
+          calls:
+            - func:
+                attr: results_iter
+              to_await: true
+
+    ValuesListIterable:
+      methods:
+        __iter__:
+          rename: __aiter__
+          to_async: true
+          calls:
+            - func:
+                attr: results_iter
+              to_await: true
+
+    NamedValuesListIterable:
+      methods:
+        __iter__:
+          rename: __aiter__
+          to_async: true
+          calls:
+            - func:
+                attr: __iter__
+              to_await: true
+              rename:
+                func:
+                  attr: __aiter__
+
+    FlatValuesListIterable:
+      methods:
+        __iter__:
+          rename: __aiter__
+          to_async: true
+          calls:
+            - func:
+                attr: results_iter
+              to_await: true

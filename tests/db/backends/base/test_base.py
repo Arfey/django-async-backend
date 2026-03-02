@@ -221,7 +221,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
     async def call_execute(connection, params=None):
         ret_val = "1" if params is None else "%s"
         sql = "SELECT " + ret_val + connection.features.bare_select_suffix
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.execute(sql, params)
 
     async def call_executemany(self, connection, params=None):
@@ -232,7 +232,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
         if params is None:
             params = [(i,) for i in range(3)]
 
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.executemany(sql, params)
 
     @staticmethod
@@ -267,7 +267,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
         connection = async_connections[DEFAULT_DB_ALIAS]
         wrapper = self.mock_wrapper()
         with connection.execute_wrapper(wrapper):
-            async with connection.cursor() as cursor:
+            async with await connection.cursor() as cursor:
                 sql = "SELECT 17" + connection.features.bare_select_suffix
                 await cursor.execute(sql)
                 seventeen = await cursor.fetchall()
@@ -335,7 +335,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
         wrapper = self.mock_wrapper()
         sql = "SELECT 'aloha'" + connection.features.bare_select_suffix
         with connection.execute_wrapper(wrapper):
-            async with connection.cursor() as cursor:
+            async with await connection.cursor() as cursor:
                 await cursor.execute(sql)
         (_, reported_sql, _, _, _), _ = wrapper.call_args
         self.assertEqual(reported_sql, sql)
@@ -395,7 +395,7 @@ class ConnectionHealthChecksTests(AsyncioTransactionTestCase):
     async def run_query(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.execute(
                 "SELECT 42" + connection.features.bare_select_suffix
             )

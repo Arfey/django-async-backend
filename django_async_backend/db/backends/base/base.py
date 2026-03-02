@@ -295,16 +295,12 @@ class BaseAsyncDatabaseWrapper:
             wrapped_cursor = self.make_cursor(cursor)
         return wrapped_cursor
 
-    @asynccontextmanager
     async def _cursor(self, name=None):
         await self.close_if_health_check_failed()
         await self.ensure_connection()
 
         with self.wrap_database_errors:
-            async with self._prepare_cursor(
-                self.create_cursor(name)
-            ) as cursor:
-                yield cursor
+            return self._prepare_cursor(self.create_cursor(name))
 
     async def _commit(self):
         if self.connection is not None:
@@ -659,7 +655,7 @@ class BaseAsyncDatabaseWrapper:
         """
         must_close = self.connection is None
         try:
-            async with self.cursor() as cursor:
+            async with await self.cursor() as cursor:
                 yield cursor
         finally:
             if must_close:

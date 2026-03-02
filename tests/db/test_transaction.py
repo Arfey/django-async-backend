@@ -309,7 +309,7 @@ class AsyncAtomicTests(AsyncioTransactionTestCase):
             # savepoint
             with self.assertRaises(DatabaseError):
                 async with async_atomic(savepoint=False):
-                    async with connection.cursor() as cursor:
+                    async with await connection.cursor() as cursor:
                         await cursor.execute(
                             "SELECT no_such_col FROM reporter_table_tmp"
                         )

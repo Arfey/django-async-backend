@@ -48,7 +48,7 @@ from django_async_backend.db import async_connections
 
 connection = async_connections['default']
 
-async with connection.cursor() as cursor:
+async with await connection.cursor() as cursor:
     await cursor.execute("SELECT ...")
     rows = await cursor.fetchall()
 
@@ -69,7 +69,7 @@ Async cursors provide the following methods:
 - `fetchall`
 
 ```python
-async with connection.cursor() as cursor:
+async with await connection.cursor() as cursor:
     await cursor.execute("SELECT 1")
     row = await cursor.fetchone()
 ```
