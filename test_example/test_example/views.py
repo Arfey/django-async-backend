@@ -18,7 +18,8 @@ async def index(request: HttpRequest) -> HttpResponse:
         await cursor.execute("select 1")
 
     print("count", await Book.async_object.acount())
-    # print('first', [i async for i in Book.async_object.all()])
+    async for i in Book.async_object.select_related("author").all():
+        print(i, i.author)
 
     await connection.close()
 

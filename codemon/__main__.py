@@ -139,67 +139,109 @@ def return_transformer(config: ReturnBlock) -> cst.CSTTransformer:
     return ReturnTransformed()
 
 
+def add_raw_top_to_function(updated_node, add_raw_top):
+    blocks = []
+    for code in add_raw_top:
+        blocks.extend(
+            [
+                cst.EmptyLine(),
+                cst.parse_module(dedent(code)).body[0],
+                cst.EmptyLine(),
+            ]
+        )
+    if m.matches(
+        updated_node,
+        m.FunctionDef(
+            body=m.IndentedBlock(
+                body=[
+                    m.SimpleStatementLine(
+                        body=[m.Expr(value=m.SimpleString()), m.ZeroOrMore()]
+                    ),
+                    m.ZeroOrMore(),
+                ]
+            )
+        ),
+    ):
+        body = [
+            updated_node.body.body[0],
+            *blocks,
+            *updated_node.body.body[1:],
+        ]
+    else:
+        body = [*blocks, *updated_node.body.body]
+    return updated_node.with_changes(
+        body=updated_node.body.with_changes(body=body)
+    )
+
+
+def apply_return_blocks(original_node, updated_node, return_blocks):
+    for return_config in return_blocks:
+        if return_config.call and return_config.call.func:
+            matcher = m.Return(
+                m.Call(
+                    func=m.Attribute(
+                        attr=(
+                            m.Name(return_config.call.func.attr)
+                            if return_config.call.func.attr
+                            else m.DoNotCare()
+                        ),
+                        value=(
+                            m.Name(return_config.call.func.value)
+                            if return_config.call.func.value
+                            else m.DoNotCare()
+                        ),
+                    )
+                )
+            )
+        elif return_config.call and return_config.call.name:
+            matcher = m.Return(m.Call(func=m.Name(return_config.call.name)))
+        else:
+            matcher = m.Return()
+        if m.matches(original_node, matcher):
+            updated_node = updated_node.visit(
+                return_transformer(return_config)
+            )
+            break
+    return updated_node
+
+
+def apply_remove(config, original_node, updated_node):
+    if config.remove:
+        return cst.RemoveFromParent()
+    return updated_node
+
+
+def apply_for_statements(original_node, updated_node, for_statements):
+    for for_config in for_statements:
+        if for_config.target:
+            matcher = m.For(target=m.Name(for_config.target))
+        else:
+            matcher = m.For()
+        if m.matches(original_node, matcher):
+            updated_node = updated_node.visit(for_transformer(for_config))
+            break
+    return updated_node
+
+
 def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
     class FunctionTransformed(m.MatcherDecoratableTransformer):
-
         if config.for_statements:
-
             @m.leave(m.For())
             def for_statement(
                 self, original_node: cst.For, updated_node: cst.For
             ) -> cst.For:
-                for for_config in config.for_statements:
-                    if for_config.target:
-                        matcher = m.For(target=m.Name(for_config.target))
-                    else:
-                        matcher = m.For()
-
-                    if m.matches(original_node, matcher):
-                        updated_node = updated_node.visit(
-                            for_transformer(for_config)
-                        )
-                        break
-
-                return updated_node
+                return apply_for_statements(
+                    original_node, updated_node, config.for_statements
+                )
 
         if config.return_blocks:
-
             @m.leave(m.Return())
             def return_block(
                 self, original_node: cst.Return, updated_node: cst.Return
             ) -> cst.Return:
-                for return_config in config.return_blocks:
-                    if return_config.call and return_config.call.func:
-                        matcher = m.Return(
-                            m.Call(
-                                func=m.Attribute(
-                                    attr=(
-                                        m.Name(return_config.call.func.attr)
-                                        if return_config.call.func.attr
-                                        else m.DoNotCare()
-                                    ),
-                                    value=(
-                                        m.Name(return_config.call.func.value)
-                                        if return_config.call.func.value
-                                        else m.DoNotCare()
-                                    ),
-                                )
-                            )
-                        )
-                    elif return_config.call and return_config.call.name:
-                        matcher = m.Return(
-                            m.Call(func=m.Name(return_config.call.name))
-                        )
-                    else:
-                        matcher = m.Return()
-
-                    if m.matches(original_node, matcher):
-                        updated_node = updated_node.visit(
-                            return_transformer(return_config)
-                        )
-                        break
-
-                return updated_node
+                return apply_return_blocks(
+                    original_node, updated_node, config.return_blocks
+                )
 
         if config.to_async:
 
@@ -266,46 +308,19 @@ def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
                 original_node: cst.FunctionDef,
                 updated_node: cst.FunctionDef,
             ) -> cst.FunctionDef:
-                blocks = []
-
-                for code in config.add_raw_top:
-                    blocks.extend(
-                        [
-                            cst.EmptyLine(),
-                            cst.parse_module(dedent(code)).body[0],
-                            cst.EmptyLine(),
-                        ]
-                    )
-
-                if m.matches(
-                    updated_node,
-                    m.FunctionDef(
-                        body=m.IndentedBlock(
-                            body=[
-                                m.SimpleStatementLine(
-                                    body=[
-                                        m.Expr(value=m.SimpleString()),
-                                        m.ZeroOrMore(),
-                                    ]
-                                ),
-                                m.ZeroOrMore(),
-                            ]
-                        )
-                    ),
-                ):
-                    body = [
-                        updated_node.body.body[0],
-                        *blocks,
-                        *updated_node.body.body[1:],
-                    ]
-                else:
-                    body = [*blocks, *updated_node.body.body]
-
-                return updated_node.with_changes(
-                    body=updated_node.body.with_changes(
-                        body=body,
-                    )
+                return add_raw_top_to_function(
+                    updated_node, config.add_raw_top
                 )
+
+        if config.remove:
+
+            @m.leave(m.FunctionDef())
+            def remove(
+                self,
+                original_node: cst.FunctionDef,
+                updated_node: cst.FunctionDef,
+            ) -> cst.RemovalSentinel:
+                return apply_remove(config, original_node, updated_node)
 
     return FunctionTransformed()
 
@@ -319,39 +334,9 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
             def return_block(
                 self, original_node: cst.Return, updated_node: cst.Return
             ) -> cst.Return:
-                for return_config in config.return_blocks:
-
-                    if return_config.call and return_config.call.func:
-                        matcher = m.Return(
-                            m.Call(
-                                func=m.Attribute(
-                                    attr=(
-                                        m.Name(return_config.call.func.attr)
-                                        if return_config.call.func.attr
-                                        else m.DoNotCare()
-                                    ),
-                                    value=(
-                                        m.Name(return_config.call.func.value)
-                                        if return_config.call.func.value
-                                        else m.DoNotCare()
-                                    ),
-                                )
-                            )
-                        )
-                    elif return_config.call and return_config.call.name:
-                        matcher = m.Return(
-                            m.Call(func=m.Name(return_config.call.name))
-                        )
-                    else:
-                        matcher = m.Return()
-
-                    if m.matches(original_node, matcher):
-                        updated_node = updated_node.visit(
-                            return_transformer(return_config)
-                        )
-                        break
-
-                return updated_node
+                return apply_return_blocks(
+                    original_node, updated_node, config.return_blocks
+                )
 
         if config.rename:
 
@@ -371,7 +356,7 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
                 original_node: cst.FunctionDef,
                 updated_node: cst.FunctionDef,
             ) -> cst.RemovalSentinel:
-                return cst.RemoveFromParent()
+                return apply_remove(config, original_node, updated_node)
 
         if config.to_async:
 
@@ -447,6 +432,28 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
                         break
 
                 return updated_node
+
+        if config.add_raw_top:
+
+            @m.leave(m.FunctionDef())
+            def add_raw_top(
+                self,
+                original_node: cst.FunctionDef,
+                updated_node: cst.FunctionDef,
+            ) -> cst.FunctionDef:
+                return add_raw_top_to_function(
+                    updated_node, config.add_raw_top
+                )
+
+        if config.for_statements:
+
+            @m.leave(m.For())
+            def for_statement(
+                self, original_node: cst.For, updated_node: cst.For
+            ) -> cst.For:
+                return apply_for_statements(
+                    original_node, updated_node, config.for_statements
+                )
 
     return MethodTransformed()
 

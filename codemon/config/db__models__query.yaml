@@ -1,8 +1,16 @@
-pathname: db/models/query.py
+pathname: db/models/query.pyд
 
 module:
   new_imports:
     - "from django_async_backend.db.models import sql as async_sql"
+
+  functions:
+    prefetch_related_objects:
+      to_async: true
+
+    # todo:
+    # aprefetch_related_objects:
+    #   remove: true
 
   classes:
     QuerySet:
@@ -44,6 +52,31 @@ module:
                 func:
                   value: async_sql
 
+        # __getitem__:
+        #   add_raw_top:
+        #     - |
+        #       async def get_item():
+        #           await qs._fetch_all()
+        #           return qs._result_cache[0]
+        #     - |
+        #       async def get_item_from_cache():
+        #           # Even if the object exists in the cache, we return a coroutine
+        #           # to maintain consistent behavior when the object is not in
+        #           # the cache.
+        #           return self._result_cache[k]
+        #   return_blocks:
+        #     - replace_raw: 'get_item_from_cache()'
+        #       call:
+        #         func:
+        #           value: self
+        #           attr: _result_cache
+
+        _prefetch_related_objects:
+          to_async: true
+          calls:
+            - name: prefetch_related_objects
+              to_await: true
+
         aexplain:
           remove: True
 
@@ -72,6 +105,9 @@ module:
           remove: true
 
         aexists:
+          remove: true
+
+        acontains:
           remove: true
 
         afirst:
@@ -120,6 +156,11 @@ module:
           to_async: true
           rename: aexplain
 
+          calls:
+            - func:
+                attr: explain
+              to_await: true
+
         get:
           to_async: true
           rename: aget
@@ -148,6 +189,11 @@ module:
           to_async: true
           rename: aaggregate
 
+          calls:
+            - func:
+                attr: chain
+              to_await: true
+
         count:
           to_async: true
           rename: acount
@@ -160,13 +206,23 @@ module:
           to_async: true
           rename: aexists
 
+        contains:
+          to_async: true
+          rename: acontains
+
         first:
           to_async: true
           rename: afirst
+          for_statements:
+            - target: obj
+              to_async: true
 
         last:
           to_async: true
           rename: alast
+          for_statements:
+            - target: obj
+              to_async: true
 
         earliest:
           to_async: true
@@ -215,6 +271,21 @@ module:
           calls:
             - func:
                 attr: execute_sql
+              to_await: true
+
+        __aiter__:
+          calls:
+            - name: sync_to_async
+              replace_raw: self._fetch_all
+
+        _fetch_all:
+          to_async: true
+          calls:
+            - name: list
+              replace_raw: list([i async for i in self._iterable_class(self)])
+            - func:
+                value: self
+                attr: _prefetch_related_objects
               to_await: true
 
     BaseIterable:

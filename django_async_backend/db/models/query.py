@@ -523,7 +523,7 @@ class QuerySet(AltersData):
                 raise TypeError("Complex aggregates require an alias")
             kwargs[arg.default_alias] = arg
 
-        return self.query.chain().get_aggregation(self.db, kwargs)
+        return await self.query.chain().get_aggregation(self.db, kwargs)
 
     async def acount(self):
         """
@@ -1071,7 +1071,7 @@ class QuerySet(AltersData):
                 method="first"
             )
             queryset = self.order_by("pk")
-        for obj in queryset[:1]:
+        async for obj in queryset[:1]:
             return obj
 
     async def alast(self):
@@ -1081,7 +1081,7 @@ class QuerySet(AltersData):
         else:
             self._check_ordering_first_last_queryset_aggregation(method="last")
             queryset = self.order_by("-pk")
-        for obj in queryset[:1]:
+        async for obj in queryset[:1]:
             return obj
 
     async def ain_bulk(self, id_list=None, *, field_name="pk"):
@@ -1255,7 +1255,7 @@ class QuerySet(AltersData):
             return self.query.has_results(using=self.db)
         return bool(self._result_cache)
 
-    def contains(self, obj):
+    async def acontains(self, obj):
         """
         Return True if the QuerySet contains the provided obj,
         False otherwise.
@@ -1278,12 +1278,9 @@ class QuerySet(AltersData):
             return obj in self._result_cache
         return self.filter(pk=obj.pk).exists()
 
-    async def acontains(self, obj):
-        return await sync_to_async(self.contains)(obj=obj)
-
-    def _prefetch_related_objects(self):
+    async def _prefetch_related_objects(self):
         # This method can only be called once the result cache has been filled.
-        prefetch_related_objects(
+        await prefetch_related_objects(
             self._result_cache, *self._prefetch_related_lookups
         )
         self._prefetch_done = True
@@ -1293,7 +1290,9 @@ class QuerySet(AltersData):
         Runs an EXPLAIN on the SQL query this QuerySet would perform, and
         returns the results.
         """
-        return self.query.explain(using=self.db, format=format, **options)
+        return await self.query.explain(
+            using=self.db, format=format, **options
+        )
 
     ##################################################
     # PUBLIC METHODS THAT RETURN A QUERYSET SUBCLASS #
@@ -1967,7 +1966,7 @@ class QuerySet(AltersData):
                 [i async for i in self._iterable_class(self)]
             )
         if self._prefetch_related_lookups and not self._prefetch_done:
-            self._prefetch_related_objects()
+            await self._prefetch_related_objects()
 
     def _next_is_sticky(self):
         """
@@ -2324,7 +2323,7 @@ def normalize_prefetch_lookups(lookups, prefix=None):
     return ret
 
 
-def prefetch_related_objects(model_instances, *related_lookups):
+async def prefetch_related_objects(model_instances, *related_lookups):
     """
     Populate prefetched object caches for an iterable of model instances based
     on the lookups/Prefetch instances given.

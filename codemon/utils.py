@@ -79,9 +79,11 @@ class Assign(BaseModel):
 
 class Method(BaseModel):
     remove: bool = False
+    add_raw_top: list[str] = None
     to_async: bool = False
     rename: str | None = None
     calls: list[Call] | None = None
+    for_statements: list[ForStatement] | None = None
     context_managers: list[ContextManagers] | None = None
     return_blocks: list[ReturnBlock] | None = None
 
@@ -99,6 +101,7 @@ class Function(BaseModel):
     calls: list[Call] | None = None
     for_statements: list[ForStatement] | None = None
     return_blocks: list[ReturnBlock] | None = None
+    remove: bool = False
 
 
 class ImportAlias(BaseModel):
