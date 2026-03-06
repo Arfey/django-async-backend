@@ -172,7 +172,6 @@ class MyTransactionTests(AsyncioTransactionTestCase):
             await do_db_stuff()
 ```
 
-<!--
 # ORM support:
 ### Manager:
 
@@ -180,7 +179,7 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | ----------------------------------- | --------- | -------- |
 | `Model.objects.aget`                | ❌        |          |
 | `Model.objects.acreate`             | ❌        |          |
-| `Model.objects.acount`              | ❌        |          |
+| `Model.objects.acount`              | ✅        |          |
 | `Model.objects.anone`               | ❌        |          |
 | `Model.objects.abulk_create`        | ❌        |          |
 | `Model.objects.abulk_update`        | ❌        |          |
@@ -196,7 +195,7 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | `Model.objects.aexists`             | ❌        |          |
 | `Model.objects.aexplain`            | ❌        |          |
 | `Model.objects.araw`                | ❌        |          |
-| `Model.objects.aall`                | ❌        |          |
+| `Model.objects.all`                 | ✅        |          |
 | `Model.objects.afilter`             | ❌        |          |
 | `Model.objects.aexclude`            | ❌        |          |
 | `Model.objects.acomplex_filter`     | ❌        |          |
@@ -216,7 +215,7 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | `Model.objects.ausing`              | ❌        |          |
 | `Model.objects.aresolve_expression` | ❌        |          |
 | `Model.objects.aordered`            | ❌        |          |
-| `__aiter__`                         | ❌        |          |
+| `__aiter__`                         | ✅        |          |
 | `__repr__`                          | ❌        |          |
 | `__len__`                           | ❌        |          |
 | `__getitem__`                       | ❌        |          |
@@ -242,7 +241,7 @@ Not supported ❌
 | `User.is_authenticated`     | ❌        |          |
 | `User.is_super_user`        | ❌        |          |
 | `User.objects.acreate_user` | ❌        |          |
-| `...`                       | ❌        |          | -->
+| `...`                       | ❌        |          |
 
 
 ## ⚙️ Development Setup
