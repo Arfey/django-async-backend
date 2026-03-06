@@ -5,8 +5,8 @@ from django_async_backend.db.transaction import async_atomic
 
 
 class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
+    # todo: fix problem with creating models
     pass
-
 
 class AsyncioTestCase(AsyncioTransactionTestCase):
 
