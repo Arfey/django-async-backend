@@ -17,9 +17,9 @@ async def index(request: HttpRequest) -> HttpResponse:
     async with await connection.cursor() as cursor:
         await cursor.execute("select 1")
 
-    print("count", await Book.async_object.acount())
+    print("count", await Book.async_object.acount())  # noqa
     async for i in Book.async_object.select_related("author").all():
-        print(i, i.author)
+        print(i, i.author)  # noqa
 
     await connection.close()
 

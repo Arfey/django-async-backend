@@ -58,7 +58,8 @@ class Call(BaseModel):
             self.func is not None and self.name is not None
         ):
             raise ValueError(
-                'Exactly one of "fun" or "name" must be set, not both or neither.'
+                'Exactly one of "fun" or "name" must '
+                "be set, not both or neither."
             )
         return self
 
@@ -124,7 +125,8 @@ class Config(BaseModel):
 
 def load_file(*, config: Config, version: str):
     response = requests.get(
-        f"https://raw.githubusercontent.com/django/django/refs/tags/{version}/django/{config.pathname}"
+        f"https://raw.githubusercontent.com/django/django/refs/tags/{version}/django/{config.pathname}",  # noqa
+        timeout=10,
     )
     response.raise_for_status()
 
@@ -153,7 +155,7 @@ def write_ast(ast, config, version):
         parent.parent / "django_async_backend" / config.pathname, "w"
     ) as f:
         f.write(
-            f"# This file was generated automatically. Do not modify it manually. (based on django {version})\n"
+            f"# This file was generated automatically. Do not modify it manually. (based on django {version})\n"  # noqa
         )
         f.write(ast.code)
 

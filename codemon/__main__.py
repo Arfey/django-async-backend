@@ -1,3 +1,5 @@
+# flake8: noqa: C901
+
 from textwrap import dedent
 
 import libcst as cst

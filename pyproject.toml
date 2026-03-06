@@ -71,11 +71,22 @@ max-complexity = 12
 exclude = [
     ".git",
     "env/",
+    "django_async_backend/db/models/query.py",
+    "django_async_backend/db/models/sql/compiler.py",
+    "django_async_backend/db/models/sql/query.py",
 ]
 extend-ignore = ["S001"]
 
 [tool.bandit]
-exclude_dirs = ["env", ".cache", "tests", ".mypy_cache"]
+exclude_dirs = [
+  "env",
+  ".cache",
+  "tests",
+  ".mypy_cache",
+  "django_async_backend/db/models/query.py",
+  "django_async_backend/db/models/sql/compiler.py",
+  "django_async_backend/db/models/sql/query.py",
+]
 
 [tool.mypy]
 ignore_missing_imports = true

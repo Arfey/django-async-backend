@@ -32,7 +32,13 @@ commands:
       poetry run python -m codemon
       poetry run pre-commit run darker -v --all-files || true
 
+  lint:
+    group: Linters & Formatters
+    description: Run all linters
+    cmd: poetry run pre-commit run --all-files
+
   test:
+    group: Tests
     depends:
       - _test_database
     options: |
