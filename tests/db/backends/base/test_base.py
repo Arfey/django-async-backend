@@ -19,7 +19,7 @@ from django_async_backend.test import (
 
 
 async def create_table():
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         await cursor.execute(
             """
             CREATE TABLE reporter_table_tmp (
@@ -31,14 +31,14 @@ async def create_table():
 
 
 async def drop_table():
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         await cursor.execute("DROP TABLE reporter_table_tmp;")
 
     await async_connections[DEFAULT_DB_ALIAS].close()
 
 
 async def create_instance(id):
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         await cursor.execute(
             f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');"
         )
@@ -47,7 +47,7 @@ async def create_instance(id):
 
 
 async def get_all():
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         res = await cursor.execute(
             "SELECT name FROM reporter_table_tmp order by name;"
         )
@@ -301,7 +301,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
             c.execute_wrapper(blocker),
             c.execute_wrapper(wrapper),
         ):
-            async with c.cursor() as cursor:
+            async with await c.cursor() as cursor:
                 await cursor.execute("The database never sees this")
                 self.assertEqual(wrapper.call_count, 1)
                 await cursor.executemany(
@@ -322,7 +322,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
             c.execute_wrapper(blocker),
             c.execute_wrapper(wrapper),
         ):
-            async with c.cursor() as cursor:
+            async with await c.cursor() as cursor:
                 await cursor.execute("The database never sees this")
                 self.assertEqual(wrapper.call_count, 1)
                 await cursor.executemany(

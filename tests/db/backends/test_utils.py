@@ -15,7 +15,9 @@ from django_async_backend.test import AsyncioTestCase
 class AsyncCursorTest(AsyncioTestCase):
 
     async def create_table(self):
-        async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+        async with await async_connections[
+            DEFAULT_DB_ALIAS
+        ].cursor() as cursor:
             await cursor.execute(
                 "CREATE TABLE test_table_tmp (name VARCHAR(255) NOT NULL);"
             )
@@ -23,7 +25,9 @@ class AsyncCursorTest(AsyncioTestCase):
     async def test_execute(self):
         await self.create_table()
 
-        async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+        async with await async_connections[
+            DEFAULT_DB_ALIAS
+        ].cursor() as cursor:
             await cursor.execute(
                 """
                 INSERT INTO test_table_tmp (name) VALUES ('1');
@@ -45,7 +49,9 @@ class AsyncCursorTest(AsyncioTestCase):
     async def test_executemany(self):
         await self.create_table()
 
-        async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+        async with await async_connections[
+            DEFAULT_DB_ALIAS
+        ].cursor() as cursor:
             await cursor.executemany(
                 "INSERT INTO test_table_tmp (name) VALUES (%s)", [(1,), (2,)]
             )
@@ -65,7 +71,9 @@ class AsyncCursorTest(AsyncioTestCase):
     async def test_iterator(self):
         await self.create_table()
 
-        async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+        async with await async_connections[
+            DEFAULT_DB_ALIAS
+        ].cursor() as cursor:
             await cursor.execute(
                 """
                 INSERT INTO test_table_tmp (name) VALUES ('1'), ('2'), ('3');

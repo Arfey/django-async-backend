@@ -22,3 +22,13 @@ commands:
       git restore django_async_backend/db/models/query.py django_async_backend/db/models/sql/compiler.py django_async_backend/db/models/sql/query.py
       poetry run python -m codemon
       poetry run pre-commit run darker -v --all-files || true
+
+  test:
+    cmd: |
+      if docker compose ps postgres | grep -q 'Up'; then
+        echo "✅ postgres is already running"
+      else
+        echo "🚀 starting postgres"
+        docker compose up postgres -d
+      fi
+      cd tests && poetry run python manage.py test

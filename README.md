@@ -306,7 +306,7 @@ from django_async_backend.db import async_connections
 
 async def run_query():
     async with async_connections._independent_connection():
-        conn = async_connections['default']
+        conn = await async_connections['default']
         async with conn.cursor() as cursor:
             await cursor.execute("SELECT ...")
             return await cursor.fetchall()

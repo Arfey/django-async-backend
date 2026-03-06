@@ -1,24 +1,11 @@
 from unittest import IsolatedAsyncioTestCase
 
-from django.test.utils import (
-    setup_test_environment,
-    teardown_test_environment,
-)
-
 from django_async_backend.db import async_connections
 from django_async_backend.db.transaction import async_atomic
 
 
 class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        setup_test_environment()
-
-    @classmethod
-    def tearDownClass(cls):
-        teardown_test_environment()
-        super().tearDownClass()
+    pass
 
 
 class AsyncioTestCase(AsyncioTransactionTestCase):

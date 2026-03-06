@@ -366,15 +366,15 @@ class BaseAsyncDatabaseWrapper:
     # ##### Backend-specific savepoint management methods #####
 
     async def _savepoint(self, sid):
-        async with self.cursor() as cursor:
+        async with await self.cursor() as cursor:
             await cursor.execute(self.ops.savepoint_create_sql(sid))
 
     async def _savepoint_rollback(self, sid):
-        async with self.cursor() as cursor:
+        async with await self.cursor() as cursor:
             await cursor.execute(self.ops.savepoint_rollback_sql(sid))
 
     async def _savepoint_commit(self, sid):
-        async with self.cursor() as cursor:
+        async with await self.cursor() as cursor:
             await cursor.execute(self.ops.savepoint_commit_sql(sid))
 
     async def _savepoint_allowed(self):
