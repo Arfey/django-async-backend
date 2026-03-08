@@ -193,7 +193,7 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | `Model.objects.ain_bulk`            | ❌        |          |
 | `Model.objects.adelete`             | ❌        |          |
 | `Model.objects.aupdate`             | ❌        |          |
-| `Model.objects.aexists`             | ❌        |          |
+| `Model.objects.aexists`             | ✅        |          |
 | `Model.objects.aexplain`            | ✅        |          |
 | `Model.objects.araw`                | ❌        |          |
 | `Model.objects.all`                 | ✅        |          |
@@ -219,7 +219,7 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | `__aiter__`                         | ✅        |          |
 | `__repr__`                          | ❌        |          |
 | `__len__`                           | ❌        |          |
-| `__getitem__`                       | ❌        |          |
+| `__getitem__`                       | ✅        |          |
 | `Model.objects.aiterator`           | ❌        |          |
 
 ### RawQuerySet

@@ -372,6 +372,35 @@ class QuerySet(AltersData):
 
     def __getitem__(self, k):
         """Retrieve an item or slice from the set of results."""
+
+        async def fetch_data(query_set, index):
+            if query_set._result_cache is None:
+                await query_set._fetch_all()
+            return query_set._result_cache[index]
+
+        async def fetch_data_iter(query_set, index):
+            if query_set._result_cache is None:
+                await query_set._fetch_all()
+            for item in query_set._result_cache[index]:
+                yield item
+
+        def get_data():
+            if self._result_cache is not None:
+                return (
+                    fetch_data_iter(self, k)
+                    if isinstance(k, slice)
+                    else fetch_data(self, k)
+                )
+
+            if isinstance(k, slice):
+                return (
+                    fetch_data_iter(qs, slice(None, None, k.step))
+                    if k.step
+                    else qs
+                )
+
+            return fetch_data(qs, 0)
+
         if not isinstance(k, (int, slice)):
             raise TypeError(
                 "QuerySet indices must be integers or slices, not %s."
@@ -387,7 +416,7 @@ class QuerySet(AltersData):
             raise ValueError("Negative indexing is not supported.")
 
         if self._result_cache is not None:
-            return self._result_cache[k]
+            return get_data()
 
         if isinstance(k, slice):
             qs = self._chain()
@@ -400,12 +429,12 @@ class QuerySet(AltersData):
             else:
                 stop = None
             qs.query.set_limits(start, stop)
-            return list(qs)[:: k.step] if k.step else qs
+            return get_data()
 
         qs = self._chain()
         qs.query.set_limits(k, k + 1)
-        qs._fetch_all()
-        return qs._result_cache[0]
+        ...
+        return get_data()
 
     def __class_getitem__(cls, *args, **kwargs):
         return cls
@@ -1252,7 +1281,7 @@ class QuerySet(AltersData):
         Return True if the QuerySet would have any results, False otherwise.
         """
         if self._result_cache is None:
-            return self.query.has_results(using=self.db)
+            return await self.query.has_results(using=self.db)
         return bool(self._result_cache)
 
     async def acontains(self, obj):

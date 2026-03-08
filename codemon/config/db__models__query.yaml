@@ -1,4 +1,4 @@
-pathname: db/models/query.pyд
+pathname: db/models/query.py
 
 module:
   new_imports:
@@ -52,24 +52,38 @@ module:
                 func:
                   value: async_sql
 
-        # __getitem__:
-        #   add_raw_top:
-        #     - |
-        #       async def get_item():
-        #           await qs._fetch_all()
-        #           return qs._result_cache[0]
-        #     - |
-        #       async def get_item_from_cache():
-        #           # Even if the object exists in the cache, we return a coroutine
-        #           # to maintain consistent behavior when the object is not in
-        #           # the cache.
-        #           return self._result_cache[k]
-        #   return_blocks:
-        #     - replace_raw: 'get_item_from_cache()'
-        #       call:
-        #         func:
-        #           value: self
-        #           attr: _result_cache
+        __getitem__:
+          add_raw_top:
+            - |
+              async def fetch_data(query_set, index):
+                  if query_set._result_cache is None:
+                      await query_set._fetch_all()
+                  return query_set._result_cache[index]
+            - |
+              async def fetch_data_iter(query_set, index):
+                  if query_set._result_cache is None:
+                      await query_set._fetch_all()
+                  for item in query_set._result_cache[index]:
+                      yield item
+            - |
+              def get_data():
+                  if self._result_cache is not None:
+                      return (
+                          fetch_data_iter(self, k) if isinstance(k, slice) else fetch_data(self, k)
+                      )
+
+                  if isinstance(k, slice):
+                      return (
+                          fetch_data_iter(qs, slice(None, None, k.step)) if k.step else qs
+                      )
+
+                  return fetch_data(qs, 0)
+          calls:
+            - func:
+                attr: _fetch_all
+              replace_raw: "..."
+          return_blocks:
+            - replace_raw: 'get_data()'
 
         _prefetch_related_objects:
           to_async: true
@@ -205,6 +219,10 @@ module:
         exists:
           to_async: true
           rename: aexists
+          calls:
+            - func:
+                attr: has_results
+              to_await: true
 
         contains:
           to_async: true
