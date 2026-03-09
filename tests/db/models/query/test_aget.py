@@ -1,3 +1,4 @@
+from django.db import NotSupportedError
 from test_app.models import TestModel
 
 from django_async_backend.test import AsyncioTestCase
@@ -32,3 +33,11 @@ class TestAGet(AsyncioTestCase):
         self.assertEqual(
             item.name, "Item1", "The object should have the name 'Item1'"
         )
+
+    async def test_union_combinator(self):
+        queryset1 = TestModel.async_object.filter(name="Item1")
+        queryset2 = TestModel.async_object.filter(name="Item2")
+        combined_queryset = queryset1.union(queryset2)
+
+        with self.assertRaises(NotSupportedError):
+            await combined_queryset.aget(id=1)

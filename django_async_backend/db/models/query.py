@@ -1071,16 +1071,16 @@ class QuerySet(AltersData):
         obj.query.set_limits(high=1)
         obj.query.clear_ordering(force=True)
         obj.query.add_ordering(*order_by)
-        return obj.get()
+        return obj.aget()
 
-    async def aearliest(self, *fields):
+    def aearliest(self, *fields):
         if self.query.is_sliced:
             raise TypeError(
                 "Cannot change a query once a slice has been taken."
             )
         return self._earliest(*fields)
 
-    async def alatest(self, *fields):
+    def alatest(self, *fields):
         """
         Return the latest object according to fields (if given) or by the
         model's Meta.get_latest_by.

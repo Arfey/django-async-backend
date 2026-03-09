@@ -245,12 +245,18 @@ module:
             - target: obj
               to_async: true
 
+        _earliest:
+          calls:
+            - func:
+                attr: get
+              rename:
+                func:
+                  attr: aget
+
         earliest:
-          to_async: true
           rename: aearliest
 
         latest:
-          to_async: true
           rename: alatest
 
         in_bulk:
