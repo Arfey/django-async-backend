@@ -43,6 +43,7 @@ pydantic = "^2.12.5"
 
 
 [tool.poetry.group.dev.dependencies]
+coverage = "^7.13.4"
 libcst = "^1.8.6"
 psycopg = {extras = ["pool"], version = "^3"}
 pyyaml = "^6.0.3"
