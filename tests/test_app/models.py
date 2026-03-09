@@ -5,11 +5,17 @@ from django_async_backend.db import async_connections
 
 
 class CustomAsyncManager(AsyncManager):
-    async def acreate(self, name):
+    async def acreate(self, name, value=None):
         async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-            await cursor.execute(
-                f"INSERT INTO test_model (name) VALUES ('{name}');"
-            )
+            if value is not None:
+                await cursor.execute(
+                    f"INSERT INTO test_model (name, value) VALUES "
+                    f"('{name}', {value});"
+                )
+            else:
+                await cursor.execute(
+                    f"INSERT INTO test_model (name) VALUES ('{name}');"
+                )
             await cursor.execute(
                 f"SELECT * FROM test_model WHERE name = '{name}';"
             )

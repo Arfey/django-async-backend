@@ -178,6 +178,9 @@ module:
         get:
           to_async: true
           rename: aget
+          calls:
+            - name: len
+              replace_raw: 'len([i async for i in clone])'
 
         create:
           to_async: true

@@ -593,7 +593,7 @@ class QuerySet(AltersData):
         ):
             limit = MAX_GET_RESULTS
             clone.query.set_limits(high=limit)
-        num = len(clone)
+        num = len([i async for i in clone])
         if num == 1:
             return clone._result_cache[0]
         if not num:

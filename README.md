@@ -178,10 +178,10 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 
 | methods                             | supported | comments |
 | ----------------------------------- | --------- | -------- |
-| `Model.objects.aget`                | ❌        |          |
+| `Model.objects.aget`                | ✅        |          |
 | `Model.objects.acreate`             | ❌        |          |
 | `Model.objects.acount`              | ✅        |          |
-| `Model.objects.anone`               | ❌        |          |
+| `Model.objects.none`                | ✅        |          |
 | `Model.objects.abulk_create`        | ❌        |          |
 | `Model.objects.abulk_update`        | ❌        |          |
 | `Model.objects.aget_or_create`      | ❌        |          |

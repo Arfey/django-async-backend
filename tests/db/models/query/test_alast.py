@@ -6,7 +6,6 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestALast(AsyncioTestCase):
     async def asyncSetUp(self):
-        # Create test data
         await TestModel.async_object.acreate(name="Item1")
         await TestModel.async_object.acreate(name="Item2")
         await TestModel.async_object.acreate(name="Item3")
