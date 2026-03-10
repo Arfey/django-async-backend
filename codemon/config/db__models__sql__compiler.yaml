@@ -1,11 +1,6 @@
 pathname: db/models/sql/compiler.py
 
 module:
-  add_raw_bottom:
-    - |
-        async def empty_aiter(_):
-            if False:
-                yield
   functions:
     cursor_iter:
       to_async: true
@@ -54,9 +49,7 @@ module:
                 attr: close
               to_await: true
             - name: iter
-              rename:
-                func:
-                  name: empty_aiter
+              replace_raw: '[]'
 
         has_results:
           to_async: true

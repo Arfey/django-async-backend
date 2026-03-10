@@ -55,8 +55,7 @@ commands:
       - "&&"
       - poetry
       - run
-      - coverage
-      - run
+      - python
       - manage.py
       - test
 

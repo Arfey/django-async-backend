@@ -1751,7 +1751,7 @@ class SQLCompiler:
                 raise EmptyResultSet
         except EmptyResultSet:
             if result_type == MULTI:
-                return empty_aiter([])
+                return []
             else:
                 return
         if chunked_fetch:
@@ -2441,8 +2441,3 @@ async def cursor_iter(cursor, sentinel, col_count, itersize):
             yield rows if col_count is None else [r[:col_count] for r in rows]
     finally:
         await cursor.close()
-
-
-async def empty_aiter(_):
-    if False:
-        yield
