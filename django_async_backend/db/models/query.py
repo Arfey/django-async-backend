@@ -257,6 +257,7 @@ class ValuesListIterable(BaseIterable):
         queryset = self.queryset
         query = queryset.query
         compiler = query.get_compiler(queryset.db)
+
         for i in await compiler.results_iter(
             tuple_expected=True,
             chunked_fetch=self.chunked_fetch,
@@ -1155,12 +1156,14 @@ class QuerySet(AltersData):
                 qs = ()
                 for offset in range(0, len(id_list), batch_size):
                     batch = id_list[offset : offset + batch_size]
-                    qs += tuple(self.filter(**{filter_key: batch}))
+                    qs += tuple(
+                        [i async for i in self.filter(**{filter_key: batch})]
+                    )
             else:
                 qs = self.filter(**{filter_key: id_list})
         else:
             qs = self._chain()
-        return {getattr(obj, field_name): obj for obj in qs}
+        return {getattr(obj, field_name): obj async for obj in qs}
 
     async def adelete(self):
         """Delete the records in the current QuerySet."""

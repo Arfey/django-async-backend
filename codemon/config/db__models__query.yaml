@@ -262,6 +262,17 @@ module:
         in_bulk:
           to_async: true
           rename: ain_bulk
+          comp_for_blocks:
+            - target:
+                name: obj
+              to_async: true
+
+          calls:
+            - name: tuple
+              args:
+                - func:
+                    attr: filter
+              replace_raw: 'tuple([i async for i in self.filter(**{filter_key: batch})])'
 
         delete:
           to_async: true
@@ -357,20 +368,28 @@ module:
         __iter__:
           rename: __aiter__
           to_async: true
-          calls:
-            - func:
-                attr: results_iter
-              to_await: true
+          return_blocks:
+            - remove: true
+          add_raw_bottom:
+            - |
+                for i in await compiler.results_iter(
+                    tuple_expected=True,
+                    chunked_fetch=self.chunked_fetch,
+                    chunk_size=self.chunk_size,
+                ):
+                    yield i
 
     NamedValuesListIterable:
       methods:
         __iter__:
           rename: __aiter__
           to_async: true
+          for_statements:
+            - target: row
+              to_async: true
           calls:
             - func:
                 attr: __iter__
-              to_await: true
               rename:
                 func:
                   attr: __aiter__

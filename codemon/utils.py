@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import pathlib
 
@@ -51,6 +53,7 @@ class Call(BaseModel):
     name: str | None = None
     rename: RenameFun | None = None
     replace_raw: str | None = None
+    args: list[Call] | None = None
 
     @model_validator(mode="after")
     def validate_either_attr_or_name(self):
@@ -66,6 +69,7 @@ class Call(BaseModel):
 
 class ReturnBlock(BaseModel):
     replace_raw: str | None = None
+    remove: bool = False
     call: Call | None = None
 
 
@@ -78,15 +82,26 @@ class Assign(BaseModel):
     target: AssignTarget
 
 
+class CompForTarget(BaseModel):
+    name: str
+
+
+class CompForBlock(BaseModel):
+    to_async: bool = False
+    target: CompForTarget
+
+
 class Method(BaseModel):
     remove: bool = False
     add_raw_top: list[str] = None
+    add_raw_bottom: list[str] = None
     to_async: bool = False
     rename: str | None = None
     calls: list[Call] | None = None
     for_statements: list[ForStatement] | None = None
     context_managers: list[ContextManagers] | None = None
     return_blocks: list[ReturnBlock] | None = None
+    comp_for_blocks: list[CompForBlock] | None = None
 
 
 class Class(BaseModel):
@@ -103,6 +118,7 @@ class Function(BaseModel):
     for_statements: list[ForStatement] | None = None
     return_blocks: list[ReturnBlock] | None = None
     remove: bool = False
+    comp_for_blocks: list[CompForBlock] | None = None
 
 
 class ImportAlias(BaseModel):

@@ -9,6 +9,7 @@ from .utils import (
     Assign,
     Call,
     Class,
+    CompForBlock,
     ContextManagers,
     ForStatement,
     Function,
@@ -37,6 +38,36 @@ def assignment_transformer(config: Assign) -> cst.CSTTransformer:
             return updated_node
 
     return AssignmentTransformed()
+
+
+def comp_for_block_transformer(config: CompForBlock) -> cst.CSTTransformer:
+    class CompForTransformed(m.MatcherDecoratableTransformer):
+        @m.leave(m.CompFor())
+        def leave_with(
+            self, original_node: cst.CompFor, updated_node: cst.CompFor
+        ) -> cst.CompFor:
+            if config.to_async:
+                updated_node = updated_node.with_changes(
+                    asynchronous=cst.Asynchronous()
+                )
+
+            return updated_node
+
+    return CompForTransformed()
+
+
+def apply_comp_for_statements(original_node, updated_node, for_statements):
+    for for_config in for_statements:
+        if for_config.target:
+            matcher = m.CompFor(target=m.Name(for_config.target.name))
+        else:
+            matcher = m.CompFor()
+        if m.matches(original_node, matcher):
+            updated_node = updated_node.visit(
+                comp_for_block_transformer(for_config)
+            )
+            break
+    return updated_node
 
 
 def call_transformer(config: Call) -> cst.CSTTransformer:
@@ -126,7 +157,7 @@ def return_transformer(config: ReturnBlock) -> cst.CSTTransformer:
         @m.leave(m.Return())
         def leave_return(
             self, original_node: cst.Return, updated_node: cst.Return
-        ) -> cst.Return:
+        ) -> cst.Return | cst.RemovalSentinel:
             if config.replace_raw:
                 updated_node = updated_node.with_changes(
                     whitespace_after_return=cst.SimpleWhitespace(" "),
@@ -135,6 +166,9 @@ def return_transformer(config: ReturnBlock) -> cst.CSTTransformer:
                     .body[0]
                     .value,
                 )
+
+            if config.remove:
+                return cst.RemoveFromParent()
 
             return updated_node
 
@@ -173,6 +207,24 @@ def add_raw_top_to_function(updated_node, add_raw_top):
         body = [*blocks, *updated_node.body.body]
     return updated_node.with_changes(
         body=updated_node.body.with_changes(body=body)
+    )
+
+
+def add_raw_bottom_to_function(updated_node, add_raw_top):
+    blocks = []
+    for code in add_raw_top:
+        blocks.extend(
+            [
+                cst.EmptyLine(),
+                cst.parse_module(dedent(code)).body[0],
+                cst.EmptyLine(),
+            ]
+        )
+
+    return updated_node.with_changes(
+        body=updated_node.body.with_changes(
+            body=[*updated_node.body.body, *blocks]
+        )
     )
 
 
@@ -234,6 +286,16 @@ def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
             ) -> cst.For:
                 return apply_for_statements(
                     original_node, updated_node, config.for_statements
+                )
+
+        if config.comp_for_blocks:
+
+            @m.leave(m.CompFor())
+            def for_statement(
+                self, original_node: cst.CompFor, updated_node: cst.CompFor
+            ) -> cst.CompFor:
+                return apply_comp_for_statements(
+                    original_node, updated_node, config.comp_for_blocks
                 )
 
         if config.return_blocks:
@@ -379,6 +441,35 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
                 self, original_node: cst.Call, updated_node: cst.Call
             ) -> cst.Await | cst.Call:
                 for call_config in config.calls:
+                    args = []
+                    if call_config.args:
+                        args = [m.ZeroOrMore()]
+
+                        for arg in call_config.args:
+                            if isinstance(arg, Call) and arg.func:
+                                args.append(
+                                    m.Arg(
+                                        value=m.Call(
+                                            func=m.Attribute(
+                                                attr=(
+                                                    m.Name(arg.func.attr)
+                                                    if arg.func.attr
+                                                    else m.DoNotCare()
+                                                ),
+                                                value=(
+                                                    m.Name(arg.func.value)
+                                                    if arg.func.value
+                                                    else m.DoNotCare()
+                                                ),
+                                            )
+                                        )
+                                    )
+                                )
+                            else:
+                                raise Exception("unhandled")
+
+                        args.append(m.ZeroOrMore())
+
                     if call_config.func:
                         matcher = m.Call(
                             func=m.Attribute(
@@ -392,12 +483,18 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
                                     if call_config.func.value
                                     else m.DoNotCare()
                                 ),
-                            )
+                            ),
+                            args=args if call_config.args else m.DoNotCare(),
                         )
                     elif call_config.name:
-                        matcher = m.Call(func=m.Name(call_config.name))
+                        matcher = m.Call(
+                            func=m.Name(call_config.name),
+                            args=args if call_config.args else m.DoNotCare(),
+                        )
                     else:
-                        matcher = m.Call()
+                        matcher = m.Call(
+                            args=args if call_config.args else m.DoNotCare()
+                        )
 
                     if m.matches(original_node, matcher):
                         updated_node = updated_node.visit(
@@ -447,6 +544,18 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
                     updated_node, config.add_raw_top
                 )
 
+        if config.add_raw_bottom:
+
+            @m.leave(m.FunctionDef())
+            def add_raw_bottom(
+                self,
+                original_node: cst.FunctionDef,
+                updated_node: cst.FunctionDef,
+            ) -> cst.FunctionDef:
+                return add_raw_bottom_to_function(
+                    updated_node, config.add_raw_bottom
+                )
+
         if config.for_statements:
 
             @m.leave(m.For())
@@ -455,6 +564,16 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
             ) -> cst.For:
                 return apply_for_statements(
                     original_node, updated_node, config.for_statements
+                )
+
+        if config.comp_for_blocks:
+
+            @m.leave(m.CompFor())
+            def for_statement(
+                self, original_node: cst.CompFor, updated_node: cst.CompFor
+            ) -> cst.CompFor:
+                return apply_comp_for_statements(
+                    original_node, updated_node, config.comp_for_blocks
                 )
 
     return MethodTransformed()
