@@ -257,11 +257,12 @@ class ValuesListIterable(BaseIterable):
         queryset = self.queryset
         query = queryset.query
         compiler = query.get_compiler(queryset.db)
-        return await compiler.results_iter(
+        for i in await compiler.results_iter(
             tuple_expected=True,
             chunked_fetch=self.chunked_fetch,
             chunk_size=self.chunk_size,
-        )
+        ):
+            yield i
 
 
 class NamedValuesListIterable(ValuesListIterable):
@@ -283,7 +284,7 @@ class NamedValuesListIterable(ValuesListIterable):
             ]
         tuple_class = create_namedtuple_class(*names)
         new = tuple.__new__
-        for row in await super().__aiter__():
+        async for row in super().__aiter__():
             yield new(tuple_class, row)
 
 
