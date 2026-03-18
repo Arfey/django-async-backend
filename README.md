@@ -176,6 +176,33 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 # ORM support:
 ### Manager:
 
+
+```python
+from django.db import models
+from django_async_backend.db import async_connections
+from django_async_backend.db.models.manager import AsyncManager
+
+class Book(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=100)
+
+    async_object = AsyncManager()
+
+    class Meta:
+        db_table = "books"
+
+
+async def main():
+    connection = async_connections[DEFAULT_DB_ALIAS]
+
+    async for i in Book.async_object.all():
+        print(i.id)
+
+    await connection.close()
+```
+
+
+
 | methods                             | supported | comments |
 | ----------------------------------- | --------- | -------- |
 | `Model.objects.aget`                | ✅        |          |
@@ -194,32 +221,40 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 | `Model.objects.adelete`             | ❌        |          |
 | `Model.objects.aupdate`             | ❌        |          |
 | `Model.objects.aexists`             | ✅        |          |
+| `Model.objects.acontains`           | ❌        |          |
 | `Model.objects.aexplain`            | ✅        |          |
 | `Model.objects.araw`                | ❌        |          |
 | `Model.objects.all`                 | ✅        |          |
-| `Model.objects.afilter`             | ❌        |          |
-| `Model.objects.aexclude`            | ❌        |          |
-| `Model.objects.acomplex_filter`     | ❌        |          |
+| `Model.objects.filter`              | ✅        |          |
+| `Model.objects.exclude`             | ✅        |          |
+| `Model.objects.complex_filter`      | ✅        |          |
 | `Model.objects.union`               | ✅        |          |
 | `Model.objects.intersection`        | ✅        |          |
 | `Model.objects.difference`          | ✅        |          |
-| `Model.objects.aselect_for_update`  | ❌        |          |
-| `Model.objects.aprefetch_related`   | ❌        |          |
-| `Model.objects.aannotate`           | ❌        |          |
-| `Model.objects.aorder_by`           | ❌        |          |
-| `Model.objects.adistinct`           | ❌        |          |
-| `Model.objects.aextra`              | ❌        |          |
-| `Model.objects.areverse`            | ❌        |          |
-| `Model.objects.adefer`              | ❌        |          |
-| `Model.objects.aonly`               | ❌        |          |
-| `Model.objects.ausing`              | ❌        |          |
-| `Model.objects.aresolve_expression` | ❌        |          |
-| `Model.objects.aordered`            | ❌        |          |
+| `Model.objects.select_related`      | ❌        |          |
+| `Model.objects.select_for_update`   | ❌        |          |
+| `Model.objects.prefetch_related`    | ❌        |          |
+| `Model.objects.annotate`            | ✅        |          |
+| `Model.objects.order_by`            | ✅        |          |
+| `Model.objects.distinct`            | ✅        |          |
+| `Model.objects.extra`               | ✅        |          |
+| `Model.objects.reverse`             | ✅        |          |
+| `Model.objects.defer`               | ❌        |          |
+| `Model.objects.only`                | ❌        |          |
+| `Model.objects.using`               | ✅        |          |
+| `Model.objects.resolve_expression`  | ❌        |          |
+| `Model.objects.ordered`             | ❌        |          |
 | `Model.objects.values`              | ✅        |          |
 | `Model.objects.values_list`         | ✅        |          |
+| `Model.objects.dates`               | ❌        |          |
+| `Model.objects.datetimes`           | ❌        |          |
+| `Model.objects.alias    `           | ❌        |          |
 | `__aiter__`                         | ✅        |          |
 | `__repr__`                          | ❌        |          |
 | `__len__`                           | ❌        |          |
+| `__and__`                           | ❌        |          |
+| `__or__`                            | ❌        |          |
+| `__xor__`                           | ❌        |          |
 | `__getitem__`                       | ✅        |          |
 | `Model.objects.aiterator`           | ❌        |          |
 

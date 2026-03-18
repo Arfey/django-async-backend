@@ -43,6 +43,34 @@ module:
             name: delete
           remove: true
 
+        - target:
+            name: acreate
+          remove: true
+
+        - target:
+            name: abulk_create
+          remove: true
+
+        - target:
+            name: abulk_update
+          remove: true
+
+        - target:
+            name: aget_or_create
+          remove: true
+
+        - target:
+            name: aupdate_or_create
+          remove: true
+
+        - target:
+            name: adelete
+          remove: true
+
+        - target:
+            name: aupdate
+          remove: true
+
       methods:
         __init__:
           calls:
@@ -94,6 +122,12 @@ module:
         aexplain:
           remove: True
 
+        _iterator:
+          remove: True
+
+        aiterator:
+          remove: True
+
         aget:
           remove: true
 
@@ -136,6 +170,18 @@ module:
         alatest:
           remove: true
 
+        araw:
+          remove: true
+
+        raw:
+          remove: true
+
+        prefetch_related:
+          remove: true
+
+        select_for_update:
+          remove: true
+
         ain_bulk:
           remove: true
 
@@ -143,9 +189,6 @@ module:
           remove: true
 
         aupdate:
-          remove: true
-
-        aiterator:
           remove: true
 
         __iter__:
@@ -166,6 +209,30 @@ module:
         __setstate__:
           remove: true
 
+        __xor__:
+          remove: true
+
+        __or__:
+          remove: true
+
+        __and__:
+          remove: true
+
+        only:
+          remove: true
+
+        defer:
+          remove: true
+
+        alias:
+          remove: true
+
+        datetimes:
+          remove: true
+
+        dates:
+          remove: true
+
         explain:
           to_async: true
           rename: aexplain
@@ -183,24 +250,29 @@ module:
               replace_raw: 'len([i async for i in clone])'
 
         create:
-          to_async: true
-          rename: acreate
+          # to_async: true
+          # rename: acreate
+          remove: true
 
         bulk_create:
-          to_async: true
-          rename: abulk_create
+          # to_async: true
+          # rename: abulk_create
+          remove: true
 
         bulk_update:
-          to_async: true
-          rename: abulk_update
+          # to_async: true
+          # rename: abulk_update
+          remove: true
 
         get_or_create:
-          to_async: true
-          rename: aget_or_create
+          # to_async: true
+          # rename: aget_or_create
+          remove: true
 
         update_or_create:
-          to_async: true
-          rename: aupdate_or_create
+          # to_async: true
+          # rename: aupdate_or_create
+          remove: true
 
         aggregate:
           to_async: true
@@ -228,8 +300,9 @@ module:
               to_await: true
 
         contains:
-          to_async: true
-          rename: acontains
+          # to_async: true
+          # rename: acontains
+          remove: true
 
         first:
           to_async: true
@@ -275,20 +348,23 @@ module:
               replace_raw: 'tuple([i async for i in self.filter(**{filter_key: batch})])'
 
         delete:
-          to_async: true
-          rename: adelete
+          # to_async: true
+          # rename: adelete
+          remove: true
 
         update:
-          to_async: true
-          rename: aupdate
-          calls:
-            - func:
-                attr: execute_sql
-              to_await: true
+          remove: true
+          # to_async: true
+          # rename: aupdate
+          # calls:
+          #   - func:
+          #       attr: execute_sql
+          #     to_await: true
 
         iterator:
-          to_async: true
-          rename: aiterator
+          # to_async: true
+          # rename: aiterator
+          remove: true
 
         _raw_delete:
           to_async: true
