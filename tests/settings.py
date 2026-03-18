@@ -1,5 +1,3 @@
-import django
-
 DATABASES = {
     "default": {
         "ENGINE": "django_async_backend.db.backends.postgresql",
@@ -19,7 +17,8 @@ DATABASES = {
     }
 }
 
+INSTALLED_APPS = [
+    "test_app",
+]
+
 USE_TZ = False
-
-
-django.setup()

@@ -1,5 +1,6 @@
 import json
 
+from books.models import Book
 from django.db import DEFAULT_DB_ALIAS
 from django.http import (
     HttpRequest,
@@ -13,8 +14,14 @@ async def index(request: HttpRequest) -> HttpResponse:
     connection = async_connections[DEFAULT_DB_ALIAS]
     result = {}
 
-    async with connection.cursor() as cursor:
+    async with await connection.cursor() as cursor:
         await cursor.execute("select 1")
+
+    print("aget", await Book.async_object.aget(name=1))  # noqa
+    print("afirst", await Book.async_object.afirst())  # noqa
+    print("count", await Book.async_object.acount())  # noqa
+    async for i in Book.async_object.select_related("author").all():
+        print(i, i.author)  # noqa
 
     await connection.close()
 

@@ -19,7 +19,7 @@ from django_async_backend.test import (
 
 
 async def create_table():
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         await cursor.execute(
             """
             CREATE TABLE reporter_table_tmp (
@@ -31,14 +31,14 @@ async def create_table():
 
 
 async def drop_table():
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         await cursor.execute("DROP TABLE reporter_table_tmp;")
 
     await async_connections[DEFAULT_DB_ALIAS].close()
 
 
 async def create_instance(id):
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         await cursor.execute(
             f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');"
         )
@@ -47,7 +47,7 @@ async def create_instance(id):
 
 
 async def get_all():
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         res = await cursor.execute(
             "SELECT name FROM reporter_table_tmp order by name;"
         )
@@ -221,7 +221,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
     async def call_execute(connection, params=None):
         ret_val = "1" if params is None else "%s"
         sql = "SELECT " + ret_val + connection.features.bare_select_suffix
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.execute(sql, params)
 
     async def call_executemany(self, connection, params=None):
@@ -232,7 +232,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
         if params is None:
             params = [(i,) for i in range(3)]
 
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.executemany(sql, params)
 
     @staticmethod
@@ -267,7 +267,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
         connection = async_connections[DEFAULT_DB_ALIAS]
         wrapper = self.mock_wrapper()
         with connection.execute_wrapper(wrapper):
-            async with connection.cursor() as cursor:
+            async with await connection.cursor() as cursor:
                 sql = "SELECT 17" + connection.features.bare_select_suffix
                 await cursor.execute(sql)
                 seventeen = await cursor.fetchall()
@@ -301,7 +301,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
             c.execute_wrapper(blocker),
             c.execute_wrapper(wrapper),
         ):
-            async with c.cursor() as cursor:
+            async with await c.cursor() as cursor:
                 await cursor.execute("The database never sees this")
                 self.assertEqual(wrapper.call_count, 1)
                 await cursor.executemany(
@@ -322,7 +322,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
             c.execute_wrapper(blocker),
             c.execute_wrapper(wrapper),
         ):
-            async with c.cursor() as cursor:
+            async with await c.cursor() as cursor:
                 await cursor.execute("The database never sees this")
                 self.assertEqual(wrapper.call_count, 1)
                 await cursor.executemany(
@@ -335,7 +335,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
         wrapper = self.mock_wrapper()
         sql = "SELECT 'aloha'" + connection.features.bare_select_suffix
         with connection.execute_wrapper(wrapper):
-            async with connection.cursor() as cursor:
+            async with await connection.cursor() as cursor:
                 await cursor.execute(sql)
         (_, reported_sql, _, _, _), _ = wrapper.call_args
         self.assertEqual(reported_sql, sql)
@@ -395,7 +395,7 @@ class ConnectionHealthChecksTests(AsyncioTransactionTestCase):
     async def run_query(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.execute(
                 "SELECT 42" + connection.features.bare_select_suffix
             )

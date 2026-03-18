@@ -37,17 +37,25 @@ repository = "https://github.com/Arfey/django-async-backend"
 
 [tool.poetry.dependencies]
 python = ">=3.12"
-django = ">=5"
+django = ">=6"
 psycopg = {extras = ["binary"], version = "^3"}
+pydantic = "^2.12.5"
 
 
 [tool.poetry.group.dev.dependencies]
+coverage = "^7.13.4"
+libcst = "^1.8.6"
 psycopg = {extras = ["pool"], version = "^3"}
+pyyaml = "^6.0.3"
+requests = "^2.32.5"
 uvicorn = "^0.38.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.darker]
+line-length = 79
 
 [tool.black]
 line-length = 79
@@ -67,11 +75,22 @@ max-complexity = 12
 exclude = [
     ".git",
     "env/",
+    "django_async_backend/db/models/query.py",
+    "django_async_backend/db/models/sql/compiler.py",
+    "django_async_backend/db/models/sql/query.py",
 ]
 extend-ignore = ["S001"]
 
 [tool.bandit]
-exclude_dirs = ["env", ".cache", "tests", ".mypy_cache"]
+exclude_dirs = [
+  "env",
+  ".cache",
+  "tests",
+  ".mypy_cache",
+  "django_async_backend/db/models/query.py",
+  "django_async_backend/db/models/sql/compiler.py",
+  "django_async_backend/db/models/sql/query.py",
+]
 
 [tool.mypy]
 ignore_missing_imports = true

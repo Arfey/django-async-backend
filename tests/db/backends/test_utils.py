@@ -15,7 +15,9 @@ from django_async_backend.test import AsyncioTestCase
 class AsyncCursorTest(AsyncioTestCase):
 
     async def create_table(self):
-        async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+        async with await async_connections[
+            DEFAULT_DB_ALIAS
+        ].cursor() as cursor:
             await cursor.execute(
                 "CREATE TABLE test_table_tmp (name VARCHAR(255) NOT NULL);"
             )
@@ -23,7 +25,9 @@ class AsyncCursorTest(AsyncioTestCase):
     async def test_execute(self):
         await self.create_table()
 
-        async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+        async with await async_connections[
+            DEFAULT_DB_ALIAS
+        ].cursor() as cursor:
             await cursor.execute(
                 """
                 INSERT INTO test_table_tmp (name) VALUES ('1');
@@ -36,7 +40,7 @@ class AsyncCursorTest(AsyncioTestCase):
     async def test_execute_broken_transaction(self):
         async with async_atomic(DEFAULT_DB_ALIAS):
             connection = async_connections[DEFAULT_DB_ALIAS]
-            async with connection.cursor() as cursor:
+            async with await connection.cursor() as cursor:
                 connection.set_rollback(True)
 
                 with self.assertRaises(TransactionManagementError):
@@ -45,7 +49,9 @@ class AsyncCursorTest(AsyncioTestCase):
     async def test_executemany(self):
         await self.create_table()
 
-        async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+        async with await async_connections[
+            DEFAULT_DB_ALIAS
+        ].cursor() as cursor:
             await cursor.executemany(
                 "INSERT INTO test_table_tmp (name) VALUES (%s)", [(1,), (2,)]
             )
@@ -56,7 +62,7 @@ class AsyncCursorTest(AsyncioTestCase):
     async def test_executemany_broken_transaction(self):
         async with async_atomic(DEFAULT_DB_ALIAS):
             connection = async_connections[DEFAULT_DB_ALIAS]
-            async with connection.cursor() as cursor:
+            async with await connection.cursor() as cursor:
                 connection.set_rollback(True)
 
                 with self.assertRaises(TransactionManagementError):
@@ -65,7 +71,9 @@ class AsyncCursorTest(AsyncioTestCase):
     async def test_iterator(self):
         await self.create_table()
 
-        async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+        async with await async_connections[
+            DEFAULT_DB_ALIAS
+        ].cursor() as cursor:
             await cursor.execute(
                 """
                 INSERT INTO test_table_tmp (name) VALUES ('1'), ('2'), ('3');
@@ -87,7 +95,7 @@ class AsyncCursorTest(AsyncioTestCase):
             return execute(sql, params, many, context)
 
         with connection.execute_wrapper(test_wrapper):
-            async with connection.cursor() as cursor:
+            async with await connection.cursor() as cursor:
                 await cursor.execute("""select 1""")
 
         wrapper_spy.assert_called_once_with(
@@ -100,7 +108,7 @@ class AsyncCursorDebugWrapperTest(AsyncioTestCase):
     @patch("django_async_backend.db.backends.utils.logger.debug")
     async def test_execute(self, debug_mock):
         connection = async_connections[DEFAULT_DB_ALIAS]
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             res = await cursor.execute("""select 1;""")
             self.assertEqual(await res.fetchone(), (1,))
 
@@ -112,7 +120,7 @@ class AsyncCursorDebugWrapperTest(AsyncioTestCase):
     @patch("django_async_backend.db.backends.utils.logger.debug")
     async def test_executemany(self, debug_mock):
         connection = async_connections[DEFAULT_DB_ALIAS]
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.executemany("""SELECT %s;""", [(1,)])
 
         self.assertEqual(len(connection.queries_log), 1)

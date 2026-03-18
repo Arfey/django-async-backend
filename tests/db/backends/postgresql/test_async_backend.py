@@ -16,7 +16,7 @@ from django_async_backend.test import AsyncioTestCase
 
 
 async def create_table():
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         await cursor.execute(
             """
             CREATE TABLE reporter_table_tmp (
@@ -28,14 +28,14 @@ async def create_table():
 
 
 async def drop_table():
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         await cursor.execute("DROP TABLE reporter_table_tmp;")
 
     await async_connections[DEFAULT_DB_ALIAS].close()
 
 
 async def create_instance(id):
-    async with async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         await cursor.execute(
             f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');"
         )
@@ -129,7 +129,7 @@ class Tests(AsyncioTestCase):
             # Ensure the database default time zone is different than
             # the time zone in new_connection.settings_dict. We can
             # get the default time zone by reset & show.
-            async with new_connection.cursor() as cursor:
+            async with await new_connection.cursor() as cursor:
                 await cursor.execute("RESET TIMEZONE")
                 await cursor.execute("SHOW TIMEZONE")
                 db_default_tz = (await cursor.fetchone())[0]
@@ -147,7 +147,7 @@ class Tests(AsyncioTestCase):
                 await new_connection.rollback()
 
                 # Now let's see if the rollback rolled back the SET TIME ZONE.
-                async with new_connection.cursor() as cursor:
+                async with await new_connection.cursor() as cursor:
                     await cursor.execute("SHOW TIMEZONE")
                     tz = (await cursor.fetchone())[0]
                 self.assertEqual(new_tz, tz)
@@ -165,7 +165,7 @@ class Tests(AsyncioTestCase):
 
         try:
             # Open a database connection.
-            async with new_connection.cursor():
+            async with await new_connection.cursor():
                 self.assertFalse(await new_connection.get_autocommit())
         finally:
             await new_connection.close()
@@ -224,7 +224,7 @@ class Tests(AsyncioTestCase):
         new_connection = no_pool_connection(alias="default_pool")
 
         try:
-            async with new_connection.cursor() as cursor:
+            async with await new_connection.cursor() as cursor:
                 await cursor.execute("SHOW TIMEZONE")
                 tz = (await cursor.fetchone())[0]
                 self.assertNotEqual(new_time_zone, tz)
@@ -235,7 +235,7 @@ class Tests(AsyncioTestCase):
         new_connection.settings_dict["OPTIONS"]["pool"] = True
         try:
             with override_settings(TIME_ZONE=new_time_zone):
-                async with new_connection.cursor() as cursor:
+                async with await new_connection.cursor() as cursor:
                     await cursor.execute("SHOW TIMEZONE")
                     tz = (await cursor.fetchone())[0]
                     self.assertEqual(new_time_zone, tz)
@@ -404,7 +404,7 @@ class Tests(AsyncioTestCase):
     async def _select(self, val):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.execute("SELECT %s::text[]", (val,))
             return (await cursor.fetchone())[0]
 
@@ -481,7 +481,7 @@ class Tests(AsyncioTestCase):
 
             copy_sql = "COPY reporter_table_tmp TO STDOUT (FORMAT CSV, HEADER)"
 
-            async with connection.cursor() as cursor:
+            async with await connection.cursor() as cursor:
                 async for row in cursor.copy(copy_sql):
                     pass
 
@@ -544,7 +544,7 @@ class Tests(AsyncioTestCase):
 
                 # Set the database default time zone to be different from
                 # the time zone in new_connection.settings_dict.
-                async with new_connection.cursor() as cursor:
+                async with await new_connection.cursor() as cursor:
                     await cursor.execute("RESET TIMEZONE")
                     await cursor.execute("SHOW TIMEZONE")
                     db_default_tz = (await cursor.fetchone())[0]
@@ -599,7 +599,7 @@ class ServerSideCursorsPostgresTests(AsyncioTestCase):
     async def inspect_cursors(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
-        async with connection.cursor() as cursor:
+        async with await connection.cursor() as cursor:
             await cursor.execute(
                 "SELECT {fields} FROM pg_cursors;".format(
                     fields=self.cursor_fields
