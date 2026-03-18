@@ -58,6 +58,9 @@ await connection.close()
 - Connections are reused and managed automatically.
 - Use await connection.close() to manually close a connection if needed.
 
+> ⚠️ To disable `request_started` and `request_finished` signals, set `ASYNC_BACKEND_DISABLE_REQUEST_SIGNALS = True` in `settings.py`, and manually connect them in your app's `ready` method if required.
+
+
 ## Cursor
 
 Async cursors provide the following methods:
