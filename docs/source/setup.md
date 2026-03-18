@@ -73,3 +73,15 @@ closes *sync* connections, so without this middleware every request leaks its
 async connection — and with [pooling](connections.md#connection-pooling)
 enabled the pool is eventually exhausted.
 ```
+
+### Request signals
+
+On startup the app connects `close_old_async_connections` to Django's
+`request_started` and `request_finished` signals, so stale async connections are
+dropped at the boundaries of every request.
+
+```{warning}
+To disable the `request_started` and `request_finished` signals, set
+`ASYNC_BACKEND_DISABLE_REQUEST_SIGNALS = True` in `settings.py`, and manually
+connect them in your app's `ready` method if required.
+```
