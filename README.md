@@ -178,7 +178,7 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 
 
 ```python
-from django.db import models
+from django.db import models, DEFAULT_DB_ALIAS
 from django_async_backend.db import async_connections
 from django_async_backend.db.models.manager import AsyncManager
 
@@ -193,12 +193,10 @@ class Book(models.Model):
 
 
 async def main():
-    connection = async_connections[DEFAULT_DB_ALIAS]
-
     async for i in Book.async_object.all():
         print(i.id)
 
-    await connection.close()
+    await async_connections[DEFAULT_DB_ALIAS].close()
 ```
 
 

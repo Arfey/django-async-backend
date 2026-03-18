@@ -75,4 +75,4 @@ jobs:
     - name: Test on Python ${{ matrix.python-version }}
       run: |
         source .venv/bin/activate
-        DJANGO_SETTINGS_MODULE=settings python -m unittest discover -s tests
+        cd tests && python manage.py test
