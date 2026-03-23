@@ -154,6 +154,7 @@ class ConcurrentReadTests(AsyncioTransactionTestCase):
             + "; ".join(f"task {tid}: {e}" for tid, e in errors),
         )
 
+        self.assertEqual(len(results), N_TASKS)
         for task_id, count in results:
             self.assertEqual(
                 count,
