@@ -233,3 +233,41 @@ class ConcurrentMixedReadWriteTests(AsyncioTransactionTestCase):
 
         row_count = await count_rows()
         self.assertEqual(row_count, n_writers)
+
+
+class TaskIsolationTests(AsyncioTransactionTestCase):
+    """
+    Verify that parent and child tasks get separate connections.
+    This directly exercises the _TaskAwareLocal identity check that
+    detects inherited ContextVar values from asyncio.create_task().
+    """
+
+    async def asyncSetUp(self):
+        await create_table()
+
+    async def asyncTearDown(self):
+        await drop_table()
+
+    async def test_parent_child_task_isolation(self):
+        """Child task via create_task gets its own connection."""
+        parent_conn = async_connections[DEFAULT_DB_ALIAS]
+        await parent_conn.ensure_connection()
+        parent_id = id(parent_conn)
+
+        child_ids = []
+
+        async def child():
+            conn = async_connections[DEFAULT_DB_ALIAS]
+            await conn.ensure_connection()
+            child_ids.append(id(conn))
+
+        task = asyncio.create_task(child())
+        await task
+
+        self.assertEqual(len(child_ids), 1)
+        self.assertNotEqual(
+            parent_id,
+            child_ids[0],
+            "Child task got the same connection as parent — "
+            "task isolation is broken",
+        )

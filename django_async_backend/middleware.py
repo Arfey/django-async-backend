@@ -21,9 +21,10 @@ def close_async_connections(get_response):
     if asyncio.iscoroutinefunction(get_response):
 
         async def middleware(request):
-            response = await get_response(request)
-            await async_connections.close_all()
-            return response
+            try:
+                return await get_response(request)
+            finally:
+                await async_connections.close_all()
 
     else:
 
