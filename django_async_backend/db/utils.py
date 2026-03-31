@@ -11,6 +11,13 @@ from django.db.utils import load_backend
 
 from django_async_backend.utils.connection import BaseAsyncConnectionHandler
 
+# Module-level ContextVar for per-task connection storage. Must be
+# declared here (not inside a class or function) so that the same
+# ContextVar instance is used across all context copies created by
+# asyncio.create_task(). See aio-libs-abandoned/aioredis-py#1040
+# for what goes wrong when ContextVars are created per-instance.
+_task_connections = ContextVar("_task_connections", default=None)
+
 
 class DatabaseErrorWrapper(_DatabaseErrorWrapper):
     def __call__(self, func):
@@ -54,9 +61,6 @@ class _TaskAwareLocal:
 
     def __init__(self):
         self._thread_local = threading.local()
-        self._task_connections = ContextVar(
-            "_task_connections", default=None
-        )
 
     def _get_storage(self):
         try:
@@ -72,10 +76,10 @@ class _TaskAwareLocal:
         # the parent's _TaskNamespace. The identity check detects this
         # and creates a fresh namespace for the child, so connections
         # are never shared across tasks.
-        storage = self._task_connections.get()
+        storage = _task_connections.get()
         if storage is None or storage._task_ref is not task:
             storage = _TaskNamespace(task)
-            self._task_connections.set(storage)
+            _task_connections.set(storage)
 
         return storage
 
