@@ -1,13 +1,13 @@
 """
 Tests for concurrent async task safety.
 
-These tests verify that async_connections and async_atomic work correctly
-when multiple asyncio tasks run concurrently on the same event loop thread.
+These tests verify that async_connections correctly isolates connections
+per ASGI request while sharing connections within a request's child tasks.
 
-Root cause under test: AsyncConnectionHandler uses thread_critical=True,
-making connections thread-local. Since all async tasks share one event loop
-thread, they share one connection object. Transaction state (in_atomic_block,
-savepoint_ids, needs_rollback) gets corrupted when tasks overlap.
+Bug fixed: AsyncConnectionHandler used thread_critical=True, making
+connections thread-local. Since all async tasks share one event loop
+thread, concurrent requests shared one connection, corrupting transaction
+state. The fix uses a ContextVar so each request gets its own namespace.
 
 See: https://github.com/Arfey/django-async-backend/issues/11
 """
@@ -53,10 +53,9 @@ async def count_rows():
 
 class ConcurrentAtomicWriteTests(AsyncioTransactionTestCase):
     """
-    Multiple async tasks each open their own async_atomic() block and
-    INSERT a row. With proper task isolation, all N tasks should succeed
-    independently. With shared connections, savepoint IDs collide and
-    transactions abort.
+    A parent task opens async_atomic, then child tasks INSERT rows
+    using the shared connection. All writes happen on the parent's
+    transaction. This matches Arfey's recommended pattern.
     """
 
     async def asyncSetUp(self):
@@ -65,31 +64,28 @@ class ConcurrentAtomicWriteTests(AsyncioTransactionTestCase):
     async def asyncTearDown(self):
         await drop_table()
 
-    async def test_concurrent_atomic_writes(self):
-        """N concurrent async_atomic writes should all succeed."""
+    async def test_concurrent_writes_in_parent_transaction(self):
+        """Parent opens transaction, child tasks write on shared connection."""
         barrier = asyncio.Barrier(N_TASKS)
         errors = []
 
         async def writer(task_id):
             try:
-                # Barrier ensures all tasks enter async_atomic before
-                # any proceeds, maximizing interleaving.
                 await barrier.wait()
-                async with async_atomic():
-                    async with await async_connections[
-                        DEFAULT_DB_ALIAS
-                    ].cursor() as cursor:
-                        await cursor.execute(
-                            "INSERT INTO concurrency_test (task_id) "
-                            "VALUES (%s);",
-                            [task_id],
-                        )
-                    # Yield to other tasks inside the atomic block.
-                    await asyncio.sleep(0)
+                async with await async_connections[
+                    DEFAULT_DB_ALIAS
+                ].cursor() as cursor:
+                    await cursor.execute(
+                        "INSERT INTO concurrency_test (task_id) "
+                        "VALUES (%s);",
+                        [task_id],
+                    )
+                await asyncio.sleep(0)
             except Exception as e:
                 errors.append((task_id, e))
 
-        await asyncio.gather(*(writer(i) for i in range(N_TASKS)))
+        async with async_atomic():
+            await asyncio.gather(*(writer(i) for i in range(N_TASKS)))
 
         self.assertEqual(
             errors,
@@ -105,8 +101,7 @@ class ConcurrentAtomicWriteTests(AsyncioTransactionTestCase):
 class ConcurrentReadTests(AsyncioTransactionTestCase):
     """
     Multiple async tasks each run a SELECT COUNT concurrently.
-    With proper task isolation, all should return the correct count.
-    With shared connections, reads can see corrupted transaction state.
+    Child tasks share the parent's connection and execute serially.
     """
 
     async def asyncSetUp(self):
@@ -165,8 +160,8 @@ class ConcurrentReadTests(AsyncioTransactionTestCase):
 
 class ConcurrentMixedReadWriteTests(AsyncioTransactionTestCase):
     """
-    Concurrent mix of writers (async_atomic + INSERT) and readers (SELECT).
-    Writers should all succeed and readers should get consistent results.
+    Concurrent mix of writers (INSERT, no per-task transaction) and
+    readers (SELECT) sharing the parent's connection.
     """
 
     async def asyncSetUp(self):
@@ -187,16 +182,15 @@ class ConcurrentMixedReadWriteTests(AsyncioTransactionTestCase):
         async def writer(task_id):
             try:
                 await write_barrier.wait()
-                async with async_atomic():
-                    async with await async_connections[
-                        DEFAULT_DB_ALIAS
-                    ].cursor() as cursor:
-                        await cursor.execute(
-                            "INSERT INTO concurrency_test (task_id) "
-                            "VALUES (%s);",
-                            [task_id],
-                        )
-                    await asyncio.sleep(0)
+                async with await async_connections[
+                    DEFAULT_DB_ALIAS
+                ].cursor() as cursor:
+                    await cursor.execute(
+                        "INSERT INTO concurrency_test (task_id) "
+                        "VALUES (%s);",
+                        [task_id],
+                    )
+                await asyncio.sleep(0)
             except Exception as e:
                 write_errors.append((task_id, e))
 
@@ -237,9 +231,10 @@ class ConcurrentMixedReadWriteTests(AsyncioTransactionTestCase):
 
 class TaskIsolationTests(AsyncioTransactionTestCase):
     """
-    Verify that parent and child tasks get separate connections.
-    This directly exercises the _TaskAwareLocal identity check that
-    detects inherited ContextVar values from asyncio.create_task().
+    Verify that child tasks share the parent's connection (not isolated).
+    This is intentional: per-request isolation comes from ASGI creating
+    a fresh task per request. Within a request, child tasks share the
+    parent's connection to avoid pool exhaustion.
     """
 
     async def asyncSetUp(self):
@@ -248,8 +243,8 @@ class TaskIsolationTests(AsyncioTransactionTestCase):
     async def asyncTearDown(self):
         await drop_table()
 
-    async def test_parent_child_task_isolation(self):
-        """Child task via create_task gets its own connection."""
+    async def test_parent_child_share_connection(self):
+        """Child task via create_task shares parent's connection."""
         parent_conn = async_connections[DEFAULT_DB_ALIAS]
         await parent_conn.ensure_connection()
         parent_id = id(parent_conn)
@@ -265,9 +260,33 @@ class TaskIsolationTests(AsyncioTransactionTestCase):
         await task
 
         self.assertEqual(len(child_ids), 1)
+        self.assertEqual(
+            parent_id,
+            child_ids[0],
+            "Child task got a different connection than parent — "
+            "child tasks should share the parent's connection",
+        )
+
+    async def test_independent_connection_workaround(self):
+        """Child task with _independent_connection gets its own connection."""
+        parent_conn = async_connections[DEFAULT_DB_ALIAS]
+        await parent_conn.ensure_connection()
+        parent_id = id(parent_conn)
+
+        child_ids = []
+
+        async def child_with_independent_conn():
+            async with async_connections._independent_connection():
+                conn = async_connections[DEFAULT_DB_ALIAS]
+                await conn.ensure_connection()
+                child_ids.append(id(conn))
+
+        task = asyncio.create_task(child_with_independent_conn())
+        await task
+
+        self.assertEqual(len(child_ids), 1)
         self.assertNotEqual(
             parent_id,
             child_ids[0],
-            "Child task got the same connection as parent — "
-            "task isolation is broken",
+            "_independent_connection should provide a different connection",
         )

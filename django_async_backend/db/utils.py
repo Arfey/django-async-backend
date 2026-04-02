@@ -40,23 +40,26 @@ class DatabaseErrorWrapper(_DatabaseErrorWrapper):
 
 class _TaskAwareLocal:
     """
-    Connection storage that gives each async task its own connections.
+    Connection storage that isolates connections per ASGI request.
 
     In sync contexts, uses thread-local storage (same as Django).
-    In async contexts, uses a ContextVar keyed by asyncio.current_task()
-    so concurrent tasks on the same event loop thread each get their
-    own database connections.
+    In async contexts, uses a ContextVar so each ASGI request (which
+    runs in its own asyncio task) gets its own connection namespace.
+    Child tasks within a request share the parent's connection.
 
-    Django's default Local (from asgiref) with thread_critical=True stores
-    connections per-thread. Since all async tasks share one event loop
-    thread, they share one connection — corrupting transaction state
-    (in_atomic_block, savepoint_ids, needs_rollback) under concurrency.
+    Django's default Local (from asgiref) with thread_critical=True
+    stores connections per-thread. Since all async tasks share one
+    event loop thread, concurrent requests share one connection —
+    corrupting transaction state (in_atomic_block, savepoint_ids,
+    needs_rollback). This class fixes that by giving each request
+    its own namespace via ContextVar, while keeping child tasks on
+    the same connection to avoid pool exhaustion.
 
-    This class is a drop-in replacement: BaseConnectionHandler accesses
+    Drop-in replacement: BaseConnectionHandler accesses
     self._connections via getattr/setattr/delattr, all of which are
-    delegated to the per-task namespace. Connection aliases (e.g.
-    "default") are stored as attributes; internal state uses the "_"
-    prefix convention to avoid collision.
+    delegated to the namespace. Connection aliases (e.g. "default")
+    are stored as attributes; internal state uses the "_" prefix
+    convention to avoid collision.
     """
 
     def __init__(self):
@@ -71,13 +74,16 @@ class _TaskAwareLocal:
         if task is None:
             return self._thread_local
 
-        # Each task gets its own namespace. When asyncio.create_task()
-        # copies the parent context, the child inherits a reference to
-        # the parent's _TaskNamespace. The identity check detects this
-        # and creates a fresh namespace for the child, so connections
-        # are never shared across tasks.
+        # Child tasks created via asyncio.create_task() inherit the
+        # parent's ContextVar value, so they share the parent's
+        # connection namespace. This is intentional: per-request
+        # isolation comes from each ASGI request starting a fresh
+        # task with _task_connections=None. Within a request,
+        # child tasks share the connection to avoid pool exhaustion
+        # and to keep signal dispatch on the same connection.
+        # Use _independent_connection() for explicit parallelism.
         storage = _task_connections.get()
-        if storage is None or storage._task_ref is not task:
+        if storage is None:
             storage = _TaskNamespace(task)
             _task_connections.set(storage)
 
