@@ -1,12 +1,19 @@
 """
 Tests for concurrent async task safety.
 
-Demonstrates the INTRANS bug: child tasks sharing a connection via
-ContextVar inheritance each open their own async_atomic(), creating
-overlapping savepoints that corrupt transaction state.
+Two bugs:
 
-    ProgrammingError: can't change 'autocommit' now:
-        connection in transaction status INTRANS
+1. Pool exhaustion (PoolExhaustionTests): ASGI has no equivalent of
+   Django's close_old_connections signal. Without middleware calling
+   close_all(), each request leaks a connection that is never returned
+   to the pool.
+
+2. Transaction corruption (PerTaskAtomicBugTests): child tasks sharing
+   a connection via ContextVar inheritance each open their own
+   async_atomic(), creating overlapping savepoints:
+
+       ProgrammingError: can't change 'autocommit' now:
+           connection in transaction status INTRANS
 
 Correct patterns:
   1. Single parent async_atomic() wrapping asyncio.gather()
@@ -16,6 +23,7 @@ See: https://github.com/Arfey/django-async-backend/issues/11
 """
 
 import asyncio
+import contextvars
 
 from django.db import DEFAULT_DB_ALIAS
 
@@ -55,6 +63,85 @@ async def count_rows():
         )
         row = await res.fetchone()
         return row[0]
+
+
+async def count_pg_backends():
+    """Count other connections to this database in pg_stat_activity."""
+    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as c:
+        res = await c.execute(
+            "SELECT count(*) FROM pg_stat_activity "
+            "WHERE datname = current_database() "
+            "AND pid != pg_backend_pid()"
+        )
+        row = await res.fetchone()
+        return row[0]
+
+
+class PoolExhaustionTests(AsyncioTransactionTestCase):
+    """
+    Without close_all() after each request, connections are never
+    returned to the pool. Each ASGI request gets a fresh ContextVar
+    context, creates a new connection, and abandons it when done.
+
+    The close_async_connections middleware fixes this by calling
+    close_all() after each response.
+    """
+
+    async def test_connections_leak_without_cleanup(self):
+        """Simulated requests without close_all leak connections."""
+        baseline = await count_pg_backends()
+
+        n_requests = 20
+        for _ in range(n_requests):
+
+            async def fake_request():
+                async with await async_connections[
+                    DEFAULT_DB_ALIAS
+                ].cursor() as c:
+                    await c.execute("SELECT 1")
+
+            await asyncio.create_task(
+                fake_request(), context=contextvars.Context()
+            )
+
+        after = await count_pg_backends()
+        leaked = after - baseline
+        # May be capped by pool max_size or pg max_connections,
+        # but should be substantial (most of n_requests).
+        self.assertGreaterEqual(
+            leaked,
+            n_requests // 2,
+            f"Expected many leaked connections, got {leaked}. "
+            f"Each ASGI request without close_all() leaks one "
+            f"(may be capped by pool or pg limits).",
+        )
+
+    async def test_connections_returned_with_cleanup(self):
+        """Simulated requests with close_all return connections."""
+        baseline = await count_pg_backends()
+
+        n_requests = 20
+        for _ in range(n_requests):
+
+            async def fake_request():
+                async with await async_connections[
+                    DEFAULT_DB_ALIAS
+                ].cursor() as c:
+                    await c.execute("SELECT 1")
+                await async_connections.close_all()
+
+            await asyncio.create_task(
+                fake_request(), context=contextvars.Context()
+            )
+
+        after = await count_pg_backends()
+        leaked = after - baseline
+        self.assertLessEqual(
+            leaked,
+            2,
+            f"Expected ~0 leaked connections with cleanup, "
+            f"got {leaked}.",
+        )
 
 
 class PerTaskAtomicBugTests(AsyncioTransactionTestCase):
