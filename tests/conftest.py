@@ -6,6 +6,7 @@ from contextlib import suppress
 from os import environ
 
 import django
+import pytest
 
 from tests.fixtures.containers import _start_postgres_container
 
@@ -34,3 +35,28 @@ def pytest_unconfigure(config):
     if container_info:
         with suppress(Exception):
             container_info.container.stop()
+
+
+@pytest.fixture
+async def async_db():
+    """Wraps each test in an async transaction that rolls back on completion.
+
+    This is the pytest equivalent of AsyncioTestCase._init_transaction /
+    _close_transaction. Use it for any async test that needs database access.
+    """
+    from django_async_backend.db import async_connections
+    from django_async_backend.db.transaction import async_atomic
+
+    atomic_cms = {}
+    for name in async_connections.settings:
+        connection = async_connections[name]
+        atomic_cms[name] = async_atomic(name)
+        await atomic_cms[name].__aenter__()
+
+    yield
+
+    for name in async_connections.settings:
+        connection = async_connections[name]
+        connection.set_rollback(True)
+        await atomic_cms[name].__aexit__(None, None, None)
+        await connection.close()
