@@ -90,6 +90,11 @@ class AsyncCollector:
     def add_field_update(self, field, value, objs):
         self.field_updates[(field, value)].append(objs)
 
+    def add_restricted_objects(self, field, objs):
+        if objs:
+            model = objs[0].__class__
+            self.restricted_objects[model][field].update(objs)
+
     def _has_signal_listeners(self, _model):
         return False  # We always skip signals
 
