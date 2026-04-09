@@ -1,50 +1,58 @@
+import pytest
 from django.core.exceptions import FieldDoesNotExist
 from test_app.models import TestModel
 
-from django_async_backend.test import AsyncioTestCase
+
+async def test_ain_bulk_with_ids(async_db):
+    obj1 = await TestModel.async_object.acreate(name="Test1", value=1)
+    obj2 = await TestModel.async_object.acreate(name="Test2", value=2)
+
+    results = await TestModel.async_object.ain_bulk([obj1.id, obj2.id])
+
+    assert len(results) == 2
+    assert obj1.id in results
+    assert obj2.id in results
+    assert results[obj1.id].name == "Test1"
+    assert results[obj2.id].name == "Test2"
 
 
-class TestAinBulk(AsyncioTestCase):
-    async def asyncSetUp(self):
-        self.obj1 = await TestModel.async_object.acreate(name="Test1", value=1)
-        self.obj2 = await TestModel.async_object.acreate(name="Test2", value=2)
+async def test_ain_bulk_no_ids(async_db):
+    results = await TestModel.async_object.ain_bulk([])
+    assert len(results) == 0
 
-    async def test_ain_bulk_with_ids(self):
-        results = await TestModel.async_object.ain_bulk([self.obj1.id, self.obj2.id])
 
-        self.assertEqual(len(results), 2, "Should return 2 objects")
-        self.assertIn(self.obj1.id, results, "Results should include obj1")
-        self.assertIn(self.obj2.id, results, "Results should include obj2")
-        self.assertEqual(results[self.obj1.id].name, "Test1", "Obj1 name should be 'Test1'")
-        self.assertEqual(results[self.obj2.id].name, "Test2", "Obj2 name should be 'Test2'")
+async def test_ain_bulk_with_field_name(async_db):
+    await TestModel.async_object.acreate(name="Test1", value=1)
+    await TestModel.async_object.acreate(name="Test2", value=2)
 
-    async def test_ain_bulk_no_ids(self):
-        results = await TestModel.async_object.ain_bulk([])
-        self.assertEqual(len(results), 0, "Should return an empty dictionary")
+    results = await TestModel.async_object.ain_bulk(["Test1", "Test2"], field_name="name")
 
-    async def test_ain_bulk_with_field_name(self):
-        results = await TestModel.async_object.ain_bulk(["Test1", "Test2"], field_name="name")
+    assert len(results) == 2
+    assert "Test1" in results
+    assert "Test2" in results
+    assert results["Test1"].value == 1
+    assert results["Test2"].value == 2
 
-        self.assertEqual(len(results), 2, "Should return 2 objects")
-        self.assertIn("Test1", results, "Results should include 'Test1'")
-        self.assertIn("Test2", results, "Results should include 'Test2'")
-        self.assertEqual(results["Test1"].value, 1, "Value for 'Test1' should be 1")
-        self.assertEqual(results["Test2"].value, 2, "Value for 'Test2' should be 2")
 
-    async def test_ain_bulk_nonexistent_field(self):
-        with self.assertRaises(FieldDoesNotExist):
-            await TestModel.async_object.ain_bulk(["Test1"], field_name="nonexistent_field")
+async def test_ain_bulk_nonexistent_field(async_db):
+    with pytest.raises(FieldDoesNotExist):
+        await TestModel.async_object.ain_bulk(["Test1"], field_name="nonexistent_field")
 
-    async def test_ain_bulk_invalid_field(self):
-        with self.assertRaises(ValueError):
-            await TestModel.async_object.ain_bulk(["Test1"], field_name="value")
 
-    async def test_ain_bulk_with_slicing(self):
-        sliced_queryset = TestModel.async_object.all()[:1]
-        with self.assertRaises(TypeError):
-            await sliced_queryset.ain_bulk([self.obj1.id])
+async def test_ain_bulk_invalid_field(async_db):
+    with pytest.raises(ValueError):
+        await TestModel.async_object.ain_bulk(["Test1"], field_name="value")
 
-    async def test_ain_bulk_with_non_model_iterable(self):
-        queryset = TestModel.async_object.values("name")
-        with self.assertRaises(TypeError):
-            await queryset.ain_bulk([self.obj1.id])
+
+async def test_ain_bulk_with_slicing(async_db):
+    obj1 = await TestModel.async_object.acreate(name="Test1", value=1)
+    sliced_queryset = TestModel.async_object.all()[:1]
+    with pytest.raises(TypeError):
+        await sliced_queryset.ain_bulk([obj1.id])
+
+
+async def test_ain_bulk_with_non_model_iterable(async_db):
+    obj1 = await TestModel.async_object.acreate(name="Test1", value=1)
+    queryset = TestModel.async_object.values("name")
+    with pytest.raises(TypeError):
+        await queryset.ain_bulk([obj1.id])
