@@ -1,6 +1,14 @@
 # Django Async Backend
 
-## 🚀 Installation & Django Integration
+> **Note:** This is a fork of [Arfey/django-async-backend](https://github.com/Arfey/django-async-backend). Most of the missing async write operations and model instance methods were added here to explore what the remaining blockers are for a fully async Django ORM. Largely vibe-coded — functional but not production-ready.
+>
+> **Remaining blockers for full async:**
+> - **Signals** — Django's signal system is synchronous. Write operations skip `pre_save`/`post_save`/`pre_delete`/`post_delete`.
+> - **Cascade deletes** — Django's `Collector` is deeply sync. `adelete()` does raw SQL delete only.
+> - **`Model.save()` parity** — `AsyncModel.asave()` bypasses `Model.save()`, so custom save overrides won't run.
+> - **User model** — Not async-aware.
+
+## Installation & Django Integration
 
 ### 1. Install the package
 
@@ -204,24 +212,24 @@ async def main():
 | methods                             | supported | comments |
 | ----------------------------------- | --------- | -------- |
 | `Model.objects.aget`                | ✅        |          |
-| `Model.objects.acreate`             | ❌        |          |
+| `Model.objects.acreate`             | ✅        | No signals |
 | `Model.objects.acount`              | ✅        |          |
 | `Model.objects.none`                | ✅        |          |
-| `Model.objects.abulk_create`        | ❌        |          |
-| `Model.objects.abulk_update`        | ❌        |          |
-| `Model.objects.aget_or_create`      | ❌        |          |
-| `Model.objects.aupdate_or_create`   | ❌        |          |
+| `Model.objects.abulk_create`        | ✅        | No signals |
+| `Model.objects.abulk_update`        | ✅        |          |
+| `Model.objects.aget_or_create`      | ✅        | No signals |
+| `Model.objects.aupdate_or_create`   | ✅        | No signals |
 | `Model.objects.aearliest`           | ✅        |          |
 | `Model.objects.alatest`             | ✅        |          |
 | `Model.objects.afirst`              | ✅        |          |
 | `Model.objects.alast`               | ✅        |          |
 | `Model.objects.ain_bulk`            | ✅        |          |
-| `Model.objects.adelete`             | ❌        |          |
-| `Model.objects.aupdate`             | ❌        |          |
+| `Model.objects.adelete`             | ✅        | No cascade/signals |
+| `Model.objects.aupdate`             | ✅        |          |
 | `Model.objects.aexists`             | ✅        |          |
-| `Model.objects.acontains`           | ❌        |          |
+| `Model.objects.acontains`           | ✅        |          |
 | `Model.objects.aexplain`            | ✅        |          |
-| `Model.objects.araw`                | ❌        |          |
+| `Model.objects.araw`                | ✅        |          |
 | `Model.objects.all`                 | ✅        |          |
 | `Model.objects.filter`              | ✅        |          |
 | `Model.objects.exclude`             | ✅        |          |
@@ -229,44 +237,57 @@ async def main():
 | `Model.objects.union`               | ✅        |          |
 | `Model.objects.intersection`        | ✅        |          |
 | `Model.objects.difference`          | ✅        |          |
-| `Model.objects.select_related`      | ❌        |          |
-| `Model.objects.select_for_update`   | ❌        |          |
-| `Model.objects.prefetch_related`    | ❌        |          |
+| `Model.objects.select_related`      | ✅        |          |
+| `Model.objects.select_for_update`   | ✅        |          |
+| `Model.objects.prefetch_related`    | ✅        |          |
 | `Model.objects.annotate`            | ✅        |          |
 | `Model.objects.order_by`            | ✅        |          |
 | `Model.objects.distinct`            | ✅        |          |
 | `Model.objects.extra`               | ✅        |          |
 | `Model.objects.reverse`             | ✅        |          |
-| `Model.objects.defer`               | ❌        |          |
-| `Model.objects.only`                | ❌        |          |
+| `Model.objects.defer`               | ✅        |          |
+| `Model.objects.only`                | ✅        |          |
 | `Model.objects.using`               | ✅        |          |
-| `Model.objects.resolve_expression`  | ❌        |          |
-| `Model.objects.ordered`             | ❌        |          |
+| `Model.objects.resolve_expression`  | ✅        |          |
+| `Model.objects.ordered`             | ✅        |          |
 | `Model.objects.values`              | ✅        |          |
 | `Model.objects.values_list`         | ✅        |          |
-| `Model.objects.dates`               | ❌        |          |
-| `Model.objects.datetimes`           | ❌        |          |
-| `Model.objects.alias    `           | ❌        |          |
+| `Model.objects.dates`               | ✅        |          |
+| `Model.objects.datetimes`           | ✅        |          |
+| `Model.objects.alias`               | ✅        |          |
 | `__aiter__`                         | ✅        |          |
-| `__repr__`                          | ❌        |          |
-| `__len__`                           | ❌        |          |
-| `__and__`                           | ❌        |          |
-| `__or__`                            | ❌        |          |
-| `__xor__`                           | ❌        |          |
+| `__repr__`                          | ✅        |          |
+| `__len__`                           | ✅        |          |
+| `__and__`                           | ✅        |          |
+| `__or__`                            | ✅        |          |
+| `__xor__`                           | ✅        |          |
 | `__getitem__`                       | ✅        |          |
-| `Model.objects.aiterator`           | ❌        |          |
+| `Model.objects.aiterator`           | ✅        |          |
 
 ### RawQuerySet
 
-Not supported ❌
+Supported via `araw()`:
+
+```python
+async for obj in Book.async_object.araw("SELECT * FROM books WHERE id > %s", [10]):
+    print(obj.name)
+```
 
 ### Model:
 
+To use async model instance methods, inherit from `AsyncModel`:
+
+```python
+from django_async_backend.db.models.base import AsyncModel
+
+class MyModel(AsyncModel, models.Model):
+    ...
+```
+
 | methods         | supported | comments |
 | --------------- | --------- | -------- |
-| `Model.asave`   | ❌        |          |
-| `Model.aupdate` | ❌        |          |
-| `Model.adelete` | ❌        |          |
+| `Model.asave`   | ✅        | No signals, requires AsyncModel mixin |
+| `Model.adelete` | ✅        | No cascade/signals, requires AsyncModel mixin |
 | `...`           | ❌        |          |
 
 ### User Model / Manager
