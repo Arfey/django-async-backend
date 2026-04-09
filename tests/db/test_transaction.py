@@ -37,24 +37,19 @@ async def drop_table():
 
 async def create_instance(id):
     async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        await cursor.execute(
-            f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');"
-        )
+        await cursor.execute(f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');")
 
         return str(id)
 
 
 async def get_all():
     async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        res = await cursor.execute(
-            "SELECT name FROM reporter_table_tmp order by name;"
-        )
+        res = await cursor.execute("SELECT name FROM reporter_table_tmp order by name;")
 
         return [i[0] for i in await res.fetchall()]
 
 
 class AsyncAtomicDurableTests(AsyncioTransactionTestCase):
-
     async def asyncSetUp(self):
         await create_table()
 
@@ -87,10 +82,7 @@ class AsyncAtomicDurableTests(AsyncioTransactionTestCase):
         self.assertEqual(await get_all(), ["1", "2"])
 
     async def test_durable_nested_both(self):
-        msg = (
-            "A durable atomic block cannot be nested within another "
-            "atomic block."
-        )
+        msg = "A durable atomic block cannot be nested within another atomic block."
 
         async with async_atomic(durable=True):
             with self.assertRaisesRegex(RuntimeError, msg):
@@ -98,10 +90,7 @@ class AsyncAtomicDurableTests(AsyncioTransactionTestCase):
                     pass
 
     async def test_durable_nested_inner(self):
-        msg = (
-            "A durable atomic block cannot be nested within another "
-            "atomic block."
-        )
+        msg = "A durable atomic block cannot be nested within another atomic block."
 
         async with async_atomic():
             with self.assertRaisesRegex(RuntimeError, msg):
@@ -121,7 +110,6 @@ class AsyncAtomicDurableTests(AsyncioTransactionTestCase):
 
 
 class AsyncAtomicTests(AsyncioTransactionTestCase):
-
     async def asyncSetUp(self):
         await create_table()
 
@@ -294,9 +282,7 @@ class AsyncAtomicTests(AsyncioTransactionTestCase):
         async with async_atomic():
             await create_instance(1)
             # atomic block shouldn't rollback, but force it.
-            self.assertFalse(
-                async_connections[DEFAULT_DB_ALIAS].get_rollback()
-            )
+            self.assertFalse(async_connections[DEFAULT_DB_ALIAS].get_rollback())
             async_connections[DEFAULT_DB_ALIAS].set_rollback(True)
         self.assertSequenceEqual(await get_all(), [])
 
@@ -310,9 +296,7 @@ class AsyncAtomicTests(AsyncioTransactionTestCase):
             with self.assertRaises(DatabaseError):
                 async with async_atomic(savepoint=False):
                     async with await connection.cursor() as cursor:
-                        await cursor.execute(
-                            "SELECT no_such_col FROM reporter_table_tmp"
-                        )
+                        await cursor.execute("SELECT no_such_col FROM reporter_table_tmp")
             # prevent atomic from rolling back since we're recovering
             # manually
             self.assertTrue(connection.get_rollback())
@@ -435,9 +419,7 @@ class AsyncAtomicMergeTests(AsyncioTransactionTestCase):
 
 
 class AsyncAtomicErrorsTests(AsyncioTransactionTestCase):
-    forbidden_atomic_msg = (
-        "This is forbidden when an 'atomic' block is active."
-    )
+    forbidden_atomic_msg = "This is forbidden when an 'atomic' block is active."
 
     async def asyncSetUp(self):
         await create_table()
@@ -487,15 +469,13 @@ class AsyncAtomicErrorsTests(AsyncioTransactionTestCase):
                 "An error occurred in the current transaction. You can't "
                 "execute queries until the end of the 'atomic' block."
             )
-            with self.assertRaisesRegex(
-                transaction.TransactionManagementError, msg
-            ) as cm:
+            with self.assertRaisesRegex(transaction.TransactionManagementError, msg) as cm:
                 await create_instance(2)
 
             self.assertIsInstance(cm.exception.__cause__, IntegrityError)
         self.assertEqual(len(await get_all()), 1)
 
-    async def test_atomic_prevents_queries_in_broken_transaction_after_client_close(  # noqa
+    async def test_atomic_prevents_queries_in_broken_transaction_after_client_close(
         self,
     ):
         connection = async_connections[DEFAULT_DB_ALIAS]
@@ -567,26 +547,23 @@ class IndependentConnectionTransaction(AsyncioTransactionTestCase):
                 self.assertEqual(len(await get_all()), 2)
 
     async def test_nested_independent_connection_with_transaction(self):
-        async with async_connections._independent_connection():
-            async with async_atomic():
-                await create_instance(1)
+        async with async_connections._independent_connection(), async_atomic():
+            await create_instance(1)
+
+            self.assertEqual(len(await get_all()), 1)
+
+            async with async_connections._independent_connection():
+                await create_instance(2)
 
                 self.assertEqual(len(await get_all()), 1)
-
-                async with async_connections._independent_connection():
-                    await create_instance(2)
-
-                    self.assertEqual(len(await get_all()), 1)
 
     async def test_nested_independent_connection_with_nested_transaction(self):
-        async with async_connections._independent_connection():
-            async with async_atomic():
-                await create_instance(1)
+        async with async_connections._independent_connection(), async_atomic():
+            await create_instance(1)
+
+            self.assertEqual(len(await get_all()), 1)
+
+            async with async_connections._independent_connection(), async_atomic():
+                await create_instance(2)
 
                 self.assertEqual(len(await get_all()), 1)
-
-                async with async_connections._independent_connection():
-                    async with async_atomic():
-                        await create_instance(2)
-
-                        self.assertEqual(len(await get_all()), 1)

@@ -13,9 +13,7 @@ class TestAGet(AsyncioTestCase):
     async def test_aget_with_results(self):
         item = await TestModel.async_object.aget(name="Item1")
         self.assertIsNotNone(item, "aget should return the matching object")
-        self.assertEqual(
-            item.name, "Item1", "The object should have the name 'Item1'"
-        )
+        self.assertEqual(item.name, "Item1", "The object should have the name 'Item1'")
 
     async def test_aget_no_results(self):
         with self.assertRaises(TestModel.DoesNotExist):
@@ -30,9 +28,7 @@ class TestAGet(AsyncioTestCase):
     async def test_aget_with_filters(self):
         item = await TestModel.async_object.filter(name="Item1").aget()
         self.assertIsNotNone(item, "aget should return the matching object")
-        self.assertEqual(
-            item.name, "Item1", "The object should have the name 'Item1'"
-        )
+        self.assertEqual(item.name, "Item1", "The object should have the name 'Item1'")
 
     async def test_union_combinator(self):
         queryset1 = TestModel.async_object.filter(name="Item1")

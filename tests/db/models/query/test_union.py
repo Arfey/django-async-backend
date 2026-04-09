@@ -15,9 +15,7 @@ class TestUnion(AsyncioTestCase):
         union_queryset = queryset1.union(queryset2)
 
         results = [item async for item in union_queryset]
-        self.assertEqual(
-            len(results), 3, "Union should return all unique items"
-        )
+        self.assertEqual(len(results), 3, "Union should return all unique items")
         self.assertTrue(
             any(item.name == "Item1" for item in results),
             "Union should include 'Item1'",
@@ -54,9 +52,7 @@ class TestUnion(AsyncioTestCase):
             1,
             "Union with an empty queryset should return the first queryset",
         )
-        self.assertEqual(
-            results[0].name, "Item1", "Union should include only 'Item1'"
-        )
+        self.assertEqual(results[0].name, "Item1", "Union should include only 'Item1'")
 
         queryset1 = TestModel.async_object.none()
         queryset2 = TestModel.async_object.none()
@@ -72,9 +68,7 @@ class TestUnion(AsyncioTestCase):
         union_queryset = queryset1.union(queryset2, queryset3)
 
         results = [item async for item in union_queryset]
-        self.assertEqual(
-            len(results), 3, "Union should include items from all querysets"
-        )
+        self.assertEqual(len(results), 3, "Union should include items from all querysets")
         self.assertTrue(
             any(item.name == "Item1" for item in results),
             "Union should include 'Item1'",

@@ -1,9 +1,8 @@
 from asgiref.sync import iscoroutinefunction
 from django.core.exceptions import ImproperlyConfigured
 from django.db import DEFAULT_DB_ALIAS
-from django.db.utils import ConnectionHandler
+from django.db.utils import ConnectionHandler, load_backend
 from django.db.utils import DatabaseErrorWrapper as _DatabaseErrorWrapper
-from django.db.utils import load_backend
 
 from django_async_backend.utils.connection import BaseAsyncConnectionHandler
 
@@ -39,13 +38,9 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
     def configure_settings(self, databases):
         databases = super().configure_settings(databases)
         if databases == {}:
-            databases[DEFAULT_DB_ALIAS] = {
-                "ENGINE": "django.db.backends.dummy"
-            }
+            databases[DEFAULT_DB_ALIAS] = {"ENGINE": "django.db.backends.dummy"}
         elif DEFAULT_DB_ALIAS not in databases:
-            raise ImproperlyConfigured(
-                f"You must define a '{DEFAULT_DB_ALIAS}' database."
-            )
+            raise ImproperlyConfigured(f"You must define a '{DEFAULT_DB_ALIAS}' database.")
         elif databases[DEFAULT_DB_ALIAS] == {}:
             databases[DEFAULT_DB_ALIAS]["ENGINE"] = "django.db.backends.dummy"
 
@@ -80,8 +75,6 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
         backend = load_backend(db["ENGINE"])
 
         if not hasattr(backend, "AsyncDatabaseWrapper"):
-            raise self.exception_class(
-                f"The async connection '{alias}' doesn't exist."
-            )
+            raise self.exception_class(f"The async connection '{alias}' doesn't exist.")
 
         return backend.AsyncDatabaseWrapper(db, alias)

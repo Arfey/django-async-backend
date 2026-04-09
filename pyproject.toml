@@ -1,107 +1,150 @@
-[tool.poetry]
+[project]
 name = "django-async-backend"
-version = "0.0.3"
+version = "0.0.4"
 description = "Django extension providing async capabilities for database and other components"
 readme = "README.md"
-authors = ["Arfey <arfey@gmail.com>"]
+license = { text = "MIT" }
+requires-python = ">=3.12"
+keywords = ["django", "asyncio", "database", "postgresql", "async"]
+authors = [{ name = "Arfey", email = "arfey@gmail.com" }]
 classifiers = [
-    "Environment :: Web Environment",
-    "Development Status :: 5 - Production/Stable",
-
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
-    "Operating System :: OS Independent",
-
-    "Framework :: Django",
-
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-
-    "Topic :: Internet",
-    "Topic :: Utilities",
-    "Topic :: Internet :: WWW/HTTP",
-    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
-    "Topic :: Software Development :: Libraries",
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Framework :: Django",
+  "Framework :: Django :: 6.0",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Software Development :: Libraries",
 ]
-keywords = [
-  "django",
-  "asyncio",
-  "database",
+dependencies = ["Django>=6", "psycopg[binary]>=3"]
+
+[project.urls]
+Homepage = "https://github.com/Arfey/django-async-backend"
+Repository = "https://github.com/Arfey/django-async-backend.git"
+
+[dependency-groups]
+dev = [
+  "mypy==1.19.1",
+  "pre-commit==4.5.1",
+  "psycopg[pool]>=3",
+  "pytest-asyncio==1.3.0",
+  "pytest-cov==7.1.0",
+  "pytest-django==4.12.0",
+  "pytest==9.0.2",
+  "ruff==0.15.8",
+  "testcontainers==4.14.2",
 ]
-license = "MIT"
-homepage = "https://github.com/Arfey/django-async-backend"
-documentation = "https://github.com/Arfey/django-async-backend/blob/main/README.md"
-repository = "https://github.com/Arfey/django-async-backend"
-
-[tool.poetry.dependencies]
-python = ">=3.12"
-django = ">=6"
-psycopg = {extras = ["binary"], version = "^3"}
-pydantic = "^2.12.5"
-
-
-[tool.poetry.group.dev.dependencies]
-coverage = "^7.13.4"
-libcst = "^1.8.6"
-psycopg = {extras = ["pool"], version = "^3"}
-pyyaml = "^6.0.3"
-requests = "^2.32.5"
-uvicorn = "^0.38.0"
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.darker]
-line-length = 79
+[tool.hatch.build.targets.wheel]
+packages = ["django_async_backend"]
 
-[tool.black]
-line-length = 79
+[tool.hatch.build.targets.sdist]
+include = ["django_async_backend", "LICENSE", "README.md"]
 
-[tool.isort]
-line_length = 80
-multi_line_output = 3
-include_trailing_comma = true
-use_parentheses = true
-ensure_newline_before_comments = true
-force_grid_wrap = 2
-extend_skip_glob = ["*/migrations/*", "env/*"]
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+fix = true
 
-[tool.flake8]
-max-line-length = 80
-max-complexity = 12
-exclude = [
-    ".git",
-    "env/",
-    "django_async_backend/db/models/query.py",
-    "django_async_backend/db/models/sql/compiler.py",
-    "django_async_backend/db/models/sql/query.py",
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "ANN",    # Type annotations — will add incrementally
+  "COM812", # Conflicts with ruff-format
+  "D",      # Docstrings — will add incrementally
+  "E501",   # Line length handled by config
+  "EM",     # Exception strings inline are fine
+  "FBT",    # Boolean params common in Django ORM API
+  "PERF203", # try/except in loop is fine
+  "PLR0913", # Too many args — Django ORM methods have many params
+  "PLR2004", # Magic values are fine in ORM code
+  "SLF001", # Private member access needed for Django internals
+  "TRY003", # Long exception messages are helpful
+  "ERA001", # Commented-out code — keeping some Django reference code
+  "TRY002", # Raise vanilla exceptions (Django patterns)
+  "TRY301", # Raise within try (Django patterns)
+  "PLC0415", # Dynamic imports (intentional)
+  "DJ008",  # Model __str__ (not relevant for backend internals)
+  "N802",   # Function names (Django conventions)
+  "N806",   # Variable names (Django conventions)
+  "A002",   # Shadowing builtins (Django conventions)
+  "UP031",  # printf-style formatting (Django's own code)
+  "RUF012", # Mutable class attributes (Django patterns)
+  "B017",   # assertRaises without match (unittest style)
+  "S608",   # SQL injection (we build SQL programmatically)
+  "C901",   # Complex functions (Django ORM is inherently complex)
+  "PLR0912", # Too many branches (Django ORM)
+  "S101",   # assert used in Django internals
+  "PGH004", # noqa blanket (existing code)
+  "EXE001", # Shebang (manage.py)
+  "INP001", # Implicit namespace package
 ]
-extend-ignore = ["S001"]
 
-[tool.bandit]
-exclude_dirs = [
-  "env",
-  ".cache",
-  "tests",
-  ".mypy_cache",
-  "django_async_backend/db/models/query.py",
-  "django_async_backend/db/models/sql/compiler.py",
-  "django_async_backend/db/models/sql/query.py",
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "ARG",    # Unused arguments common in fixtures
+  "B007",   # Loop variable not used in body
+  "B017",   # assertRaises without match
+  "B018",   # Useless expression (Django test patterns)
+  "BLE001", # Blind except (Django test patterns)
+  "C403",   # Unnecessary list call
+  "F841",   # Unused variables okay in tests
+  "PERF401", # Use list comprehension (test readability preference)
+  "PT006",  # Parametrize tuple style is preference
+  "PT009",  # Use pytest.raises instead of unittest-style (we use unittest)
+  "PT011",  # Broad pytest.raises okay
+  "PT027",  # Use pytest assert instead of unittest-style (we use unittest)
+  "PYI024", # NamedTuple vs TypedDict
+  "S101",   # assert in tests
+  "S105",   # Hardcoded passwords in test settings
+  "S110",   # try/except/pass
+  "SIM117", # Multiple with statements
+  "SIM118", # Use key in dict
 ]
+# Django-derived files — these are ported from Django's source with async modifications.
+# Applying strict linting would require rewriting Django's own patterns.
+"django_async_backend/db/models/query.py" = ["ALL"]
+"django_async_backend/db/models/sql/compiler.py" = ["ALL"]
+"django_async_backend/db/models/sql/query.py" = ["ALL"]
+"django_async_backend/db/backends/**" = ["ALL"]
+"django_async_backend/db/transaction.py" = ["ALL"]
+"django_async_backend/db/utils.py" = ["ALL"]
+"django_async_backend/utils/**" = ["ALL"]
+"django_async_backend/db/models/base.py" = ["ALL"]
+"django_async_backend/test.py" = ["ALL"]
+"test_example/**" = ["ALL"]
+"tests_django/**" = ["ALL"]
 
 [tool.mypy]
+python_version = "3.12"
 ignore_missing_imports = true
 check_untyped_defs = true
-disallow_any_generics = true
-disallow_untyped_defs = true
-follow_imports = "silent"
-strict_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = "*.tests.*"
+module = "tests.*"
 ignore_errors = true
+
+[tool.pytest.ini_options]
+pythonpath = ["tests"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+precision = 2
+skip_covered = true

@@ -36,9 +36,7 @@ async def drop_table():
 
 async def create_instance(id):
     async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        await cursor.execute(
-            f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');"
-        )
+        await cursor.execute(f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');")
 
         return str(id)
 
@@ -293,9 +291,7 @@ class Tests(AsyncioTestCase):
         self.assertIsNone(connection.connection.isolation_level)
 
         new_connection = no_pool_connection()
-        new_connection.settings_dict["OPTIONS"][
-            "isolation_level"
-        ] = IsolationLevel.SERIALIZABLE
+        new_connection.settings_dict["OPTIONS"]["isolation_level"] = IsolationLevel.SERIALIZABLE
         try:
             # Start a transaction so the isolation level isn't reported as 0.
             await new_connection.set_autocommit(False)
@@ -314,10 +310,7 @@ class Tests(AsyncioTestCase):
         self.assertIsNone(connection.connection.isolation_level)
         new_connection = no_pool_connection()
         new_connection.settings_dict["OPTIONS"]["isolation_level"] = -1
-        msg = (
-            "Invalid transaction isolation level -1 specified. Use one of the "
-            "psycopg.IsolationLevel values."
-        )
+        msg = "Invalid transaction isolation level -1 specified. Use one of the psycopg.IsolationLevel values."
         with self.assertRaisesRegex(ImproperlyConfigured, msg):
             await new_connection.ensure_connection()
 
@@ -329,9 +322,7 @@ class Tests(AsyncioTestCase):
         try:
             custom_role = "django_nonexistent_role"
             new_connection = no_pool_connection()
-            new_connection.settings_dict["OPTIONS"][
-                "assume_role"
-            ] = custom_role
+            new_connection.settings_dict["OPTIONS"]["assume_role"] = custom_role
             msg = f'role "{custom_role}" does not exist'
 
             with self.assertRaisesRegex(errors.InvalidParameterValue, msg):
@@ -375,9 +366,7 @@ class Tests(AsyncioTestCase):
         new_connection.settings_dict["OPTIONS"]["cursor_factory"] = MyCursor
         try:
             await new_connection.connect()
-            self.assertEqual(
-                new_connection.connection.cursor_factory, MyCursor
-            )
+            self.assertEqual(new_connection.connection.cursor_factory, MyCursor)
         finally:
             await new_connection.close()
 
@@ -392,9 +381,7 @@ class Tests(AsyncioTestCase):
 
     async def test_client_encoding_utf8_enforce(self):
         new_connection = no_pool_connection()
-        new_connection.settings_dict["OPTIONS"][
-            "client_encoding"
-        ] = "iso-8859-2"
+        new_connection.settings_dict["OPTIONS"]["client_encoding"] = "iso-8859-2"
         try:
             await new_connection.connect()
             self.assertEqual(new_connection.connection.info.encoding, "utf-8")
@@ -461,13 +448,9 @@ class Tests(AsyncioTestCase):
             psycopg_version,
         )
 
-        with mock.patch.object(
-            Database, "__version__", "4.2.1 (dt dec pq3 ext lo64)"
-        ):
+        with mock.patch.object(Database, "__version__", "4.2.1 (dt dec pq3 ext lo64)"):
             self.assertEqual(psycopg_version(), (4, 2, 1))
-        with mock.patch.object(
-            Database, "__version__", "4.2b0.dev1 (dt dec pq3 ext lo64)"
-        ):
+        with mock.patch.object(Database, "__version__", "4.2b0.dev1 (dt dec pq3 ext lo64)"):
             self.assertEqual(psycopg_version(), (4, 2))
 
     @override_settings(DEBUG=True)
@@ -511,9 +494,7 @@ class Tests(AsyncioTestCase):
 
         msg = r"PostgreSQL 14 or later is required \(found 13\)."
         with self.assertRaisesRegex(NotSupportedError, msg):
-            await CustomAsyncDatabaseWrapper(
-                settings
-            ).check_database_version_supported()
+            await CustomAsyncDatabaseWrapper(settings).check_database_version_supported()
 
     async def test_compose_sql_when_no_connection(self):
         new_connection = no_pool_connection()
@@ -553,9 +534,7 @@ class Tests(AsyncioTestCase):
 
                 settings = new_connection.settings_dict.copy()
                 conn = new_connection.connection
-                self.assertIs(
-                    await Wrapper(settings)._configure_connection(conn), commit
-                )
+                self.assertIs(await Wrapper(settings)._configure_connection(conn), commit)
 
     async def test_bypass_role_configuration(self):
         from django_async_backend.db.backends.postgresql.base import (
@@ -574,17 +553,13 @@ class Tests(AsyncioTestCase):
         settings["OPTIONS"]["assume_role"] = "django_nonexistent_role"
         conn = new_connection.connection
         self.assertIs(
-            await CustomAsyncDatabaseWrapper(settings)._configure_connection(
-                conn
-            ),
+            await CustomAsyncDatabaseWrapper(settings)._configure_connection(conn),
             False,
         )
 
 
 class ServerSideCursorsPostgresTests(AsyncioTestCase):
-    cursor_fields = (
-        "name, statement, is_holdable, is_binary, is_scrollable, creation_time"
-    )
+    cursor_fields = "name, statement, is_holdable, is_binary, is_scrollable, creation_time"
     PostgresCursor = namedtuple("PostgresCursor", cursor_fields)
 
     async def asyncSetUp(self):
@@ -600,11 +575,7 @@ class ServerSideCursorsPostgresTests(AsyncioTestCase):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
         async with await connection.cursor() as cursor:
-            await cursor.execute(
-                "SELECT {fields} FROM pg_cursors;".format(
-                    fields=self.cursor_fields
-                )
-            )
+            await cursor.execute(f"SELECT {self.cursor_fields} FROM pg_cursors;")
             cursors = await cursor.fetchall()
         return [self.PostgresCursor._make(cursor) for cursor in cursors]
 
@@ -631,9 +602,7 @@ class ServerSideCursorsPostgresTests(AsyncioTestCase):
     async def test_server_side_cursor_many_cursors(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
         query = "SELECT * FROM reporter_table_tmp"
-        async with connection.create_cursor(
-            name="my_server_side_cursor2"
-        ) as cursor:
+        async with connection.create_cursor(name="my_server_side_cursor2") as cursor:
             # await cursor.execute("SELECT * FROM reporter_table_tmp")
             await cursor.execute(query)
             # Open the cursor by fetching a row

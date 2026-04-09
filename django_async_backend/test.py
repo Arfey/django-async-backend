@@ -8,12 +8,11 @@ from django_async_backend.db.transaction import async_atomic
 
 
 class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
-    # todo: fix problem with creating models
+    # TODO: fix problem with creating models
     pass
 
 
 class AsyncioTestCase(AsyncioTransactionTestCase):
-
     async def _init_transaction(self):
         self.connections = {}
         self.atomic_cms = {}
@@ -48,7 +47,6 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
 
 
 class AsyncCaptureQueriesContext:
-
     def __init__(self, connection):
         self.connection = connection
 
@@ -57,9 +55,7 @@ class AsyncCaptureQueriesContext:
 
     @property
     def captured_queries(self):
-        return self.connection.queries[
-            slice(self.initial_queries, self.final_queries)
-        ]
+        return self.connection.queries[slice(self.initial_queries, self.final_queries)]
 
     async def __aenter__(self):
         self.force_debug_cursor = self.connection.force_debug_cursor
@@ -69,9 +65,7 @@ class AsyncCaptureQueriesContext:
         await self.connection.ensure_connection()
         self.initial_queries = len(self.connection.queries_log)
         self.final_queries = None
-        self.reset_queries_disconnected = request_started.disconnect(
-            reset_queries
-        )
+        self.reset_queries_disconnected = request_started.disconnect(reset_queries)
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):

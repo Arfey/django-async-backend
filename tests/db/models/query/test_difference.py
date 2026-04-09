@@ -15,12 +15,8 @@ class TestDifference(AsyncioTestCase):
         difference_queryset = queryset1.difference(queryset2)
 
         results = [item async for item in difference_queryset]
-        self.assertEqual(
-            len(results), 1, "Difference should return unique items"
-        )
-        self.assertEqual(
-            results[0].name, "Item1", "Difference should include only 'Item1'"
-        )
+        self.assertEqual(len(results), 1, "Difference should return unique items")
+        self.assertEqual(results[0].name, "Item1", "Difference should include only 'Item1'")
 
     async def test_difference_no_results(self):
         queryset1 = TestModel.async_object.filter(value__lte=1)
@@ -33,9 +29,7 @@ class TestDifference(AsyncioTestCase):
             1,
             "Difference should return items from the first queryset",
         )
-        self.assertEqual(
-            results[0].name, "Item1", "Difference should include only 'Item1'"
-        )
+        self.assertEqual(results[0].name, "Item1", "Difference should include only 'Item1'")
 
     async def test_difference_with_empty_queryset(self):
         queryset1 = TestModel.async_object.filter(value__lte=1)
@@ -46,12 +40,9 @@ class TestDifference(AsyncioTestCase):
         self.assertEqual(
             len(results),
             1,
-            "Difference with an empty queryset should return the first "
-            "queryset",
+            "Difference with an empty queryset should return the first queryset",
         )
-        self.assertEqual(
-            results[0].name, "Item1", "Difference should include only 'Item1'"
-        )
+        self.assertEqual(results[0].name, "Item1", "Difference should include only 'Item1'")
 
     async def test_difference_with_multiple_querysets(self):
         queryset1 = TestModel.async_object.filter(value__lte=3)
@@ -65,6 +56,4 @@ class TestDifference(AsyncioTestCase):
             1,
             "Difference should exclude items from all other querysets",
         )
-        self.assertEqual(
-            results[0].name, "Item1", "Difference should include only 'Item1'"
-        )
+        self.assertEqual(results[0].name, "Item1", "Difference should include only 'Item1'")

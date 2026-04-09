@@ -19,9 +19,7 @@ class TestAIter(AsyncioTestCase):
         results = [obj async for obj in TestModel.async_object.all()]
 
         self.assertEqual(len(results), 2, "Should iterate over 2 objects")
-        self.assertEqual(
-            results[0].name, "Test1", "First object name should be 'Test1'"
-        )
+        self.assertEqual(results[0].name, "Test1", "First object name should be 'Test1'")
         self.assertEqual(
             results[1].name,
             "Test2",
@@ -41,11 +39,7 @@ class TestAIter(AsyncioTestCase):
             name="Test1",
         )
 
-        results = [
-            obj async for obj in TestModel.async_object.filter(name="Test1")
-        ]
+        results = [obj async for obj in TestModel.async_object.filter(name="Test1")]
 
         self.assertEqual(len(results), 1, "Should iterate over 1 object")
-        self.assertEqual(
-            results[0].name, "Test1", "First object name should be 'Test1'"
-        )
+        self.assertEqual(results[0].name, "Test1", "First object name should be 'Test1'")

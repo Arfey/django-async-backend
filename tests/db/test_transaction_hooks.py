@@ -33,18 +33,14 @@ async def drop_table():
 
 async def create_instance(id):
     async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        await cursor.execute(
-            f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');"
-        )
+        await cursor.execute(f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');")
 
         return int(id)
 
 
 async def get_all():
     async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        res = await cursor.execute(
-            "SELECT name FROM reporter_table_tmp order by name;"
-        )
+        res = await cursor.execute("SELECT name FROM reporter_table_tmp order by name;")
 
         return [int(i[0]) for i in await res.fetchall()]
 
@@ -69,15 +65,13 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
 
     def notify(self, id_):
         if id_ == "error":
-            raise ForcedError()
+            raise ForcedError
         self.notified.append(id_)
 
     async def do(self, num):
         """Create a Thing instance and notify about it."""
         await create_instance(num)
-        await async_connections[DEFAULT_DB_ALIAS].on_commit(
-            lambda: self.notify(num)
-        )
+        await async_connections[DEFAULT_DB_ALIAS].on_commit(lambda: self.notify(num))
 
     async def assertDone(self, nums):
         self.assertNotified(nums)
@@ -96,9 +90,7 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
         def robust_callback():
             raise ForcedError("robust callback")
 
-        with self.assertLogs(
-            "django_async_backend.db.backends", "ERROR"
-        ) as cm:
+        with self.assertLogs("django_async_backend.db.backends", "ERROR") as cm:
             await connection.on_commit(robust_callback, robust=True)
             await self.do(1)
 
@@ -121,9 +113,7 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
         def robust_callback():
             raise ForcedError("robust callback")
 
-        with self.assertLogs(
-            "django_async_backend.db.backends", "ERROR"
-        ) as cm:
+        with self.assertLogs("django_async_backend.db.backends", "ERROR") as cm:
             async with async_atomic():
                 await connection.on_commit(robust_callback, robust=True)
                 await self.do(1)
@@ -152,7 +142,7 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
         try:
             async with async_atomic():
                 await self.do(1)
-                raise ForcedError()
+                raise ForcedError
         except ForcedError:
             pass
 
@@ -175,7 +165,7 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
             try:
                 async with async_atomic():
                     await self.do(2)
-                    raise ForcedError()
+                    raise ForcedError
             except ForcedError:
                 pass
             # another successful savepoint
@@ -191,7 +181,7 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
             async with async_atomic():
                 async with async_atomic():
                     await self.do(1)
-                raise ForcedError()
+                raise ForcedError
         except ForcedError:
             pass
 
@@ -203,7 +193,7 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
                 async with async_atomic():
                     async with async_atomic():
                         await self.do(1)
-                    raise ForcedError()
+                    raise ForcedError
             except ForcedError:
                 pass
             await self.do(2)
@@ -212,26 +202,24 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
 
     async def test_no_savepoints_atomic_merged_with_outer(self):
 
-        async with async_atomic():
-            async with async_atomic():
-                await self.do(1)
-                try:
-                    async with async_atomic(savepoint=False):
-                        raise ForcedError()
-                except ForcedError:
-                    pass
+        async with async_atomic(), async_atomic():
+            await self.do(1)
+            try:
+                async with async_atomic(savepoint=False):
+                    raise ForcedError
+            except ForcedError:
+                pass
 
         await self.assertDone([])
 
     async def test_inner_savepoint_does_not_affect_outer(self):
-        async with async_atomic():
-            async with async_atomic():
-                await self.do(1)
-                try:
-                    async with async_atomic():
-                        raise ForcedError()
-                except ForcedError:
-                    pass
+        async with async_atomic(), async_atomic():
+            await self.do(1)
+            try:
+                async with async_atomic():
+                    raise ForcedError
+            except ForcedError:
+                pass
 
         await self.assertDone([1])
 
@@ -256,7 +244,7 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
         try:
             async with async_atomic():
                 await self.do(1)
-                raise ForcedError()
+                raise ForcedError
         except ForcedError:
             pass
 
@@ -324,9 +312,7 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
         async def on_commit(i, add_hook):
             async with async_atomic():
                 if add_hook:
-                    await connection.on_commit(
-                        lambda: on_commit(i + 10, False)
-                    )
+                    await connection.on_commit(lambda: on_commit(i + 10, False))
                 t = await create_instance(i)
                 self.notify(t)
 
@@ -345,9 +331,7 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
         try:
             await connection.set_autocommit(False)
             msg = "cannot be used in manual transaction management"
-            with self.assertRaisesRegex(
-                transaction.TransactionManagementError, msg
-            ):
+            with self.assertRaisesRegex(transaction.TransactionManagementError, msg):
                 await connection.on_commit(should_never_be_called)
         finally:
             await connection.set_autocommit(True)

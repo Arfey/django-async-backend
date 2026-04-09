@@ -15,9 +15,7 @@ class TestIntersection(AsyncioTestCase):
         intersection_queryset = queryset1.intersection(queryset2)
 
         results = [item async for item in intersection_queryset]
-        self.assertEqual(
-            len(results), 2, "Intersection should return common items"
-        )
+        self.assertEqual(len(results), 2, "Intersection should return common items")
         self.assertTrue(
             any(item.name == "Item1" for item in results),
             "Intersection should include 'Item1'",
@@ -36,8 +34,7 @@ class TestIntersection(AsyncioTestCase):
         self.assertEqual(
             len(results),
             0,
-            "Intersection should return no items if there are no common "
-            "elements",
+            "Intersection should return no items if there are no common elements",
         )
 
     async def test_intersection_with_empty_queryset(self):

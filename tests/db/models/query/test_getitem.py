@@ -15,7 +15,6 @@ class TestMock(TestCase):
 
 
 class TestGetItem(AsyncioTestCase):
-
     async def asyncSetUp(self):
         await TestModel.async_object.acreate(name="Item1")
         await TestModel.async_object.acreate(name="Item2")
@@ -23,28 +22,22 @@ class TestGetItem(AsyncioTestCase):
         await TestModel.async_object.acreate(name="Item4")
 
     async def test_get_single_item(self):
-        qs = TestModel.async_object.all()
+        qs = TestModel.async_object.order_by("name")
 
-        async with AsyncCaptureQueriesContext(
-            async_connections[DEFAULT_DB_ALIAS]
-        ) as ctx:
+        async with AsyncCaptureQueriesContext(async_connections[DEFAULT_DB_ALIAS]) as ctx:
             item = await qs[1]
             self.assertEqual(item.name, "Item2")
             self.assertIsNone(qs._result_cache, "Cache should be empty")
 
             item = await qs[1]
-            self.assertEqual(
-                item.name, "Item2", "Should fetch the second item"
-            )
+            self.assertEqual(item.name, "Item2", "Should fetch the second item")
             self.assertEqual(len(ctx.captured_queries), 2)
             self.assertIsNone(qs._result_cache, "Cache should be empty")
 
         # populate cache
         [i async for i in qs]
 
-        async with AsyncCaptureQueriesContext(
-            async_connections[DEFAULT_DB_ALIAS]
-        ) as ctx:
+        async with AsyncCaptureQueriesContext(async_connections[DEFAULT_DB_ALIAS]) as ctx:
             item = await qs[0]
             await qs[1]
             await qs[2]
@@ -56,25 +49,19 @@ class TestGetItem(AsyncioTestCase):
     async def test_get_slice(self):
         qs = TestModel.async_object.all()
 
-        async with AsyncCaptureQueriesContext(
-            async_connections[DEFAULT_DB_ALIAS]
-        ) as ctx:
+        async with AsyncCaptureQueriesContext(async_connections[DEFAULT_DB_ALIAS]) as ctx:
             items = [i async for i in qs[1:3]]
 
             self.assertEqual(len(ctx.captured_queries), 1)
             self.assertEqual(len(items), 2, "Should fetch two items")
-            self.assertEqual(
-                items[0].name, "Item2", "First item in slice should be 'Item2'"
-            )
+            self.assertEqual(items[0].name, "Item2", "First item in slice should be 'Item2'")
             self.assertEqual(
                 items[1].name,
                 "Item3",
                 "Second item in slice should be 'Item3'",
             )
 
-        async with AsyncCaptureQueriesContext(
-            async_connections[DEFAULT_DB_ALIAS]
-        ) as ctx:
+        async with AsyncCaptureQueriesContext(async_connections[DEFAULT_DB_ALIAS]) as ctx:
             # populate cache
             [i async for i in qs]
             self.assertEqual(len(ctx.captured_queries), 1)
@@ -82,9 +69,7 @@ class TestGetItem(AsyncioTestCase):
             items = [i async for i in qs[1:3]]
             self.assertEqual(len(ctx.captured_queries), 1)
             self.assertEqual(len(items), 2, "Should fetch two items")
-            self.assertEqual(
-                items[0].name, "Item2", "First item in slice should be 'Item2'"
-            )
+            self.assertEqual(items[0].name, "Item2", "First item in slice should be 'Item2'")
             self.assertEqual(
                 items[1].name,
                 "Item3",
@@ -93,28 +78,18 @@ class TestGetItem(AsyncioTestCase):
 
     async def test_get_slice_with_step(self):
         qs = TestModel.async_object.all()
-        async with AsyncCaptureQueriesContext(
-            async_connections[DEFAULT_DB_ALIAS]
-        ) as ctx:
+        async with AsyncCaptureQueriesContext(async_connections[DEFAULT_DB_ALIAS]) as ctx:
             items = [i async for i in qs[0:3:2]]
             self.assertEqual(len(ctx.captured_queries), 1)
 
-        self.assertEqual(
-            len(items), 2, "Should fetch two items with a step of 2"
-        )
-        self.assertEqual(
-            items[0].name, "Item1", "First item in slice should be 'Item1'"
-        )
-        self.assertEqual(
-            items[1].name, "Item3", "Second item in slice should be 'Item3'"
-        )
+        self.assertEqual(len(items), 2, "Should fetch two items with a step of 2")
+        self.assertEqual(items[0].name, "Item1", "First item in slice should be 'Item1'")
+        self.assertEqual(items[1].name, "Item3", "Second item in slice should be 'Item3'")
 
         # populate cache
         [i async for i in qs]
 
-        async with AsyncCaptureQueriesContext(
-            async_connections[DEFAULT_DB_ALIAS]
-        ) as ctx:
+        async with AsyncCaptureQueriesContext(async_connections[DEFAULT_DB_ALIAS]) as ctx:
             items = [i async for i in qs[0:3:2]]
             self.assertEqual(len(ctx.captured_queries), 0)
 

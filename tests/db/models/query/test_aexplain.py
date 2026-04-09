@@ -32,25 +32,18 @@ class TestAExplain(AsyncioTestCase):
         )
 
     async def test_aexplain_with_format(self):
-        explain_output = json.loads(
-            await TestModel.async_object.aexplain(format="JSON")
-        )
+        explain_output = json.loads(await TestModel.async_object.aexplain(format="JSON"))
         self.assertTrue(
             isinstance(explain_output, list),
             "Explain output should be a list",
         )
         self.assertTrue(
-            any(
-                plan.get("Plan", {}).get("Node Type") == "Seq Scan"
-                for plan in explain_output
-            ),
+            any(plan.get("Plan", {}).get("Node Type") == "Seq Scan" for plan in explain_output),
             "Explain output should contain a 'Seq Scan' plan",
         )
 
     async def test_aexplain_with_options(self):
-        explain_output = await TestModel.async_object.aexplain(
-            analyze=True, verbose=True
-        )
+        explain_output = await TestModel.async_object.aexplain(analyze=True, verbose=True)
         self.assertIn(
             "Seq Scan",
             explain_output,
