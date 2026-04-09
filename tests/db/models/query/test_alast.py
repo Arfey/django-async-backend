@@ -1,33 +1,37 @@
+import pytest
 from django.db.models import Count
 from test_app.models import TestModel
 
-from django_async_backend.test import AsyncioTestCase
+
+async def test_alast_with_results(async_db):
+    await TestModel.async_object.acreate(name="Item1")
+    await TestModel.async_object.acreate(name="Item2")
+    await TestModel.async_object.acreate(name="Item3")
+
+    last_item = await TestModel.async_object.alast()
+    assert last_item is not None
+    assert last_item.name == "Item3"
 
 
-class TestALast(AsyncioTestCase):
-    async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Item1")
-        await TestModel.async_object.acreate(name="Item2")
-        await TestModel.async_object.acreate(name="Item3")
+async def test_alast_no_results(async_db):
+    await TestModel.async_object.acreate(name="Item1")
+    await TestModel.async_object.acreate(name="Item2")
+    await TestModel.async_object.acreate(name="Item3")
 
-    async def test_alast_with_results(self):
-        last_item = await TestModel.async_object.alast()
-        self.assertIsNotNone(last_item, "alast should return the last object")
-        self.assertEqual(last_item.name, "Item3", "The last object should be 'Item3'")
+    last_item = await TestModel.async_object.filter(name="Item4").alast()
+    assert last_item is None
 
-    async def test_alast_no_results(self):
-        last_item = await TestModel.async_object.filter(name="Item4").alast()
-        self.assertIsNone(last_item, "alast should return None when no objects exist")
 
-    async def test_alast_with_ordering(self):
-        last_item = await TestModel.async_object.order_by("name").alast()
-        self.assertIsNotNone(last_item, "alast should return the last object")
-        self.assertEqual(
-            last_item.name,
-            "Item3",
-            "The last object should be 'Item3' with ascending order",
-        )
+async def test_alast_with_ordering(async_db):
+    await TestModel.async_object.acreate(name="Item1")
+    await TestModel.async_object.acreate(name="Item2")
+    await TestModel.async_object.acreate(name="Item3")
 
-    async def test_alast_check_ordering_error(self):
-        with self.assertRaises(TypeError):
-            await TestModel.async_object.values("name").annotate(count=Count("name")).alast()
+    last_item = await TestModel.async_object.order_by("name").alast()
+    assert last_item is not None
+    assert last_item.name == "Item3"
+
+
+async def test_alast_check_ordering_error(async_db):
+    with pytest.raises(TypeError):
+        await TestModel.async_object.values("name").annotate(count=Count("name")).alast()

@@ -1,30 +1,20 @@
 from test_app.models import TestModel
 
-from django_async_backend.test import AsyncioTestCase
+
+async def test_has_results(async_db):
+    await TestModel.async_object.acreate(name="Test1")
+
+    assert await TestModel.async_object.aexists()
 
 
-class TestAExists(AsyncioTestCase):
-    async def test_has_results(self):
-        await TestModel.async_object.acreate(name="Test1")
+async def test_has_results_no_objects(async_db):
+    assert not await TestModel.async_object.aexists()
 
-        self.assertTrue(
-            await TestModel.async_object.aexists(),
-            "has_results should return True when there are results",
-        )
 
-    async def test_has_results_no_objects(self):
-        self.assertFalse(
-            await TestModel.async_object.aexists(),
-            "has_results should return False when there are no results",
-        )
+async def test_has_results_from_cache(async_db):
+    await TestModel.async_object.acreate(name="Test1")
 
-    async def test_has_results_from_cache(self):
-        await TestModel.async_object.acreate(name="Test1")
+    results = [i async for i in TestModel.async_object.all()]
+    assert len(results) == 1
 
-        results = [i async for i in TestModel.async_object.all()]
-        self.assertEqual(len(results), 1, "Cache should contain 1 object")
-
-        self.assertTrue(
-            await TestModel.async_object.aexists(),
-            "has_results should return True using the cache",
-        )
+    assert await TestModel.async_object.aexists()
