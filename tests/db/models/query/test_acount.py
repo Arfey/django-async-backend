@@ -1,6 +1,7 @@
-from django_async_backend.test import AsyncioTestCase
-from test_app.models import TestModel
 from django.test import TestCase
+from test_app.models import TestModel
+
+from django_async_backend.test import AsyncioTestCase
 
 
 class TestMock(TestCase):
@@ -10,8 +11,8 @@ class TestMock(TestCase):
 
 class TestACount(AsyncioTestCase):
     async def test_acount(self):
-        await TestModel.async_object.acreate(1)
-        await TestModel.async_object.acreate(2)
+        await TestModel.async_object.acreate(name="Item1")
+        await TestModel.async_object.acreate(name="Item2")
 
         self.assertEqual(
             await TestModel.async_object.acount(),

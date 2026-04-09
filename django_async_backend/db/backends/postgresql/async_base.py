@@ -25,10 +25,7 @@ except ImportError:
 
 
 if not is_psycopg3:
-    raise ImproperlyConfigured(
-        "psycopg version 3 or newer is required; "
-        f"you have {Database.__version__}"
-    )
+    raise ImproperlyConfigured(f"psycopg version 3 or newer is required; you have {Database.__version__}")
 
 
 TIMESTAMPTZ_OID = Database.adapters.types["timestamptz"].oid
@@ -44,6 +41,9 @@ class AsyncDatabaseOperations(DatabaseWrapper.ops_class):
 
     async def compose_sql(self, sql, params):
         return await async_mogrify(sql, params, self.connection)
+
+    async def fetch_returned_rows(self, cursor, returning_params=None):
+        return await cursor.fetchall()
 
     async def last_executed_query(self, cursor, sql, params):
         if self.connection.features.uses_server_side_binding:
@@ -84,9 +84,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
 
         if self.alias not in self._connection_pools:
             if self.settings_dict.get("CONN_MAX_AGE", 0) != 0:
-                raise ImproperlyConfigured(
-                    "Pooling doesn't support persistent connections."
-                )
+                raise ImproperlyConfigured("Pooling doesn't support persistent connections.")
             # Set the default options.
             if pool_options is True:
                 pool_options = {}
@@ -95,8 +93,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
                 from psycopg_pool import AsyncConnectionPool
             except ImportError as err:
                 raise ImproperlyConfigured(
-                    "Error loading psycopg_pool module.\n"
-                    "Did you install psycopg[pool]?"
+                    "Error loading psycopg_pool module.\nDid you install psycopg[pool]?"
                 ) from err
 
             connect_kwargs = self.get_connection_params()
@@ -107,11 +104,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
                 kwargs=connect_kwargs,
                 open=False,  # Do not open the pool during startup.
                 configure=self._configure_connection,
-                check=(
-                    AsyncConnectionPool.check_connection
-                    if enable_checks
-                    else None
-                ),
+                check=(AsyncConnectionPool.check_connection if enable_checks else None),
                 **pool_options,
             )
             # setdefault() ensures that multiple threads don't set this in
@@ -137,12 +130,9 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
     def get_connection_params(self):
         settings_dict = self.settings_dict
         # None may be used to connect to the default 'postgres' db
-        if settings_dict["NAME"] == "" and not settings_dict["OPTIONS"].get(
-            "service"
-        ):
+        if settings_dict["NAME"] == "" and not settings_dict["OPTIONS"].get("service"):
             raise ImproperlyConfigured(
-                "settings.DATABASES is improperly configured. "
-                "Please supply the NAME or OPTIONS['service'] value."
+                "settings.DATABASES is improperly configured. Please supply the NAME or OPTIONS['service'] value."
             )
         if len(settings_dict["NAME"] or "") > self.ops.max_name_length():
             raise ImproperlyConfigured(
@@ -175,11 +165,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
         server_side_binding = conn_params.pop("server_side_binding", None)
         conn_params.setdefault(
             "cursor_factory",
-            (
-                AsyncServerBindingCursor
-                if server_side_binding is True
-                else AsyncCursor
-            ),
+            (AsyncServerBindingCursor if server_side_binding is True else AsyncCursor),
         )
         if settings_dict["USER"]:
             conn_params["user"] = settings_dict["USER"]
@@ -190,14 +176,10 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
         if settings_dict["PORT"]:
             conn_params["port"] = settings_dict["PORT"]
 
-        conn_params["context"] = get_adapters_template(
-            settings.USE_TZ, self.timezone
-        )
+        conn_params["context"] = get_adapters_template(settings.USE_TZ, self.timezone)
         # Disable prepared statements by default to keep connection poolers
         # working. Can be reenabled via OPTIONS in the settings dict.
-        conn_params["prepare_threshold"] = conn_params.pop(
-            "prepare_threshold", None
-        )
+        conn_params["prepare_threshold"] = conn_params.pop("prepare_threshold", None)
 
         return conn_params
 
@@ -229,9 +211,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
             await self.pool.open()
             connection = await self.pool.getconn()
         else:
-            connection = await self.Database.AsyncConnection.connect(
-                **conn_params
-            )
+            connection = await self.Database.AsyncConnection.connect(**conn_params)
         if set_isolation_level:
             await connection.set_isolation_level(self.isolation_level)
 
@@ -249,9 +229,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
         timezone_name = self.timezone_name
         if timezone_name and conn_timezone_name != timezone_name:
             async with connection.cursor() as cursor:
-                await cursor.execute(
-                    self.ops.set_time_zone_sql(), [timezone_name]
-                )
+                await cursor.execute(self.ops.set_time_zone_sql(), [timezone_name])
             return True
         return False
 
@@ -303,10 +281,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
 
     def create_cursor(self, name=None):
         if name:
-            if (
-                self.settings_dict["OPTIONS"].get("server_side_binding")
-                is not True
-            ):
+            if self.settings_dict["OPTIONS"].get("server_side_binding") is not True:
                 # psycopg >= 3 forces the usage of server-side bindings for
                 # named cursors so a specialized class that implements
                 # server-side cursors while performing client-side bindings
@@ -320,9 +295,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
             else:
                 # In autocommit mode, the cursor will be used outside of a
                 # transaction, hence use a holdable cursor.
-                cursor = self.connection.cursor(
-                    name, scrollable=False, withhold=self.connection.autocommit
-                )
+                cursor = self.connection.cursor(name, scrollable=False, withhold=self.connection.autocommit)
         else:
             cursor = self.connection.cursor()
 
@@ -386,7 +359,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
     async def close_if_health_check_failed(self):
         if self.pool:
             # The pool only returns healthy connections.
-            return
+            return None
         return await super().close_if_health_check_failed()
 
     async def pg_version(self):
@@ -408,9 +381,7 @@ class AsyncCursor(Database.AsyncClientCursor):
     pass
 
 
-class AsyncServerSideCursor(
-    Database.client_cursor.ClientCursorMixin, Database.AsyncServerCursor
-):
+class AsyncServerSideCursor(Database.client_cursor.ClientCursorMixin, Database.AsyncServerCursor):
     """
     ClientCursorMixin forces the usage of client-side bindings while
     ServerCursor implements the logic required to declare and scroll
@@ -424,7 +395,6 @@ class AsyncServerSideCursor(
 
 class AsyncCursorDebugWrapper(BaseAsyncCursorDebugWrapper):
     async def copy(self, statement):
-        async with self.debug_sql(statement):
-            async with self.cursor.copy(statement) as copy:
-                async for row in copy:
-                    yield row
+        async with self.debug_sql(statement), self.cursor.copy(statement) as copy:
+            async for row in copy:
+                yield row
