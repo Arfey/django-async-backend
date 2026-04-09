@@ -13,7 +13,6 @@ logger = logging.getLogger("django_async_backend.db.backends")
 
 
 class AsyncCursorWrapper:
-
     def __init__(self, cursor, db):
         self.cursor = cursor
         self.db = db
@@ -26,8 +25,7 @@ class AsyncCursorWrapper:
         cursor_attr = getattr(self.cursor, attr)
         if attr in self.WRAP_ERROR_ATTRS:
             return self.db.wrap_database_errors(cursor_attr)
-        else:
-            return cursor_attr
+        return cursor_attr
 
     async def __aiter__(self):
         with self.db.wrap_database_errors:
@@ -50,14 +48,10 @@ class AsyncCursorWrapper:
     # code must run when the method is invoked, not just when it is accessed.
 
     async def execute(self, sql, params=None):
-        return await self._execute_with_wrappers(
-            sql, params, many=False, executor=self._execute
-        )
+        return await self._execute_with_wrappers(sql, params, many=False, executor=self._execute)
 
     async def executemany(self, sql, param_list):
-        return await self._execute_with_wrappers(
-            sql, param_list, many=True, executor=self._executemany
-        )
+        return await self._execute_with_wrappers(sql, param_list, many=True, executor=self._executemany)
 
     async def _execute_with_wrappers(self, sql, params, many, executor):
         context = {"connection": self.db, "cursor": self}
@@ -70,9 +64,7 @@ class AsyncCursorWrapper:
         # Raise a warning during app initialization (stored_app_configs is only
         # ever set during testing).
         if not apps.ready and not apps.stored_app_configs:
-            warnings.warn(
-                self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning
-            )
+            warnings.warn(self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
 
         self.db.validate_no_broken_transaction()
 
@@ -80,16 +72,13 @@ class AsyncCursorWrapper:
             if params is None:
                 # params default might be backend specific.
                 return await self.cursor.execute(sql)
-            else:
-                return await self.cursor.execute(sql, params)
+            return await self.cursor.execute(sql, params)
 
     async def _executemany(self, sql, param_list, *ignored_wrapper_args):
         # Raise a warning during app initialization (stored_app_configs is only
         # ever set during testing).
         if not apps.ready and not apps.stored_app_configs:
-            warnings.warn(
-                self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning
-            )
+            warnings.warn(self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
 
         self.db.validate_no_broken_transaction()
 
@@ -98,7 +87,6 @@ class AsyncCursorWrapper:
 
 
 class AsyncCursorDebugWrapper(AsyncCursorWrapper):
-
     async def execute(self, sql, params=None):
         async with self.debug_sql(sql, params, use_last_executed_query=True):
             return await super().execute(sql, params)
@@ -108,9 +96,7 @@ class AsyncCursorDebugWrapper(AsyncCursorWrapper):
             return await super().executemany(sql, param_list)
 
     @asynccontextmanager
-    async def debug_sql(
-        self, sql=None, params=None, use_last_executed_query=False, many=False
-    ):
+    async def debug_sql(self, sql=None, params=None, use_last_executed_query=False, many=False):
         start = time.monotonic()
         try:
             yield
@@ -118,9 +104,7 @@ class AsyncCursorDebugWrapper(AsyncCursorWrapper):
             stop = time.monotonic()
             duration = stop - start
             if use_last_executed_query:
-                sql = await await_maybe(
-                    self.db.ops.last_executed_query(self.cursor, sql, params)
-                )
+                sql = await await_maybe(self.db.ops.last_executed_query(self.cursor, sql, params))
             try:
                 times = len(params) if many else ""
             except TypeError:

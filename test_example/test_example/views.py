@@ -25,6 +25,4 @@ async def index(request: HttpRequest) -> HttpResponse:
 
     await connection.close()
 
-    return HttpResponse(
-        content=json.dumps(result), content_type="application/json"
-    )
+    return HttpResponse(content=json.dumps(result), content_type="application/json")

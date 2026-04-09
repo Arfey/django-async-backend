@@ -28,10 +28,7 @@ class TestDatabaseWrapper(TestCase):
             DatabaseWrapper(settings_dict).get_connection_params()
 
         self.assertFalse(
-            any(
-                issubclass(warning.category, RuntimeWarning)
-                for warning in caught
-            ),
+            any(issubclass(warning.category, RuntimeWarning) for warning in caught),
             "RuntimeWarning was raised even though pool option is not enabled.",
         )
 
@@ -47,10 +44,6 @@ class TestDatabaseWrapper(TestCase):
                 DatabaseWrapper(settings_dict).get_connection_params()
 
         self.assertFalse(
-            any(
-                issubclass(warning.category, RuntimeWarning)
-                for warning in caught
-            ),
-            "RuntimeWarning was raised even though "
-            "ASYNC_BACKEND_DISABLE_POOL_WARNING=True.",
+            any(issubclass(warning.category, RuntimeWarning) for warning in caught),
+            "RuntimeWarning was raised even though ASYNC_BACKEND_DISABLE_POOL_WARNING=True.",
         )

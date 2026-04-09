@@ -39,24 +39,19 @@ async def drop_table():
 
 async def create_instance(id):
     async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        await cursor.execute(
-            f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');"
-        )
+        await cursor.execute(f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');")
 
         return str(id)
 
 
 async def get_all():
     async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        res = await cursor.execute(
-            "SELECT name FROM reporter_table_tmp order by name;"
-        )
+        res = await cursor.execute("SELECT name FROM reporter_table_tmp order by name;")
 
         return [i[0] for i in await res.fetchall()]
 
 
 class DatabaseWrapperTests(AsyncioTransactionTestCase):
-
     async def asyncSetUp(self):
         await create_table()
 
@@ -90,29 +85,20 @@ class DatabaseWrapperTests(AsyncioTransactionTestCase):
 
     async def test_initialization_display_name(self):
         self.assertEqual(BaseAsyncDatabaseWrapper.display_name, "unknown")
-        self.assertNotEqual(
-            async_connections[DEFAULT_DB_ALIAS].display_name, "unknown"
-        )
+        self.assertNotEqual(async_connections[DEFAULT_DB_ALIAS].display_name, "unknown")
 
     async def test_get_database_version(self):
-        with patch.object(
-            BaseAsyncDatabaseWrapper, "__init__", return_value=None
-        ):
-            msg = (
-                "subclasses of BaseAsyncDatabaseWrapper may require a "
-                "get_database_version."
-            )
+        with patch.object(BaseAsyncDatabaseWrapper, "__init__", return_value=None):
+            msg = "subclasses of BaseAsyncDatabaseWrapper may require a get_database_version."
             with self.assertRaisesRegex(NotImplementedError, msg):
                 await BaseAsyncDatabaseWrapper().get_database_version()
 
-    async def test_check_database_version_supported_with_none_as_database_version(  # noqa: E501
+    async def test_check_database_version_supported_with_none_as_database_version(
         self,
     ):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
-        with patch.object(
-            connection.features, "minimum_database_version", None
-        ):
+        with patch.object(connection.features, "minimum_database_version", None):
             await connection.check_database_version_supported()
 
     @skipIf(django.VERSION < (6, 0), "Requires Django 6.0 or higher")
@@ -149,7 +135,6 @@ class DatabaseWrapperTests(AsyncioTransactionTestCase):
 
 
 class DatabaseWrapperLoggingTests(AsyncioTransactionTestCase):
-
     async def asyncSetUp(self):
         await create_table()
 
@@ -304,9 +289,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
             async with await c.cursor() as cursor:
                 await cursor.execute("The database never sees this")
                 self.assertEqual(wrapper.call_count, 1)
-                await cursor.executemany(
-                    "The database never sees this %s", [("either",)]
-                )
+                await cursor.executemany("The database never sees this %s", [("either",)])
                 self.assertEqual(wrapper.call_count, 2)
 
     async def test_outer_async_wrapper_blocks(self):
@@ -325,9 +308,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
             async with await c.cursor() as cursor:
                 await cursor.execute("The database never sees this")
                 self.assertEqual(wrapper.call_count, 1)
-                await cursor.executemany(
-                    "The database never sees this %s", [("either",)]
-                )
+                await cursor.executemany("The database never sees this %s", [("either",)])
                 self.assertEqual(wrapper.call_count, 2)
 
     async def test_wrapper_gets_sql(self):
@@ -345,9 +326,7 @@ class ExecuteWrapperTests(AsyncioTestCase):
         wrapper = self.mock_wrapper()
 
         with async_connections["other"].execute_wrapper(wrapper):
-            self.assertEqual(
-                async_connections["other"].execute_wrappers, [wrapper]
-            )
+            self.assertEqual(async_connections["other"].execute_wrappers, [wrapper])
             await self.call_execute(connection)
 
         self.assertFalse(wrapper.called)
@@ -396,9 +375,7 @@ class ConnectionHealthChecksTests(AsyncioTransactionTestCase):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
         async with await connection.cursor() as cursor:
-            await cursor.execute(
-                "SELECT 42" + connection.features.bare_select_suffix
-            )
+            await cursor.execute("SELECT 42" + connection.features.bare_select_suffix)
 
     async def test_health_checks_enabled(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
@@ -415,9 +392,7 @@ class ConnectionHealthChecksTests(AsyncioTransactionTestCase):
         self.assertIs(old_connection, connection.connection)
 
         # Simulate connection health check failing.
-        with patch.object(
-            connection, "is_usable", return_value=False
-        ) as mocked_is_usable:
+        with patch.object(connection, "is_usable", return_value=False) as mocked_is_usable:
             await self.run_query()
             new_connection = connection.connection
             # A new connection is established.
@@ -505,9 +480,7 @@ class ConnectionHealthChecksTests(AsyncioTransactionTestCase):
         self.assertIs(old_connection, connection.connection)
 
         # Simulate connection health check failing.
-        with patch.object(
-            connection, "is_usable", return_value=False
-        ) as mocked_is_usable:
+        with patch.object(connection, "is_usable", return_value=False) as mocked_is_usable:
             # Simulate outermost atomic block: changing autocommit for
             # a connection.
             await connection.set_autocommit(False)
@@ -541,17 +514,13 @@ class MultiDatabaseTests(AsyncioTransactionTestCase):
     async def test_multi_database_init_connection_state_called_once(self):
         for db in self.databases:
             with self.subTest(database=db):
-                with patch.object(
-                    async_connections[db], "commit", return_value=None
-                ):
+                with patch.object(async_connections[db], "commit", return_value=None):
                     with patch.object(
                         async_connections[db],
                         "check_database_version_supported",
                     ) as mocked_database_version_supported:
                         await async_connections[db].init_connection_state()
-                        after_first_calls = len(
-                            mocked_database_version_supported.mock_calls
-                        )
+                        after_first_calls = len(mocked_database_version_supported.mock_calls)
                         await async_connections[db].init_connection_state()
                         self.assertEqual(
                             len(mocked_database_version_supported.mock_calls),

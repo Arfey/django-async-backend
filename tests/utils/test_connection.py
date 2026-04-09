@@ -166,9 +166,7 @@ class BaseAsyncConnectionHandlerTest(SimpleTestCase):
                 self.close = AsyncMock()
                 self.close.side_effect = Exception
 
-        class BaseAsyncConnectionHandlerWithError(
-            BaseAsyncConnectionHandlerExample
-        ):
+        class BaseAsyncConnectionHandlerWithError(BaseAsyncConnectionHandlerExample):
             def create_connection(self, alias):
                 return AsyncConnectionWithException(alias)
 

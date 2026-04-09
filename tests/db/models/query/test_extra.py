@@ -10,16 +10,9 @@ class TestExtra(AsyncioTestCase):
         await TestModel.async_object.acreate(name="Test3", value=2)
 
     async def test_extra_select(self):
-        results = [
-            obj
-            async for obj in TestModel.async_object.extra(
-                select={"value_plus_one": "value + 1"}
-            )
-        ]
+        results = [obj async for obj in TestModel.async_object.extra(select={"value_plus_one": "value + 1"})]
 
-        self.assertEqual(
-            len(results), 3, "Should return all objects with extra field"
-        )
+        self.assertEqual(len(results), 3, "Should return all objects with extra field")
         self.assertEqual(
             results[0].value_plus_one,
             4,
@@ -37,10 +30,7 @@ class TestExtra(AsyncioTestCase):
         )
 
     async def test_extra_where(self):
-        results = [
-            obj
-            async for obj in TestModel.async_object.extra(where=["value > 1"])
-        ]
+        results = [obj async for obj in TestModel.async_object.extra(where=["value > 1"])]
 
         self.assertEqual(
             len(results),
@@ -48,15 +38,10 @@ class TestExtra(AsyncioTestCase):
             "Should return objects matching the extra where condition",
         )
         self.assertEqual(results[0].value, 3, "First object value should be 3")
-        self.assertEqual(
-            results[1].value, 2, "Second object value should be 2"
-        )
+        self.assertEqual(results[1].value, 2, "Second object value should be 2")
 
     async def test_extra_order_by(self):
-        results = [
-            obj
-            async for obj in TestModel.async_object.extra(order_by=["-value"])
-        ]
+        results = [obj async for obj in TestModel.async_object.extra(order_by=["-value"])]
 
         self.assertEqual(
             len(results),
@@ -64,16 +49,9 @@ class TestExtra(AsyncioTestCase):
             "Should return all objects ordered by extra order_by condition",
         )
         self.assertEqual(results[0].value, 3, "First object value should be 3")
-        self.assertEqual(
-            results[1].value, 2, "Second object value should be 2"
-        )
+        self.assertEqual(results[1].value, 2, "Second object value should be 2")
         self.assertEqual(results[2].value, 1, "Third object value should be 1")
 
     async def test_extra_with_slice_error(self):
         with self.assertRaises(TypeError):
-            [
-                obj
-                async for obj in TestModel.async_object[:1].extra(
-                    select={"value_plus_one": "value + 1"}
-                )
-            ]
+            [obj async for obj in TestModel.async_object[:1].extra(select={"value_plus_one": "value + 1"})]

@@ -14,9 +14,7 @@ class TestAEarliest(AsyncioTestCase):
 
     async def test_aearliest_with_results(self):
         earliest_item = await TestModel.async_object.aearliest("name")
-        self.assertIsNotNone(
-            earliest_item, "aearliest should return the earliest object"
-        )
+        self.assertIsNotNone(earliest_item, "aearliest should return the earliest object")
         self.assertEqual(
             earliest_item.name,
             "Item1",
@@ -48,9 +46,7 @@ class TestAEarliest(AsyncioTestCase):
         await GetLatestByModel.async_object.acreate(name="Item2")
 
         earliest_item = await GetLatestByModel.async_object.aearliest()
-        self.assertIsNotNone(
-            earliest_item, "aearliest should return the earliest object"
-        )
+        self.assertIsNotNone(earliest_item, "aearliest should return the earliest object")
         self.assertEqual(
             earliest_item.name,
             "Item1",

@@ -13,21 +13,14 @@ from django_async_backend.test import AsyncioTestCase
 
 
 class AsyncCursorTest(AsyncioTestCase):
-
     async def create_table(self):
-        async with await async_connections[
-            DEFAULT_DB_ALIAS
-        ].cursor() as cursor:
-            await cursor.execute(
-                "CREATE TABLE test_table_tmp (name VARCHAR(255) NOT NULL);"
-            )
+        async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+            await cursor.execute("CREATE TABLE test_table_tmp (name VARCHAR(255) NOT NULL);")
 
     async def test_execute(self):
         await self.create_table()
 
-        async with await async_connections[
-            DEFAULT_DB_ALIAS
-        ].cursor() as cursor:
+        async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
             await cursor.execute(
                 """
                 INSERT INTO test_table_tmp (name) VALUES ('1');
@@ -49,12 +42,8 @@ class AsyncCursorTest(AsyncioTestCase):
     async def test_executemany(self):
         await self.create_table()
 
-        async with await async_connections[
-            DEFAULT_DB_ALIAS
-        ].cursor() as cursor:
-            await cursor.executemany(
-                "INSERT INTO test_table_tmp (name) VALUES (%s)", [(1,), (2,)]
-            )
+        async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+            await cursor.executemany("INSERT INTO test_table_tmp (name) VALUES (%s)", [(1,), (2,)])
             res = await cursor.execute("""SELECT name FROM test_table_tmp;""")
 
             self.assertEqual(await res.fetchall(), [("1",), ("2",)])
@@ -71,9 +60,7 @@ class AsyncCursorTest(AsyncioTestCase):
     async def test_iterator(self):
         await self.create_table()
 
-        async with await async_connections[
-            DEFAULT_DB_ALIAS
-        ].cursor() as cursor:
+        async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
             await cursor.execute(
                 """
                 INSERT INTO test_table_tmp (name) VALUES ('1'), ('2'), ('3');
@@ -81,9 +68,7 @@ class AsyncCursorTest(AsyncioTestCase):
             )
             await cursor.execute("""SELECT name FROM test_table_tmp;""")
 
-            self.assertEqual(
-                [i async for i in cursor], [("1",), ("2",), ("3",)]
-            )
+            self.assertEqual([i async for i in cursor], [("1",), ("2",), ("3",)])
 
     async def test_execution_wrapper(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
@@ -98,9 +83,7 @@ class AsyncCursorTest(AsyncioTestCase):
             async with await connection.cursor() as cursor:
                 await cursor.execute("""select 1""")
 
-        wrapper_spy.assert_called_once_with(
-            sql="select 1", params=None, many=False
-        )
+        wrapper_spy.assert_called_once_with(sql="select 1", params=None, many=False)
 
 
 class AsyncCursorDebugWrapperTest(AsyncioTestCase):
@@ -124,7 +107,5 @@ class AsyncCursorDebugWrapperTest(AsyncioTestCase):
             await cursor.executemany("""SELECT %s;""", [(1,)])
 
         self.assertEqual(len(connection.queries_log), 1)
-        self.assertEqual(
-            connection.queries_log[0]["sql"], "1 times: SELECT %s;"
-        )
+        self.assertEqual(connection.queries_log[0]["sql"], "1 times: SELECT %s;")
         debug_mock.assert_called()

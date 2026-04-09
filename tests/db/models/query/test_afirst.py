@@ -12,24 +12,16 @@ class TestAFirst(AsyncioTestCase):
 
     async def test_afirst_with_results(self):
         first_item = await TestModel.async_object.afirst()
-        self.assertIsNotNone(
-            first_item, "afirst should return the first object"
-        )
-        self.assertEqual(
-            first_item.name, "Item1", "The first object should be 'Item1'"
-        )
+        self.assertIsNotNone(first_item, "afirst should return the first object")
+        self.assertEqual(first_item.name, "Item1", "The first object should be 'Item1'")
 
     async def test_afirst_no_results(self):
         first_item = await TestModel.async_object.filter(name="Item4").afirst()
-        self.assertIsNone(
-            first_item, "afirst should return None when no objects exist"
-        )
+        self.assertIsNone(first_item, "afirst should return None when no objects exist")
 
     async def test_afirst_with_ordering(self):
         first_item = await TestModel.async_object.order_by("-name").afirst()
-        self.assertIsNotNone(
-            first_item, "afirst should return the first object"
-        )
+        self.assertIsNotNone(first_item, "afirst should return the first object")
         self.assertEqual(
             first_item.name,
             "Item3",
@@ -38,6 +30,4 @@ class TestAFirst(AsyncioTestCase):
 
     async def test_afirst_check_ordering_error(self):
         with self.assertRaises(TypeError):
-            await TestModel.async_object.values("name").annotate(
-                count=Count("name")
-            ).afirst()
+            await TestModel.async_object.values("name").annotate(count=Count("name")).afirst()

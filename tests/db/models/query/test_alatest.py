@@ -14,12 +14,8 @@ class TestALatest(AsyncioTestCase):
 
     async def test_alatest_with_results(self):
         latest_item = await TestModel.async_object.alatest("name")
-        self.assertIsNotNone(
-            latest_item, "alatest should return the latest object"
-        )
-        self.assertEqual(
-            latest_item.name, "Item3", "The latest object should be 'Item3'"
-        )
+        self.assertIsNotNone(latest_item, "alatest should return the latest object")
+        self.assertEqual(latest_item.name, "Item3", "The latest object should be 'Item3'")
 
     async def test_alatest_no_results(self):
         with self.assertRaises(TestModel.DoesNotExist):
@@ -46,12 +42,8 @@ class TestALatest(AsyncioTestCase):
         await GetLatestByModel.async_object.acreate(name="Item2")
 
         latest_item = await GetLatestByModel.async_object.alatest()
-        self.assertIsNotNone(
-            latest_item, "alatest should return the latest object"
-        )
-        self.assertEqual(
-            latest_item.name, "Item2", "The latest object should be 'Item2'"
-        )
+        self.assertIsNotNone(latest_item, "alatest should return the latest object")
+        self.assertEqual(latest_item.name, "Item2", "The latest object should be 'Item2'")
 
     async def test_alatest_with_sliced_query(self):
         sliced_queryset = TestModel.async_object.all()[:1]
