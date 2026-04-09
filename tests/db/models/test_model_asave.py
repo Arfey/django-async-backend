@@ -69,3 +69,22 @@ class TestModelADelete(AsyncioTestCase):
         obj = TestModel(name="NoPK")
         with self.assertRaises(ValueError):
             await obj.adelete()
+
+
+class TestModelARefreshFromDb(AsyncioTestCase):
+    async def test_arefresh_from_db(self):
+        obj = await TestModel.async_object.acreate(name="Refresh", value=1)
+        # Update in DB directly
+        await TestModel.async_object.filter(pk=obj.pk).aupdate(value=99)
+        # obj still has old value
+        self.assertEqual(obj.value, 1)
+        # Refresh
+        await obj.arefresh_from_db()
+        self.assertEqual(obj.value, 99)
+
+    async def test_arefresh_from_db_fields(self):
+        obj = await TestModel.async_object.acreate(name="Partial", value=10)
+        await TestModel.async_object.filter(pk=obj.pk).aupdate(value=50, name="Changed")
+        await obj.arefresh_from_db(fields=["value"])
+        self.assertEqual(obj.value, 50)
+        self.assertEqual(obj.name, "Partial")  # not refreshed
