@@ -85,6 +85,7 @@ ignore = [
   "S608",   # SQL injection (we build SQL programmatically)
   "C901",   # Complex functions (Django ORM is inherently complex)
   "PLR0912", # Too many branches (Django ORM)
+  "PLR0915", # Too many statements (Django ORM)
   "S101",   # assert used in Django internals
   "PGH004", # noqa blanket (existing code)
   "EXE001", # Shebang (manage.py)

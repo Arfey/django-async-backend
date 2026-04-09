@@ -310,9 +310,10 @@ class AsyncModel:
         """
         Async delete of this model instance.
 
-        Simplified: uses direct SQL DELETE, no cascade handling or signals.
-        Will raise IntegrityError if other objects reference this one.
+        Handles CASCADE and SET_NULL via AsyncCollector. Skips signals.
         """
+        from django_async_backend.db.models.deletion import AsyncCollector
+
         if not self._is_pk_set():
             raise ValueError(
                 "%s object can't be deleted because its %s attribute is set "
@@ -320,11 +321,9 @@ class AsyncModel:
             )
         using = using or router.db_for_write(self.__class__, instance=self)
 
-        qs = self._get_async_queryset(self.__class__, using)
-        count, per_model = await qs.filter(pk=self.pk).adelete()
-
-        setattr(self, self._meta.pk.attname, None)
-        return count, per_model
+        collector = AsyncCollector(using=using, origin=self)
+        await collector.acollect([self], keep_parents=keep_parents)
+        return await collector.adelete()
 
     adelete.alters_data = True
 

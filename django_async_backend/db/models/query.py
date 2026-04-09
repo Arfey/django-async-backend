@@ -821,11 +821,11 @@ class QuerySet(AltersData):
         """
         Delete the records in the current QuerySet.
 
-        Simplified implementation: performs a direct SQL DELETE via _raw_delete.
-        Does NOT handle cascading deletes, FK nullification, or
-        pre_delete/post_delete signals. Will raise IntegrityError if rows have
-        incoming FK references with PROTECT/CASCADE constraints.
+        Handles CASCADE and SET_NULL relationships via AsyncCollector.
+        Skips pre_delete/post_delete signals.
         """
+        from django_async_backend.db.models.deletion import AsyncCollector
+
         self._not_support_combined_queries("delete")
         if self.query.is_sliced:
             raise TypeError("Cannot use 'limit' or 'offset' with delete().")
@@ -840,9 +840,13 @@ class QuerySet(AltersData):
         del_query.query.select_related = False
         del_query.query.clear_ordering(force=True)
 
-        num_deleted = await del_query._raw_delete(using=del_query.db)
+        collector = AsyncCollector(using=del_query.db, origin=self)
+        objs = [obj async for obj in del_query]
+        await collector.acollect(objs)
+        num_deleted, deleted_per_model = await collector.adelete()
+
         self._result_cache = None
-        return num_deleted, {self.model._meta.label: num_deleted}
+        return num_deleted, deleted_per_model
 
     adelete.alters_data = True
     adelete.queryset_only = True
