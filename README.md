@@ -4,7 +4,7 @@
 >
 > **Remaining blockers for full async:**
 > - **Signals** — Django's signal system is synchronous. Write operations skip `pre_save`/`post_save`/`pre_delete`/`post_delete`.
-> - **Cascade deletes** — Django's `Collector` is deeply sync. `adelete()` does raw SQL delete only.
+> - **Cascade deletes** — `AsyncCollector` handles CASCADE/SET_NULL, but doesn't cover every edge case of Django's `Collector`.
 > - **`Model.save()` parity** — `AsyncModel.asave()` bypasses `Model.save()`, so custom save overrides won't run.
 > - **User model** — Not async-aware.
 
@@ -224,7 +224,7 @@ async def main():
 | `Model.objects.afirst`              | ✅        |          |
 | `Model.objects.alast`               | ✅        |          |
 | `Model.objects.ain_bulk`            | ✅        |          |
-| `Model.objects.adelete`             | ✅        | No cascade/signals |
+| `Model.objects.adelete`             | ✅        | Cascade supported, no signals |
 | `Model.objects.aupdate`             | ✅        |          |
 | `Model.objects.aexists`             | ✅        |          |
 | `Model.objects.acontains`           | ✅        |          |
