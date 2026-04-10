@@ -87,10 +87,7 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
             )
 
         wrapper = backend.AsyncDatabaseWrapper(db, alias)
-        try:
-            task = asyncio.current_task()
-        except RuntimeError:
-            task = None
+        task = asyncio.current_task()
         if task is None:
             raise RuntimeError(
                 "Cannot create an async connection without a running "
