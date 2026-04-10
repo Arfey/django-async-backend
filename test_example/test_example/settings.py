@@ -12,6 +12,11 @@ INSTALLED_APPS = [
 ]
 
 
+MIDDLEWARE = [
+    "django_async_backend.middleware.close_async_connections",
+]
+
+
 ROOT_URLCONF = "test_example.urls"
 
 DATABASES = {

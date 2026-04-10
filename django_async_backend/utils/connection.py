@@ -7,9 +7,15 @@ from django.utils.connection import BaseConnectionHandler
 class BaseAsyncConnectionHandler(BaseConnectionHandler):
 
     async def close_all(self):
-        await asyncio.gather(
-            *[conn.close() for conn in self.all(initialized_only=True)]
-        )
+        print("Initiating connection closure...")  # noqa
+        try:
+            await asyncio.sleep(10)
+            await asyncio.gather(
+                *(conn.close() for conn in self.all(initialized_only=True))
+            )
+            print("Closure complete")  # noqa
+        except asyncio.CancelledError:
+            print("Connection leak detected")  # noqa
 
     @asynccontextmanager
     async def _independent_connection(self):
