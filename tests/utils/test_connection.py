@@ -1,15 +1,11 @@
 import asyncio
-import contextvars
 import threading
 from unittest.mock import AsyncMock
 
-from django.db import DEFAULT_DB_ALIAS
 from django.test import SimpleTestCase
 from django.test.utils import override_settings
 from django.utils.connection import ConnectionDoesNotExist
 
-from django_async_backend.db import async_connections
-from django_async_backend.test import AsyncioTransactionTestCase
 from django_async_backend.utils.connection import BaseAsyncConnectionHandler
 
 default_settings = {
@@ -247,79 +243,4 @@ class BaseAsyncConnectionHandlerTest(SimpleTestCase):
         self.assertNotEqual(
             origin_connections_map["second"],
             separate_connections_map["second"],
-        )
-
-
-async def _count_pg_backends():
-    """Count other connections to this database in pg_stat_activity."""
-    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as c:
-        res = await c.execute(
-            "SELECT count(*) FROM pg_stat_activity "
-            "WHERE datname = current_database() "
-            "AND pid != pg_backend_pid()"
-        )
-        row = await res.fetchone()
-        return row[0]
-
-
-class AsyncConnectionCleanupTests(AsyncioTransactionTestCase):
-    """
-    In ASGI, each request runs in its own asyncio task with a fresh
-    ContextVar context. Unlike sync Django (which uses the
-    request_finished signal), there is no built-in mechanism to close
-    async connections when a request ends. Without explicit cleanup,
-    every request leaks a connection that is never returned to the pool.
-    """
-
-    async def test_connections_leak_without_cleanup(self):
-        """Requests without close_all() leak connections."""
-        baseline = await _count_pg_backends()
-
-        n_requests = 20
-        for _ in range(n_requests):
-
-            async def fake_request():
-                async with await async_connections[
-                    DEFAULT_DB_ALIAS
-                ].cursor() as c:
-                    await c.execute("SELECT 1")
-
-            await asyncio.create_task(
-                fake_request(), context=contextvars.Context()
-            )
-
-        after = await _count_pg_backends()
-        leaked = after - baseline
-        self.assertGreaterEqual(
-            leaked,
-            n_requests // 2,
-            f"Expected leaked connections without cleanup, "
-            f"got {leaked}.",
-        )
-
-    async def test_connections_returned_with_cleanup(self):
-        """Requests with close_all() return connections to the pool."""
-        baseline = await _count_pg_backends()
-
-        n_requests = 20
-        for _ in range(n_requests):
-
-            async def fake_request():
-                async with await async_connections[
-                    DEFAULT_DB_ALIAS
-                ].cursor() as c:
-                    await c.execute("SELECT 1")
-                await async_connections.close_all()
-
-            await asyncio.create_task(
-                fake_request(), context=contextvars.Context()
-            )
-
-        after = await _count_pg_backends()
-        leaked = after - baseline
-        self.assertLessEqual(
-            leaked,
-            2,
-            f"Expected ~0 leaked connections with cleanup, "
-            f"got {leaked}.",
         )

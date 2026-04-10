@@ -39,6 +39,19 @@ INSTALLED_APPS = [
 
 ---
 
+## Middleware
+
+When running under ASGI, add `close_async_connections` to `MIDDLEWARE` so connections are returned to the pool at the end of each request. Django's `request_finished` signal only closes sync connections.
+
+```python
+MIDDLEWARE = [
+    "django_async_backend.middleware.close_async_connections",
+    ...
+]
+```
+
+---
+
 ## Connection Handler
 
 The connection handler manages database connections for your async backend.
