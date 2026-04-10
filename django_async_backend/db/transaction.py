@@ -92,7 +92,7 @@ class AsyncAtomic(AsyncContextDecorator):
             )
 
         # Reject cross-task nesting (same-task savepoints are fine).
-        if connection.in_atomic_block and not self._from_testcase:
+        if connection.in_atomic_block:
             if connection._task_connection_owner != id(asyncio.current_task()):
                 raise RuntimeError(
                     "Using a transaction in a nested task is forbidden. "
