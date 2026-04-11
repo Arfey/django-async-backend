@@ -24,6 +24,22 @@ from django_async_backend.db.transaction import (
 class AsyncModel:
     """Mixin that adds truly async asave() and adelete() to Django models."""
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for klass in cls.__mro__:
+            if klass is AsyncModel:
+                break
+            if "save" in klass.__dict__ and "asave" not in klass.__dict__:
+                raise TypeError(
+                    f"{klass.__name__} overrides save() without overriding asave(). "
+                    f"This will silently skip logic when asave() is called."
+                )
+            if "delete" in klass.__dict__ and "adelete" not in klass.__dict__:
+                raise TypeError(
+                    f"{klass.__name__} overrides delete() without overriding adelete(). "
+                    f"This will silently skip logic when adelete() is called."
+                )
+
     async def asave(
         self,
         *,
