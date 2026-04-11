@@ -1,6 +1,6 @@
 import pytest
 from django.db import IntegrityError
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_abulk_create_basic(async_db):

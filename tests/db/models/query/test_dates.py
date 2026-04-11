@@ -1,7 +1,7 @@
 import datetime
 
 import pytest
-from test_app.models import Event
+from shared.models import Event
 
 
 @pytest.fixture

@@ -1,6 +1,6 @@
 import pytest
 from django.db import IntegrityError
-from test_app.models import Author, Book, Review, TestModel
+from shared.models import Author, Book, Review, TestModel
 
 
 async def test_asave_force_update(async_db):

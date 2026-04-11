@@ -10,7 +10,7 @@ import pytest
 from django.db import connection
 from django.db.models import F, Value
 from django.db.models.functions import Concat
-from test_app.models import Author, Book, TestModel
+from shared.models import Author, Book, TestModel
 
 from django_async_backend.db.transaction import async_atomic
 

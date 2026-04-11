@@ -1,5 +1,5 @@
 import pytest
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_adelete_all(async_db):
@@ -43,7 +43,7 @@ async def test_adelete_returns_model_label(async_db):
     await TestModel.async_object.acreate(name="Item3", value=30)
 
     _, deleted_per_model = await TestModel.async_object.all().adelete()
-    assert "test_app.TestModel" in deleted_per_model
+    assert "shared.TestModel" in deleted_per_model
 
 
 async def test_adelete_cascade_fk(async_db):

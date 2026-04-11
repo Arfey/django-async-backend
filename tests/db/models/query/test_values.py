@@ -1,7 +1,7 @@
 import pytest
 from django.core.exceptions import FieldError
 from django.db.models import Count
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_values(async_db):

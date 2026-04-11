@@ -16,7 +16,7 @@ import re
 
 import pytest
 from django.core.exceptions import FieldError
-from test_app.models import Author, Book, EditorNote, Review
+from shared.models import Author, Book, EditorNote, Review
 
 # ---------------------------------------------------------------------------
 # SelectRelatedTests equivalents

@@ -1,6 +1,6 @@
 from django.db.models import Count, F, Value
 from django.db.models.functions import Concat, Length, Lower, Upper
-from test_app.models import Author, Book, Review, TestModel
+from shared.models import Author, Book, Review, TestModel
 
 
 async def test_annotate_count_related(async_db):

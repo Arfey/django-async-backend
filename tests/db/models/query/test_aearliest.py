@@ -1,5 +1,5 @@
 import pytest
-from test_app.models import GetLatestByModel, TestModel
+from shared.models import GetLatestByModel, TestModel
 
 
 async def test_aearliest_with_results(async_db):

@@ -1,6 +1,6 @@
 import pytest
 from django.db import NotSupportedError
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_aget_with_results(async_db):

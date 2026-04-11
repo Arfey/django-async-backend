@@ -1,5 +1,5 @@
 import pytest
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_abulk_update_basic(async_db):

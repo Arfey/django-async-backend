@@ -25,7 +25,7 @@ from django.db.models import (
     When,
 )
 from django.db.models.functions import Coalesce, Length, Lower, Upper
-from test_app.models import Author, Book, Review, TestModel
+from shared.models import Author, Book, Review, TestModel
 
 # ---------------------------------------------------------------------------
 # Basic Value / F annotations

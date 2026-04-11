@@ -1,5 +1,5 @@
 from django.db.models import Prefetch
-from test_app.models import Author, Book
+from shared.models import Author, Book
 
 
 async def test_prefetch_related_none_clears(async_db):

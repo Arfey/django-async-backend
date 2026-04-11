@@ -2,7 +2,7 @@
 
 import pytest
 from django.db.models.deletion import ProtectedError, RestrictedError
-from test_app.models import Author, Book, EditorNote, ProtectedComment, RestrictedTag, Review, TestModel
+from shared.models import Author, Book, EditorNote, ProtectedComment, RestrictedTag, Review, TestModel
 
 # --- CASCADE chain: Author -> Book -> Review ---
 

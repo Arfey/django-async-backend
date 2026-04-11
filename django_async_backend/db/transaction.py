@@ -24,7 +24,7 @@ async def async_mark_for_rollback_on_error(using=None):
     try:
         yield
     except Exception as exc:
-        connection = async_connections[using]
+        connection = async_connections[using or DEFAULT_DB_ALIAS]
 
         if connection.in_atomic_block:
             connection.needs_rollback = True

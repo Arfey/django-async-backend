@@ -1,4 +1,4 @@
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_creates_when_not_exists(async_db):

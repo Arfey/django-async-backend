@@ -1,5 +1,5 @@
 import pytest
-from test_app.models import TestModel
+from shared.models import TestModel
 
 from django_async_backend.db.transaction import async_atomic
 

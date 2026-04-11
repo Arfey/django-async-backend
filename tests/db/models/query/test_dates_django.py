@@ -9,7 +9,7 @@ import datetime
 
 import pytest
 from django.core.exceptions import FieldError
-from test_app.models import Event
+from shared.models import Event
 
 # ---------------------------------------------------------------------------
 # Fixtures

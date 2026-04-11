@@ -1,4 +1,4 @@
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_intersection_with_results(async_db):

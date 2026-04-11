@@ -1,5 +1,5 @@
 from django.db.models import Count, OuterRef, Subquery
-from test_app.models import Author, Book, Review
+from shared.models import Author, Book, Review
 
 
 async def test_filter_with_subquery(async_db):

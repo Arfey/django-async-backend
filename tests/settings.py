@@ -23,7 +23,9 @@ DATABASES = {
 }
 
 INSTALLED_APPS = [
-    "test_app",
+    "shared",
+    "lookup",
+    "expressions",
 ]
 
 USE_TZ = False

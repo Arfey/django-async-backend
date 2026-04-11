@@ -1,6 +1,6 @@
 import pytest
 from django.core.exceptions import FieldError
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_order_by_single_field(async_db):

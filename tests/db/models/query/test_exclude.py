@@ -1,6 +1,6 @@
 import pytest
 from django.core.exceptions import FieldError
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_exclude_by_name(async_db):

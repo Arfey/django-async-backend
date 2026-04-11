@@ -1,6 +1,6 @@
 import pytest
 from django.core.exceptions import FieldDoesNotExist
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_ain_bulk_with_ids(async_db):

@@ -1,4 +1,4 @@
-from test_app.models import Author, Book, EditorNote, Review, TestModel
+from shared.models import Author, Book, EditorNote, Review, TestModel
 
 
 async def test_select_related_basic(async_db):

@@ -587,3 +587,69 @@ async def test_independent_connection_avoids_corruption(reporter_table_transacti
 
     assert errors == []
     assert len(await fetch_all_reporters()) == 10
+
+
+# ── Misc atomic behaviors ─────────────────────────────────────────────
+
+
+async def test_wrap_callable_instance():
+    """#20028 -- async_atomic must support wrapping callable instances."""
+
+    class Callable:
+        async def __call__(self):
+            pass
+
+    # Must not raise an exception
+    async_atomic()(Callable())
+
+
+async def test_atomic_does_not_leak_savepoints_on_failure(reporter_table_transaction):
+    """#23074 -- Savepoints must be released after rollback."""
+    connection = async_connections[DEFAULT_DB_ALIAS]
+    with pytest.raises(Error):
+        async with async_atomic():
+            with pytest.raises(Exception, match="Oops"):
+                async with async_atomic():
+                    sid = connection.savepoint_ids[-1]
+                    raise Exception("Oops")
+            # The savepoint no longer exists; rolling back to it must fail.
+            await connection.savepoint_rollback(sid)
+
+
+async def test_mark_for_rollback_on_error_in_transaction(reporter_table_transaction):
+    connection = async_connections[DEFAULT_DB_ALIAS]
+    async with async_atomic(savepoint=False):
+        with pytest.raises(Exception, match="Oops"):
+            async with async_mark_for_rollback_on_error():
+                assert connection.needs_rollback is False
+                raise Exception("Oops")
+        # mark_for_rollback_on_error marked the transaction as broken …
+        assert connection.needs_rollback is True
+
+        # … and further queries fail.
+        msg = "You can't execute queries until the end of the 'atomic' block."
+        with pytest.raises(transaction.TransactionManagementError, match=msg):
+            await insert_reporter("boom")
+
+    # Transaction errors are reset at the end of a transaction, so this
+    # should just work.
+    await insert_reporter(1)
+    assert await fetch_all_reporters() == ["1"]
+
+
+async def test_mark_for_rollback_on_error_in_autocommit(reporter_table_transaction):
+    connection = async_connections[DEFAULT_DB_ALIAS]
+    assert await connection.get_autocommit() is True
+
+    with pytest.raises(Exception, match="Oops"):
+        async with async_mark_for_rollback_on_error():
+            assert connection.needs_rollback is False
+            raise Exception("Oops")
+
+    # mark_for_rollback_on_error does not mark the transaction as broken
+    # when we are in autocommit mode.
+    assert connection.needs_rollback is False
+
+    # … and further queries work nicely.
+    await insert_reporter(1)
+    assert await fetch_all_reporters() == ["1"]

@@ -1,6 +1,6 @@
 import pytest
 from django.db.models import Count
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_afirst_with_results(async_db):

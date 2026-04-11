@@ -1,5 +1,5 @@
 from django.db.models import Avg, Count, Max, Min, Sum
-from test_app.models import Author, Book, Review, TestModel
+from shared.models import Author, Book, Review, TestModel
 
 
 async def test_aaggregate_count(async_db):

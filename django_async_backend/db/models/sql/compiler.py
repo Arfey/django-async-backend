@@ -2003,8 +2003,8 @@ class SQLUpdateCompiler(SQLCompiler):
         self.returning_fields = returning_fields
         async with await self.connection.cursor() as cursor:
             sql, params = self.as_sql()
-            cursor.execute(sql, params)
-            rows = self.connection.ops.fetch_returned_rows(cursor, self.returning_params)
+            await cursor.execute(sql, params)
+            rows = await self.connection.ops.fetch_returned_rows(cursor, self.returning_params)
         opts = self.query.get_meta()
         cols = [field.get_col(opts.db_table) for field in self.returning_fields]
         converters = self.get_converters(cols)

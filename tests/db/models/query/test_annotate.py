@@ -1,5 +1,5 @@
 from django.db.models import Count
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 async def test_annotate_count(async_db):

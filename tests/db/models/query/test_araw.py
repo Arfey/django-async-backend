@@ -2,7 +2,7 @@
 bypass transaction wrapping. Manually cleans up test data."""
 
 import pytest
-from test_app.models import TestModel
+from shared.models import TestModel
 
 
 @pytest.fixture
