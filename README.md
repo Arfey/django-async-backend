@@ -41,6 +41,19 @@ INSTALLED_APPS = [
 
 ---
 
+## Middleware
+
+When running under ASGI, add `close_async_connections` to `MIDDLEWARE` so connections are returned to the pool at the end of each request. Django's `request_finished` signal only closes sync connections.
+
+```python
+MIDDLEWARE = [
+    "django_async_backend.middleware.close_async_connections",
+    ...
+]
+```
+
+---
+
 ## Connection Pooling
 
 > ⚠️ Connection pooling is not supported when running under a WSGI server (including the Django development server), because WSGI creates a new event loop for each request. This prevents reliable management of connection pool state. To disable the warning, set `ASYNC_BACKEND_DISABLE_POOL_WARNING=True`
