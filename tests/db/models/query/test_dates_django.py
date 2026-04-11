@@ -8,11 +8,8 @@ async iteration pattern `[obj async for obj in queryset]`.
 import datetime
 
 import pytest
-
 from django.core.exceptions import FieldError
-
 from test_app.models import Event
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -156,19 +153,13 @@ async def test_dates_empty_queryset(async_db):
 
 async def test_dates_with_filter_year(events):
     """dates() combined with filter restricts to matching rows."""
-    result = [
-        d
-        async for d in Event.async_object.filter(date__year=2020).dates("date", "month")
-    ]
+    result = [d async for d in Event.async_object.filter(date__year=2020).dates("date", "month")]
     assert result == [datetime.date(2020, 1, 1), datetime.date(2020, 3, 1)]
 
 
 async def test_dates_with_filter_month(events):
     """dates() filtered by month returns only days in that month."""
-    result = [
-        d
-        async for d in Event.async_object.filter(date__month=1).dates("date", "day")
-    ]
+    result = [d async for d in Event.async_object.filter(date__month=1).dates("date", "day")]
     assert result == [datetime.date(2020, 1, 5), datetime.date(2020, 1, 28)]
 
 
@@ -210,9 +201,7 @@ async def test_datetimes_year(events):
 
 async def test_datetimes_year_desc(events):
     """datetimes() with kind='year', order='DESC' returns descending."""
-    result = [
-        dt async for dt in Event.async_object.datetimes("timestamp", "year", order="DESC")
-    ]
+    result = [dt async for dt in Event.async_object.datetimes("timestamp", "year", order="DESC")]
     assert result[0].year == 2021
     assert result[1].year == 2020
 
@@ -306,12 +295,7 @@ async def test_datetimes_empty_queryset(async_db):
 
 async def test_datetimes_with_filter(events):
     """datetimes() combined with a filter restricts to matching rows."""
-    result = [
-        dt
-        async for dt in Event.async_object.filter(
-            timestamp__year=2020
-        ).datetimes("timestamp", "month")
-    ]
+    result = [dt async for dt in Event.async_object.filter(timestamp__year=2020).datetimes("timestamp", "month")]
     assert len(result) == 2
     assert (result[0].year, result[0].month) == (2020, 1)
     assert (result[1].year, result[1].month) == (2020, 3)
@@ -331,12 +315,7 @@ async def test_datetimes_invalid_kind(async_db):
 async def test_datetimes_invalid_order(async_db):
     """datetimes() with an unrecognised order raises ValueError."""
     with pytest.raises(ValueError, match="'order' must be either"):
-        [
-            dt
-            async for dt in Event.async_object.datetimes(
-                "timestamp", "year", order="bad order"
-            )
-        ]
+        [dt async for dt in Event.async_object.datetimes("timestamp", "year", order="bad order")]
 
 
 async def test_datetimes_invalid_field(async_db):

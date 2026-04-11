@@ -100,6 +100,7 @@ ignore = [
   "B018",   # Useless expression (Django test patterns)
   "BLE001", # Blind except (Django test patterns)
   "C403",   # Unnecessary list call
+  "DTZ001", # Datetime without timezone (test data)
   "F841",   # Unused variables okay in tests
   "PERF401", # Use list comprehension (test readability preference)
   "PT006",  # Parametrize tuple style is preference
@@ -107,6 +108,7 @@ ignore = [
   "PT011",  # Broad pytest.raises okay
   "PT027",  # Use pytest assert instead of unittest-style (we use unittest)
   "PYI024", # NamedTuple vs TypedDict
+  "RUF059", # Unpacked variables (fixture setup returns used for side effects)
   "S101",   # assert in tests
   "S105",   # Hardcoded passwords in test settings
   "S110",   # try/except/pass

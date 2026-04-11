@@ -7,18 +7,17 @@ SELECT FOR UPDATE is wrapped in an async_atomic() block as required.
 """
 
 import pytest
-
 from django.db import connection
 from django.db.models import F, Value
 from django.db.models.functions import Concat
+from test_app.models import Author, Book, TestModel
 
-from test_app.models import Book, Author, TestModel
 from django_async_backend.db.transaction import async_atomic
-
 
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def _sql_contains_for_update(sql: str, **kwargs) -> bool:
     """Return True if *sql* contains the FOR UPDATE clause produced by Django."""
@@ -58,10 +57,7 @@ async def test_for_update_multiple_rows(async_db):
         ]
     )
     async with async_atomic():
-        locked = [
-            obj
-            async for obj in TestModel.async_object.select_for_update().order_by("name")
-        ]
+        locked = [obj async for obj in TestModel.async_object.select_for_update().order_by("name")]
     assert [obj.name for obj in locked] == ["fu_a", "fu_b", "fu_c"]
 
 
@@ -80,9 +76,7 @@ async def test_for_update_nowait_no_contention(async_db):
     """nowait=True succeeds when no other connection holds the lock."""
     await TestModel.async_object.acreate(name="nowait_free", value=1)
     async with async_atomic():
-        obj = await TestModel.async_object.select_for_update(nowait=True).aget(
-            name="nowait_free"
-        )
+        obj = await TestModel.async_object.select_for_update(nowait=True).aget(name="nowait_free")
     assert obj.value == 1
 
 
@@ -90,12 +84,7 @@ async def test_for_update_skip_locked_no_contention(async_db):
     """skip_locked=True returns unlocked rows when there is no contention."""
     await TestModel.async_object.acreate(name="skip_free", value=5)
     async with async_atomic():
-        results = [
-            obj
-            async for obj in TestModel.async_object.select_for_update(
-                skip_locked=True
-            ).order_by("name")
-        ]
+        results = [obj async for obj in TestModel.async_object.select_for_update(skip_locked=True).order_by("name")]
     assert len(results) >= 1
 
 
@@ -108,9 +97,7 @@ async def test_for_update_no_key(async_db):
     """select_for_update(no_key=True) executes without error."""
     await TestModel.async_object.acreate(name="no_key_fu", value=7)
     async with async_atomic():
-        obj = await TestModel.async_object.select_for_update(no_key=True).aget(
-            name="no_key_fu"
-        )
+        obj = await TestModel.async_object.select_for_update(no_key=True).aget(name="no_key_fu")
     assert obj.value == 7
 
 
@@ -123,9 +110,7 @@ async def test_for_update_of_self(async_db):
     """select_for_update(of=('self',)) locks only the primary table."""
     await TestModel.async_object.acreate(name="of_self", value=9)
     async with async_atomic():
-        obj = await TestModel.async_object.select_for_update(of=("self",)).aget(
-            name="of_self"
-        )
+        obj = await TestModel.async_object.select_for_update(of=("self",)).aget(name="of_self")
     assert obj.name == "of_self"
 
 
@@ -133,12 +118,7 @@ async def test_for_update_of_followed_by_values(async_db):
     """select_for_update(of=('self',)) followed by .values() returns dicts."""
     await TestModel.async_object.acreate(name="of_values", value=11)
     async with async_atomic():
-        values = [
-            v
-            async for v in TestModel.async_object.select_for_update(
-                of=("self",)
-            ).values("name")
-        ]
+        values = [v async for v in TestModel.async_object.select_for_update(of=("self",)).values("name")]
     assert len(values) >= 1
     assert values[0]["name"] == "of_values"
 
@@ -147,12 +127,7 @@ async def test_for_update_of_followed_by_values_list(async_db):
     """select_for_update(of=('self',)) followed by .values_list() returns tuples."""
     await TestModel.async_object.acreate(name="of_vl", value=13)
     async with async_atomic():
-        values = [
-            v
-            async for v in TestModel.async_object.select_for_update(
-                of=("self",)
-            ).values_list("name")
-        ]
+        values = [v async for v in TestModel.async_object.select_for_update(of=("self",)).values_list("name")]
     assert len(values) >= 1
     assert values[0][0] == "of_vl"
 
@@ -166,11 +141,11 @@ async def test_for_update_of_values_list_with_expression(async_db):
     """
     await TestModel.async_object.acreate(name="ReinhardtXX", value=1)
     async with async_atomic():
-        row = await TestModel.async_object.select_for_update(
-            of=("self",)
-        ).values_list(
-            Concat(Value("Dr. "), F("name")), "value"
-        ).aget(name="ReinhardtXX")
+        row = (
+            await TestModel.async_object.select_for_update(of=("self",))
+            .values_list(Concat(Value("Dr. "), F("name")), "value")
+            .aget(name="ReinhardtXX")
+        )
     assert row[0] == "Dr. ReinhardtXX"
     assert row[1] == 1
 
@@ -189,9 +164,7 @@ async def test_for_update_with_select_related(async_db):
     await Book.async_object.acreate(title="Book One", author=author)
 
     async with async_atomic():
-        book = await Book.async_object.select_related("author").select_for_update().aget(
-            title="Book One"
-        )
+        book = await Book.async_object.select_related("author").select_for_update().aget(title="Book One")
     assert book.author.name == "Django Unchained"
 
 
@@ -265,10 +238,7 @@ async def test_for_update_with_slicing(async_db):
         ]
     )
     async with async_atomic():
-        results = [
-            obj
-            async for obj in TestModel.async_object.order_by("name").select_for_update()[1:2]
-        ]
+        results = [obj async for obj in TestModel.async_object.order_by("name").select_for_update()[1:2]]
     assert len(results) == 1
     assert results[0].name == "slice_second"
 

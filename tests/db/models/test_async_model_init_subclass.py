@@ -4,7 +4,7 @@ from django_async_backend.db.models.base import AsyncModel
 
 
 def test_save_without_asave_raises():
-    with pytest.raises(TypeError, match="overrides save.*without overriding asave"):
+    with pytest.raises(TypeError, match=r"overrides save.*without overriding asave"):
 
         class BadModel(AsyncModel):
             def save(self, *args, **kwargs):
@@ -12,7 +12,7 @@ def test_save_without_asave_raises():
 
 
 def test_delete_without_adelete_raises():
-    with pytest.raises(TypeError, match="overrides delete.*without overriding adelete"):
+    with pytest.raises(TypeError, match=r"overrides delete.*without overriding adelete"):
 
         class BadModel(AsyncModel):
             def delete(self, *args, **kwargs):

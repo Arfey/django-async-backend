@@ -11,8 +11,6 @@ M2M relations (friends, book.authors, store.books) and models without
 equivalents (Publisher, Store) are skipped.
 """
 
-from itertools import chain
-
 import pytest
 from django.core.exceptions import FieldError
 from django.db.models import (
@@ -21,8 +19,6 @@ from django.db.models import (
     Count,
     Exists,
     F,
-    FloatField,
-    IntegerField,
     Max,
     Min,
     Q,
@@ -34,9 +30,7 @@ from django.db.models import (
     When,
 )
 from django.db.models.functions import Coalesce
-
 from test_app.models import Author, Book, Review, TestModel
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -73,9 +67,7 @@ async def test_empty_aggregate(async_db):
 
 async def test_single_aggregate_default_alias(async_db):
     """Positional aggregate uses field__aggfunc alias."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"T{i}", value=i * 10) for i in range(1, 4)]
-    )
+    await TestModel.async_object.abulk_create([TestModel(name=f"T{i}", value=i * 10) for i in range(1, 4)])
     result = await TestModel.async_object.aaggregate(Sum("value"))
     assert "value__sum" in result
     assert result["value__sum"] == 60
@@ -83,9 +75,7 @@ async def test_single_aggregate_default_alias(async_db):
 
 async def test_multiple_aggregates_default_aliases(async_db):
     """Multiple positional aggregates produce separate alias keys."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"M{i}", value=i * 10) for i in range(1, 4)]
-    )
+    await TestModel.async_object.abulk_create([TestModel(name=f"M{i}", value=i * 10) for i in range(1, 4)])
     result = await TestModel.async_object.aaggregate(Sum("value"), Count("value"))
     assert result["value__sum"] == 60
     assert result["value__count"] == 3
@@ -93,12 +83,8 @@ async def test_multiple_aggregates_default_aliases(async_db):
 
 async def test_filter_aggregate(async_db):
     """Filtering before aggregate restricts the set."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"F{i}", value=i * 10) for i in range(1, 6)]
-    )
-    result = await TestModel.async_object.filter(value__gt=20).aaggregate(
-        Sum("value")
-    )
+    await TestModel.async_object.abulk_create([TestModel(name=f"F{i}", value=i * 10) for i in range(1, 6)])
+    result = await TestModel.async_object.filter(value__gt=20).aaggregate(Sum("value"))
     # values 30, 40, 50 → sum = 120
     assert result["value__sum"] == 120
 
@@ -114,9 +100,7 @@ async def test_related_aggregate_fk(async_db):
 async def test_related_aggregate_reverse_fk_chain(async_db):
     """Aggregate across a two-hop FK chain (Author→Book→Review)."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
-    result = await Author.async_object.aaggregate(
-        review_count=Count("books__reviews")
-    )
+    result = await Author.async_object.aaggregate(review_count=Count("books__reviews"))
     assert result["review_count"] == 2
 
 
@@ -135,9 +119,7 @@ async def test_count(async_db):
 
 async def test_count_star(async_db):
     """Count('*') counts all rows."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"S{i}", value=i) for i in range(3)]
-    )
+    await TestModel.async_object.abulk_create([TestModel(name=f"S{i}", value=i) for i in range(3)])
     result = await TestModel.async_object.aaggregate(n=Count("*"))
     assert result["n"] == 3
 
@@ -152,19 +134,13 @@ async def test_distinct_on_aggregate(async_db):
             TestModel(name="D3", value=20),
         ]
     )
-    avg_result = await TestModel.async_object.aaggregate(
-        v=Avg("value", distinct=True)
-    )
+    avg_result = await TestModel.async_object.aaggregate(v=Avg("value", distinct=True))
     assert avg_result["v"] == 15.0  # (10+20)/2
 
-    count_result = await TestModel.async_object.aaggregate(
-        v=Count("value", distinct=True)
-    )
+    count_result = await TestModel.async_object.aaggregate(v=Count("value", distinct=True))
     assert count_result["v"] == 2
 
-    sum_result = await TestModel.async_object.aaggregate(
-        v=Sum("value", distinct=True)
-    )
+    sum_result = await TestModel.async_object.aaggregate(v=Sum("value", distinct=True))
     assert sum_result["v"] == 30  # 10+20
 
 
@@ -178,9 +154,7 @@ async def test_count_distinct_expression(async_db):
         ]
     )
     result = await TestModel.async_object.aaggregate(
-        distinct_vals=Count(
-            Case(When(value__gt=10, then="value")), distinct=True
-        )
+        distinct_vals=Count(Case(When(value__gt=10, then="value")), distinct=True)
     )
     # Only value=15 qualifies (one distinct value)
     assert result["distinct_vals"] == 1
@@ -189,12 +163,10 @@ async def test_count_distinct_expression(async_db):
 async def test_sum_distinct_aggregate(async_db):
     """Sum on a queryset with repeated values counts each row only once
     unless distinct=True on the aggregate itself."""
-    # b1 has 2 reviews, b2 has 0 – total reviews = 2
+    # b1 has 2 reviews, b2 has 0 - total reviews = 2
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
     # Aggregate reviews through books; with distinct on book id
-    result = await Book.async_object.aaggregate(
-        book_count=Count("id", distinct=True)
-    )
+    result = await Book.async_object.aaggregate(book_count=Count("id", distinct=True))
     assert result["book_count"] == 3
 
 
@@ -206,12 +178,7 @@ async def test_sum_distinct_aggregate(async_db):
 async def test_annotate_basic(async_db):
     """annotate() adds a computed attribute to each row."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
-    books = [
-        obj
-        async for obj in Book.async_object.annotate(
-            review_count=Count("reviews")
-        ).order_by("title")
-    ]
+    books = [obj async for obj in Book.async_object.annotate(review_count=Count("reviews")).order_by("title")]
     # Book One has 2 reviews, Book Three has 0, Book Two has 0
     by_title = {b.title: b.review_count for b in books}
     assert by_title["Book One"] == 2
@@ -222,12 +189,7 @@ async def test_annotate_basic(async_db):
 async def test_backwards_fk_annotate(async_db):
     """annotate() via reverse FK counts related objects per row."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
-    authors = [
-        obj
-        async for obj in Author.async_object.annotate(
-            num_books=Count("books")
-        ).order_by("name")
-    ]
+    authors = [obj async for obj in Author.async_object.annotate(num_books=Count("books")).order_by("name")]
     by_name = {a.name: a.num_books for a in authors}
     assert by_name["Alice"] == 2
     assert by_name["Bob"] == 1
@@ -236,12 +198,7 @@ async def test_backwards_fk_annotate(async_db):
 async def test_reverse_fk_annotate_no_related(async_db):
     """Author with no books gets count 0."""
     await Author.async_object.acreate(name="Charlie")
-    authors = [
-        obj
-        async for obj in Author.async_object.annotate(
-            num_books=Count("books")
-        ).order_by("name")
-    ]
+    authors = [obj async for obj in Author.async_object.annotate(num_books=Count("books")).order_by("name")]
     by_name = {a.name: a.num_books for a in authors}
     assert by_name["Charlie"] == 0
 
@@ -250,12 +207,7 @@ async def test_annotate_values(async_db):
     """annotate + values() returns dicts with the annotation."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
     results = [
-        obj
-        async for obj in Book.async_object.annotate(
-            rc=Count("reviews")
-        )
-        .values("title", "rc")
-        .order_by("title")
+        obj async for obj in Book.async_object.annotate(rc=Count("reviews")).values("title", "rc").order_by("title")
     ]
     assert results[0] == {"title": "Book One", "rc": 2}
     assert results[1] == {"title": "Book Three", "rc": 0}
@@ -267,11 +219,7 @@ async def test_annotate_values_list(async_db):
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
     results = [
         obj
-        async for obj in Book.async_object.annotate(
-            rc=Count("reviews")
-        )
-        .values_list("title", "rc")
-        .order_by("title")
+        async for obj in Book.async_object.annotate(rc=Count("reviews")).values_list("title", "rc").order_by("title")
     ]
     assert results[0] == ("Book One", 2)
     assert results[2] == ("Book Two", 0)
@@ -282,9 +230,7 @@ async def test_annotate_values_list_flat(async_db):
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
     titles = [
         obj
-        async for obj in Book.async_object.annotate(
-            rc=Count("reviews")
-        )
+        async for obj in Book.async_object.annotate(rc=Count("reviews"))
         .values_list("title", flat=True)
         .order_by("title")
     ]
@@ -294,18 +240,8 @@ async def test_annotate_values_list_flat(async_db):
 async def test_fkey_aggregate_explicit_vs_implicit(async_db):
     """Count('books__id') and Count('books') produce the same result."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
-    explicit = [
-        obj
-        async for obj in Author.async_object.annotate(
-            cnt=Count("books__id")
-        ).order_by("name")
-    ]
-    implicit = [
-        obj
-        async for obj in Author.async_object.annotate(
-            cnt=Count("books")
-        ).order_by("name")
-    ]
+    explicit = [obj async for obj in Author.async_object.annotate(cnt=Count("books__id")).order_by("name")]
+    implicit = [obj async for obj in Author.async_object.annotate(cnt=Count("books")).order_by("name")]
     assert [a.cnt for a in explicit] == [a.cnt for a in implicit]
 
 
@@ -334,9 +270,7 @@ async def test_aggregate_annotation(async_db):
     """annotate then aggregate applies aggregate over the annotation."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
     # Annotate each author with book count, then find average book count
-    result = await Author.async_object.annotate(
-        num_books=Count("books")
-    ).aaggregate(Avg("num_books"))
+    result = await Author.async_object.annotate(num_books=Count("books")).aaggregate(Avg("num_books"))
     # Alice has 2, Bob has 1 → avg = 1.5
     assert result["num_books__avg"] == 1.5
 
@@ -380,13 +314,9 @@ async def test_grouped_annotation_in_group_by(async_db):
 
 async def test_aggregation_expressions(async_db):
     """Arithmetic on aggregates works: Sum/Count produces integer division."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"AE{i}", value=i * 10) for i in range(1, 5)]
-    )
+    await TestModel.async_object.abulk_create([TestModel(name=f"AE{i}", value=i * 10) for i in range(1, 5)])
     # values: 10, 20, 30, 40 → sum=100, count=4 → 100//4 = 25
-    result = await TestModel.async_object.aaggregate(
-        av=Sum("value") / Count("*")
-    )
+    result = await TestModel.async_object.aaggregate(av=Sum("value") / Count("*"))
     assert result["av"] == 25
 
 
@@ -409,15 +339,13 @@ async def test_aggregate_over_complex_annotation(async_db):
 
 async def test_values_annotation_with_expression(async_db):
     """F() in annotate inside values() is promoted to GROUP BY."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"VA{i}", value=i * 5) for i in range(1, 4)]
-    )
+    await TestModel.async_object.abulk_create([TestModel(name=f"VA{i}", value=i * 5) for i in range(1, 4)])
     # each value is unique, so grouping by name + doubled_value works
     results = [
         obj
-        async for obj in TestModel.async_object.values("name").annotate(
-            double_val=Sum("value") + F("value")
-        ).order_by("name")
+        async for obj in TestModel.async_object.values("name")
+        .annotate(double_val=Sum("value") + F("value"))
+        .order_by("name")
     ]
     # For name=VA1, value=5 → Sum(5)+5 = 10; VA2 → 20; VA3 → 30 (each group has 1 row)
     by_name = {r["name"]: r["double_val"] for r in results}
@@ -428,16 +356,14 @@ async def test_values_annotation_with_expression(async_db):
 
 async def test_annotate_values_aggregate(async_db):
     """Annotate with alias of a field, then aggregate on the alias gives same result."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"AVA{i}", value=i * 10) for i in range(1, 4)]
+    await TestModel.async_object.abulk_create([TestModel(name=f"AVA{i}", value=i * 10) for i in range(1, 4)])
+    alias_result = (
+        await TestModel.async_object.annotate(val_alias=F("value"))
+        .values("val_alias")
+        .aaggregate(total=Sum("val_alias"))
     )
-    alias_result = await TestModel.async_object.annotate(
-        val_alias=F("value")
-    ).values("val_alias").aaggregate(total=Sum("val_alias"))
 
-    direct_result = await TestModel.async_object.values("value").aaggregate(
-        total=Sum("value")
-    )
+    direct_result = await TestModel.async_object.values("value").aaggregate(total=Sum("value"))
     assert alias_result["total"] == direct_result["total"]
 
 
@@ -445,11 +371,7 @@ async def test_annotate_over_annotate(async_db):
     """annotate on top of annotate: the chained alias works."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
     # Count books, then annotate a doubled count
-    author = await Author.async_object.annotate(
-        bc=Count("books")
-    ).annotate(
-        doubled=F("bc") * 2
-    ).aget(name="Alice")
+    author = await Author.async_object.annotate(bc=Count("books")).annotate(doubled=F("bc") * 2).aget(name="Alice")
     assert author.bc == 2
     assert author.doubled == 4
 
@@ -475,12 +397,7 @@ async def test_complex_annotations_require_kwarg(async_db):
     """Annotations without an alias for complex expressions raise TypeError."""
     with pytest.raises(TypeError, match="Complex annotations require an alias"):
         # This should raise on queryset evaluation
-        _ = [
-            obj
-            async for obj in TestModel.async_object.annotate(
-                Sum(F("value") + F("value"))
-            )
-        ]
+        _ = [obj async for obj in TestModel.async_object.annotate(Sum(F("value") + F("value")))]
 
 
 async def test_aggregate_over_aggregate_raises(async_db):
@@ -517,27 +434,21 @@ async def test_arguments_must_be_expressions(async_db):
 async def test_aggregation_default_unset(async_db):
     """Without a default, aggregate over empty set returns None for all aggs."""
     for Aggregate in [Avg, Max, Min, StdDev, Sum, Variance]:
-        result = await TestModel.async_object.filter(value__gt=9999).aaggregate(
-            v=Aggregate("value")
-        )
+        result = await TestModel.async_object.filter(value__gt=9999).aaggregate(v=Aggregate("value"))
         assert result["v"] is None, f"{Aggregate.__name__} should return None"
 
 
 async def test_aggregation_default_zero(async_db):
     """With default=0, aggregate over empty set returns 0."""
     for Aggregate in [Avg, Max, Min, StdDev, Sum, Variance]:
-        result = await TestModel.async_object.filter(value__gt=9999).aaggregate(
-            v=Aggregate("value", default=0)
-        )
+        result = await TestModel.async_object.filter(value__gt=9999).aaggregate(v=Aggregate("value", default=0))
         assert result["v"] == 0, f"{Aggregate.__name__} should return 0"
 
 
 async def test_aggregation_default_integer(async_db):
     """With default=21, aggregate over empty set returns 21."""
     for Aggregate in [Avg, Max, Min, StdDev, Sum, Variance]:
-        result = await TestModel.async_object.filter(value__gt=9999).aaggregate(
-            v=Aggregate("value", default=21)
-        )
+        result = await TestModel.async_object.filter(value__gt=9999).aaggregate(v=Aggregate("value", default=21))
         assert result["v"] == 21, f"{Aggregate.__name__} should return 21"
 
 
@@ -582,25 +493,17 @@ async def test_aggregation_default_group_by(async_db):
 
 async def test_aggregation_default_passed_another_aggregate(async_db):
     """default can be another aggregate expression."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"DA{i}", value=i * 10) for i in range(1, 4)]
-    )
+    await TestModel.async_object.abulk_create([TestModel(name=f"DA{i}", value=i * 10) for i in range(1, 4)])
     # No rows match value > 9999 → default kicks in as Avg("value") over all rows
-    result = await TestModel.async_object.aaggregate(
-        v=Sum("value", filter=Q(value__gt=9999), default=Avg("value"))
-    )
+    result = await TestModel.async_object.aaggregate(v=Sum("value", filter=Q(value__gt=9999), default=Avg("value")))
     # Avg of [10, 20, 30] = 20.0
     assert result["v"] == 20.0
 
 
 async def test_aggregation_default_after_annotation(async_db):
     """default works when aggregate references an annotation."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"DAA{i}", value=i * 10) for i in range(1, 4)]
-    )
-    result = await TestModel.async_object.annotate(
-        double=F("value") * 2
-    ).aaggregate(total=Sum("double", default=0))
+    await TestModel.async_object.abulk_create([TestModel(name=f"DAA{i}", value=i * 10) for i in range(1, 4)])
+    result = await TestModel.async_object.annotate(double=F("value") * 2).aaggregate(total=Sum("double", default=0))
     # 20 + 40 + 60 = 120
     assert result["total"] == 120
 
@@ -621,17 +524,13 @@ async def test_empty_result_optimization(async_db):
 
 async def test_coalesced_empty_result_set(async_db):
     """Coalesce(Sum(…), 0) on .none() returns 0."""
-    result = await TestModel.async_object.none().aaggregate(
-        total=Coalesce(Sum("value"), 0)
-    )
+    result = await TestModel.async_object.none().aaggregate(total=Coalesce(Sum("value"), 0))
     assert result["total"] == 0
 
 
 async def test_coalesced_empty_result_set_nested(async_db):
     """Nested Coalesce on .none() still returns the fallback."""
-    result = await TestModel.async_object.none().aaggregate(
-        total=Coalesce(Coalesce(Sum("value"), None), 0)
-    )
+    result = await TestModel.async_object.none().aaggregate(total=Coalesce(Coalesce(Sum("value"), None), 0))
     assert result["total"] == 0
 
 
@@ -648,9 +547,7 @@ async def test_coalesced_empty_result_set_nested(async_db):
 )
 async def test_aggregate_over_sliced_queryset(async_db):
     """aggregate() on a sliced queryset works correctly."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"SL{i}", value=i * 10) for i in range(1, 6)]
-    )
+    await TestModel.async_object.abulk_create([TestModel(name=f"SL{i}", value=i * 10) for i in range(1, 6)])
     # Top-3 by descending value: 50, 40, 30 → avg ≈ 40
     qs = TestModel.async_object.order_by("-value")[0:3]
     result = await qs.aaggregate(avg=Avg("value"))
@@ -665,12 +562,7 @@ async def test_aggregate_over_sliced_queryset(async_db):
 async def test_filtering_on_annotation(async_db):
     """filter() on an annotated count uses HAVING and returns correct rows."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
-    authors = [
-        obj
-        async for obj in Author.async_object.annotate(
-            num_books=Count("books")
-        ).filter(num_books__gt=1)
-    ]
+    authors = [obj async for obj in Author.async_object.annotate(num_books=Count("books")).filter(num_books__gt=1)]
     assert len(authors) == 1
     assert authors[0].name == "Alice"
 
@@ -680,9 +572,9 @@ async def test_annotation_filter_range(async_db):
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
     authors = [
         obj
-        async for obj in Author.async_object.annotate(
-            num_books=Count("books")
-        ).filter(num_books__range=[1, 2]).order_by("name")
+        async for obj in Author.async_object.annotate(num_books=Count("books"))
+        .filter(num_books__range=[1, 2])
+        .order_by("name")
     ]
     assert len(authors) == 2
     assert {a.name for a in authors} == {"Alice", "Bob"}
@@ -691,12 +583,7 @@ async def test_annotation_filter_range(async_db):
 async def test_annotation_filter_in(async_db):
     """filter(annotation__in=[…]) works."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
-    authors = [
-        obj
-        async for obj in Author.async_object.annotate(
-            num_books=Count("books")
-        ).filter(num_books__in=[2])
-    ]
+    authors = [obj async for obj in Author.async_object.annotate(num_books=Count("books")).filter(num_books__in=[2])]
     assert len(authors) == 1
     assert authors[0].name == "Alice"
 
@@ -705,10 +592,7 @@ async def test_annotation_isnull_false(async_db):
     """Annotated count is never NULL → filter(isnull=True) returns empty."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
     authors = [
-        obj
-        async for obj in Author.async_object.annotate(
-            num_books=Count("books")
-        ).filter(num_books__isnull=True)
+        obj async for obj in Author.async_object.annotate(num_books=Count("books")).filter(num_books__isnull=True)
     ]
     assert authors == []
 
@@ -727,9 +611,7 @@ async def test_values_aggregation(async_db):
             TestModel(name="VG3", value=20),
         ]
     )
-    max_result = await TestModel.async_object.values("value").aaggregate(
-        max_val=Max("value")
-    )
+    max_result = await TestModel.async_object.values("value").aaggregate(max_val=Max("value"))
     assert max_result["max_val"] == 20
 
 
@@ -749,11 +631,7 @@ async def test_values_annotate_aggregate(async_db):
         ]
     )
     # Group by value, count per group → max of those counts
-    result = await (
-        TestModel.async_object.values("value")
-        .annotate(cnt=Count("id"))
-        .aaggregate(Max("cnt"))
-    )
+    result = await TestModel.async_object.values("value").annotate(cnt=Count("id")).aaggregate(Max("cnt"))
     assert result == {"cnt__max": 2}  # value=10 has count 2
 
 
@@ -765,9 +643,7 @@ async def test_complex_values_aggregation(async_db):
             TestModel(name="CV2", value=20),
         ]
     )
-    result = await TestModel.async_object.values("value").aaggregate(
-        double_max=Max("value") + Max("value")
-    )
+    result = await TestModel.async_object.values("value").aaggregate(double_max=Max("value") + Max("value"))
     assert result["double_max"] == 40  # 20 + 20
 
 
@@ -778,14 +654,10 @@ async def test_complex_values_aggregation(async_db):
 
 async def test_having_with_no_group_by(async_db):
     """Static value in values() with annotated sum and filter uses HAVING."""
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"HG{i}", value=i * 10) for i in range(1, 4)]
-    )
+    await TestModel.async_object.abulk_create([TestModel(name=f"HG{i}", value=i * 10) for i in range(1, 4)])
     results = [
         obj
-        async for obj in TestModel.async_object.values(
-            static_value=Value("static")
-        )
+        async for obj in TestModel.async_object.values(static_value=Value("static"))
         .annotate(total=Sum("value"))
         .filter(total__gte=0)
         .values_list("total", flat=True)
@@ -863,11 +735,7 @@ async def test_group_by_reference_subquery(async_db):
         .annotate(cnt=Count("*"))
         .values("author_id")
     )
-    authors = [
-        obj
-        async for obj in Author.async_object.filter(pk__in=authors_with_books_qs)
-        .order_by("name")
-    ]
+    authors = [obj async for obj in Author.async_object.filter(pk__in=authors_with_books_qs).order_by("name")]
     assert len(authors) == 2
     assert {a.name for a in authors} == {"Alice", "Bob"}
 
@@ -881,19 +749,13 @@ async def test_aggregation_subquery_annotation(async_db):
     """Subquery annotations are excluded from GROUP BY when not explicitly grouped."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
     latest_review_qs = (
-        Review.async_object.filter(book=Subquery(
-            Book.async_object.filter(author=F("author")).values("id")[:1]
-        ))
+        Review.async_object.filter(book=Subquery(Book.async_object.filter(author=F("author")).values("id")[:1]))
         .order_by("-id")
         .values("id")[:1]
     )
     # Just verifying the queryset executes without error
     author_qs = Author.async_object.annotate(
-        latest_review_id=Subquery(
-            Review.async_object.filter(book__author=F("id"))
-            .order_by("-id")
-            .values("id")[:1]
-        ),
+        latest_review_id=Subquery(Review.async_object.filter(book__author=F("id")).order_by("-id").values("id")[:1]),
     ).annotate(book_count=Count("books"))
     results = [obj async for obj in author_qs.order_by("name")]
     assert len(results) == 2
@@ -905,11 +767,7 @@ async def test_aggregation_subquery_annotation_exists(async_db):
     """Combining a subquery annotation with an aggregate doesn't crash."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
     author_qs = Author.async_object.annotate(
-        latest_review_id=Subquery(
-            Review.async_object.filter(book__author=F("id"))
-            .order_by("-id")
-            .values("id")[:1]
-        ),
+        latest_review_id=Subquery(Review.async_object.filter(book__author=F("id")).order_by("-id").values("id")[:1]),
         book_count=Count("books"),
     )
     assert await author_qs.aexists()
@@ -923,10 +781,7 @@ async def test_filter_in_subquery_or_aggregation(async_db):
         obj
         async for obj in Author.async_object.annotate(
             book_count=Count("books"),
-        ).filter(
-            Q(book_count__gt=0)
-            | Q(pk__in=Book.async_object.values("author"))
-        )
+        ).filter(Q(book_count__gt=0) | Q(pk__in=Book.async_object.values("author")))
     ]
     # Both Alice and Bob have books
     assert len(authors) == 2

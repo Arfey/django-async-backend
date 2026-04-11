@@ -1,12 +1,9 @@
 from django.db.models import Avg, Count, Max, Min, Sum
-
 from test_app.models import Author, Book, Review, TestModel
 
 
 async def test_aaggregate_count(async_db):
-    await TestModel.async_object.abulk_create(
-        [TestModel(name=f"T{i}", value=i) for i in range(5)]
-    )
+    await TestModel.async_object.abulk_create([TestModel(name=f"T{i}", value=i) for i in range(5)])
     result = await TestModel.async_object.aaggregate(total=Count("id"))
     assert result == {"total": 5}
 
@@ -42,9 +39,7 @@ async def test_aaggregate_min_max(async_db):
             TestModel(name="C", value=25),
         ]
     )
-    result = await TestModel.async_object.aaggregate(
-        min_val=Min("value"), max_val=Max("value")
-    )
+    result = await TestModel.async_object.aaggregate(min_val=Min("value"), max_val=Max("value"))
     assert result == {"min_val": 5, "max_val": 50}
 
 
@@ -67,9 +62,7 @@ async def test_aaggregate_multiple(async_db):
 
 
 async def test_aaggregate_empty_queryset(async_db):
-    result = await TestModel.async_object.aaggregate(
-        total=Count("id"), sum_val=Sum("value")
-    )
+    result = await TestModel.async_object.aaggregate(total=Count("id"), sum_val=Sum("value"))
     assert result == {"total": 0, "sum_val": None}
 
 
@@ -81,9 +74,7 @@ async def test_aaggregate_with_filter(async_db):
             TestModel(name="C", value=30),
         ]
     )
-    result = await TestModel.async_object.filter(value__gte=20).aaggregate(
-        total=Count("id"), sum_val=Sum("value")
-    )
+    result = await TestModel.async_object.filter(value__gte=20).aaggregate(total=Count("id"), sum_val=Sum("value"))
     assert result == {"total": 2, "sum_val": 50}
 
 

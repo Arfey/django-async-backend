@@ -17,4 +17,3 @@ CLAUDE.md
 .ruff_cache/
 .pytest_cache/
 htmlcov/
-docs/superpowers/

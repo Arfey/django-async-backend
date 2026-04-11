@@ -1,7 +1,6 @@
 import datetime
 
 import pytest
-
 from test_app.models import Event
 
 
@@ -122,12 +121,7 @@ async def test_datetimes_invalid_kind(async_db):
 
 async def test_dates_with_filter(events):
     """dates() combined with filter."""
-    result = [
-        d
-        async for d in Event.async_object.filter(
-            date__year=2024
-        ).dates("date", "month")
-    ]
+    result = [d async for d in Event.async_object.filter(date__year=2024).dates("date", "month")]
     assert len(result) == 2
     assert result[0] == datetime.date(2024, 1, 1)
     assert result[1] == datetime.date(2024, 3, 1)

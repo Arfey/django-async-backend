@@ -597,9 +597,7 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
                 await create_instance("should_fail")
 
         async with async_atomic():
-            with self.assertRaisesRegex(
-                RuntimeError, "nested task"
-            ):
+            with self.assertRaisesRegex(RuntimeError, "nested task"):
                 await asyncio.create_task(writer())
 
     async def test_concurrent_gather_atomic_raises(self):

@@ -1,6 +1,5 @@
 import pytest
 from django.db import IntegrityError
-
 from test_app.models import Author, Book, Review, TestModel
 
 

@@ -16,9 +16,7 @@ import re
 
 import pytest
 from django.core.exceptions import FieldError
-
-from test_app.models import Author, Book, EditorNote, Review, TestModel
-
+from test_app.models import Author, Book, EditorNote, Review
 
 # ---------------------------------------------------------------------------
 # SelectRelatedTests equivalents
@@ -47,9 +45,7 @@ async def test_access_fks_with_select_related(async_db):
     book = await Book.async_object.acreate(title="BookSR", author=author)
     await Review.async_object.acreate(text="ReviewSR", book=book)
 
-    review = await Review.async_object.select_related("book__author").aget(
-        text="ReviewSR"
-    )
+    review = await Review.async_object.select_related("book__author").aget(text="ReviewSR")
     # Both levels should be cached — no additional DB hit needed.
     assert review.book.title == "BookSR"
     assert review.book.author.name == "AuthorSR"
@@ -133,12 +129,7 @@ async def test_more_certain_fields(async_db):
     await Review.async_object.acreate(text="MCFR1", book=book1)
     await Review.async_object.acreate(text="MCFR2", book=book2)
 
-    reviews = [
-        r
-        async for r in Review.async_object.filter(book__author__name="MCF1").select_related(
-            "book__author"
-        )
-    ]
+    reviews = [r async for r in Review.async_object.filter(book__author__name="MCF1").select_related("book__author")]
     assert len(reviews) == 1
     assert reviews[0].book.author.name == "MCF1"
 
@@ -152,12 +143,7 @@ async def test_field_traversal(async_db):
     book = await Book.async_object.acreate(title="FTBook", author=author)
     await Review.async_object.acreate(text="FTReview", book=book)
 
-    review = (
-        await Review.async_object.all()
-        .select_related("book__author")
-        .order_by("id")[0:1]
-        .aget()
-    )
+    review = await Review.async_object.all().select_related("book__author").order_by("id")[0:1].aget()
     assert review.book.author.name == "FTAuthor"
 
 
@@ -200,9 +186,7 @@ async def test_reverse_relation_not_cached(async_db):
     book = await Book.async_object.acreate(title="RRBook", author=author)
     await Review.async_object.acreate(text="RRReview", book=book)
 
-    review = (
-        await Review.async_object.select_related("book").filter(text="RRReview").afirst()
-    )
+    review = await Review.async_object.select_related("book").filter(text="RRReview").afirst()
     assert review.book.title == "RRBook"
     # The reverse relation (reviews) should not be in the book's fields_cache
     assert "reviews" not in review.book._state.fields_cache
@@ -239,9 +223,7 @@ async def test_non_relational_field(async_db):
     Passing a non-relational field to select_related() raises FieldError.
     Equivalent to Django's test_non_relational_field.
     """
-    non_relational_error = (
-        "Non-relational field given in select_related: '%s'. Choices are: %s"
-    )
+    non_relational_error = "Non-relational field given in select_related: '%s'. Choices are: %s"
     # 'text' is a CharField on Review — not a relation
     with pytest.raises(FieldError, match="Non-relational field given in select_related"):
         [r async for r in Review.async_object.select_related("text__something")]
@@ -293,10 +275,7 @@ async def test_select_related_multiple_fields(async_db):
     await EditorNote.async_object.acreate(note="MFNote", book=book)
 
     # Fetch EditorNote with both book and book__author in one query
-    notes = [
-        n
-        async for n in EditorNote.async_object.select_related("book", "book__author")
-    ]
+    notes = [n async for n in EditorNote.async_object.select_related("book", "book__author")]
     assert len(notes) == 1
     assert notes[0].book.title == "MFBook"
     assert notes[0].book.author.name == "MFAuthor"
@@ -337,12 +316,7 @@ async def test_select_related_order_by_related_field(async_db):
     await Review.async_object.acreate(text="ZReview", book=book1)
     await Review.async_object.acreate(text="AReview", book=book2)
 
-    reviews = [
-        r
-        async for r in Review.async_object.select_related("book__author").order_by(
-            "book__author__name"
-        )
-    ]
+    reviews = [r async for r in Review.async_object.select_related("book__author").order_by("book__author__name")]
     assert len(reviews) == 2
     assert reviews[0].book.author.name == "AAA"
     assert reviews[1].book.author.name == "ZZZ"

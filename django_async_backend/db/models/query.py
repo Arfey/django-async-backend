@@ -321,6 +321,17 @@ class QuerySet(AltersData):
                 obj.__dict__[k] = copy.deepcopy(v, memo)
         return obj
 
+    def __iter__(self):
+        # Sync iteration works when results are already cached (e.g. after
+        # await _fetch_all()). Django internals like get_prefetch_querysets
+        # iterate querysets synchronously — the caller must ensure the
+        # cache is populated before sync iteration.
+        if self._result_cache is not None:
+            return iter(self._result_cache)
+        raise TypeError(
+            "Async QuerySet cannot be iterated synchronously. Use 'async for' or call await qs._fetch_all() first."
+        )
+
     def __aiter__(self):
         # Remember, __aiter__ itself is synchronous, it's the thing it returns
         # that is async!
@@ -1255,10 +1266,7 @@ class QuerySet(AltersData):
                     lookup = lookup.prefetch_to
                     lookup = lookup.split(LOOKUP_SEP, 1)[0]
                 if lookup in self.query._filtered_relations:
-                    raise ValueError(
-                        "prefetch_related() is not supported with "
-                        "FilteredRelation."
-                    )
+                    raise ValueError("prefetch_related() is not supported with FilteredRelation.")
             clone._prefetch_related_lookups = clone._prefetch_related_lookups + lookups
         return clone
 
@@ -2160,7 +2168,7 @@ async def prefetch_related_objects(model_instances, *related_lookups):
                 obj_to_fetch = [obj for obj in obj_list if not is_fetched(obj)]
 
             if obj_to_fetch:
-                obj_list, additional_lookups = prefetch_one_level(
+                obj_list, additional_lookups = await prefetch_one_level(
                     obj_to_fetch,
                     prefetcher,
                     lookup,
@@ -2277,7 +2285,7 @@ def get_prefetcher(instance, through_attr, to_attr):
     return prefetcher, rel_obj_descriptor, attr_found, is_fetched
 
 
-def prefetch_one_level(instances, prefetcher, lookup, level):
+async def prefetch_one_level(instances, prefetcher, lookup, level):
     """
     Helper function for prefetch_related_objects().
 
@@ -2301,14 +2309,62 @@ def prefetch_one_level(instances, prefetcher, lookup, level):
 
     # The 'values to be matched' must be hashable as they will be used
     # in a dictionary.
-    (
-        rel_qs,
-        rel_obj_attr,
-        instance_attr,
-        single,
-        cache_name,
-        is_descriptor,
-    ) = prefetcher.get_prefetch_querysets(instances, lookup.get_current_querysets(level))
+
+    # Django's get_prefetch_querysets() creates a queryset, filters it,
+    # then iterates it *synchronously* to set cached FK values on related
+    # objects. Our async QuerySet can't be iterated synchronously without
+    # a populated _result_cache.
+    #
+    # Solution: evaluate the queryset async *before* get_prefetch_querysets
+    # tries to iterate it. We do this by pre-evaluating custom querysets,
+    # and by pre-populating the default queryset's cache via a patched
+    # get_queryset that returns a queryset whose __iter__ triggers async
+    # evaluation.
+    current_querysets = lookup.get_current_querysets(level)
+    if current_querysets:
+        for qs in current_querysets:
+            if hasattr(qs, "_fetch_all") and qs._result_cache is None:
+                await qs._fetch_all()
+
+    # Replicate what get_prefetch_querysets does internally, but with
+    # async evaluation. This avoids the sync iteration problem entirely.
+    if current_querysets:
+        rel_qs = current_querysets[0]
+    else:
+        # Use the base manager's get_queryset() to avoid the instance-
+        # bound filter that RelatedManager.get_queryset() applies.
+        from django.db.models.manager import BaseManager
+
+        rel_qs = BaseManager.get_queryset(prefetcher)
+
+    rel_qs._add_hints(instance=instances[0])
+    rel_qs = rel_qs.using(rel_qs._db or prefetcher.db)
+
+    # Get the field info from the prefetcher.
+    field = prefetcher.field
+    rel_obj_attr = field.get_local_related_value
+    instance_attr = field.get_foreign_related_value
+
+    from django.db.models.fields.related_descriptors import _filter_prefetch_queryset
+
+    rel_qs = _filter_prefetch_queryset(rel_qs, field.name, instances)
+
+    # Evaluate async — this is the key fix.
+    if rel_qs._result_cache is None:
+        await rel_qs._fetch_all()
+
+    # Set cached FK values on related objects (what get_prefetch_querysets
+    # does in its sync for-loop).
+    instances_dict = {instance_attr(inst): inst for inst in instances}
+    for rel_obj in rel_qs._result_cache:
+        if not field.is_cached(rel_obj):
+            instance = instances_dict[rel_obj_attr(rel_obj)]
+            field.set_cached_value(rel_obj, instance)
+
+    cache_name = field.remote_field.cache_name
+    single = False
+    is_descriptor = False
+
     # We have to handle the possibility that the QuerySet we just got back
     # contains some prefetch_related lookups. We don't want to trigger the
     # prefetch_related functionality by evaluating the query. Rather, we need
@@ -2324,7 +2380,7 @@ def prefetch_one_level(instances, prefetcher, lookup, level):
         # for performance reasons.
         rel_qs._prefetch_related_lookups = ()
 
-    all_related_objects = list(rel_qs)
+    all_related_objects = list(rel_qs._result_cache)
 
     rel_obj_cache = {}
     for rel_obj in all_related_objects:
