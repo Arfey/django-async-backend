@@ -50,7 +50,9 @@ async def async_db():
     atomic_cms = {}
     for name in async_connections.settings:
         connection = async_connections[name]
-        atomic_cms[name] = async_atomic(name)
+        atomic = async_atomic(name)
+        atomic._from_testcase = True
+        atomic_cms[name] = atomic
         await atomic_cms[name].__aenter__()
 
     yield

@@ -819,7 +819,7 @@ class SQLCompiler:
 
                 if self.query.select_for_update and features.has_select_for_update:
                     if (
-                        self.connection.get_autocommit()
+                        self.connection.autocommit
                         # Don't raise an exception when database doesn't
                         # support transactions, as it's a noop.
                         and features.supports_transactions
