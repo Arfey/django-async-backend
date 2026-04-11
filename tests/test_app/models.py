@@ -101,3 +101,16 @@ class RestrictedTag(AsyncModel, models.Model):
 
     class Meta:
         db_table = "test_restricted_tag"
+
+
+class Event(AsyncModel, models.Model):
+    """Model with date/datetime fields for dates()/datetimes() tests."""
+
+    title = models.CharField(max_length=255)
+    date = models.DateField()
+    timestamp = models.DateTimeField()
+
+    async_object = AsyncManager()
+
+    class Meta:
+        db_table = "test_event"
