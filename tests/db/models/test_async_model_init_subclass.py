@@ -54,3 +54,21 @@ def test_inheriting_compliant_parent_ok():
 
     class Child(Parent):
         pass
+
+
+def test_strict_false_skips_check():
+    class Unguarded(AsyncModel, async_mro_strict=False):
+        def save(self, *args, **kwargs):
+            pass
+
+
+def test_strict_false_does_not_propagate_to_children():
+    class Parent(AsyncModel, async_mro_strict=False):
+        def save(self, *args, **kwargs):
+            pass
+
+    with pytest.raises(TypeError, match="overrides save"):
+
+        class Child(Parent):
+            def save(self, *args, **kwargs):
+                pass

@@ -24,8 +24,10 @@ from django_async_backend.db.transaction import (
 class AsyncModel:
     """Mixin that adds truly async asave() and adelete() to Django models."""
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, async_mro_strict=True, **kwargs):
         super().__init_subclass__(**kwargs)
+        if not async_mro_strict:
+            return
         for klass in cls.__mro__:
             if klass is AsyncModel:
                 break
