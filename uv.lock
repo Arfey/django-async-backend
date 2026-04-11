@@ -166,14 +166,14 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "django", specifier = ">=6" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3" },
+    { name = "psycopg", extras = ["binary"], specifier = "==3.3.3" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = "==1.20.0" },
     { name = "pre-commit", specifier = "==4.5.1" },
-    { name = "psycopg", extras = ["pool"], specifier = ">=3" },
+    { name = "psycopg", extras = ["pool"], specifier = "==3.3.3" },
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "pytest-cov", specifier = "==7.1.0" },
