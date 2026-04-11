@@ -2,19 +2,15 @@ import asyncio
 import threading
 from unittest.mock import AsyncMock
 
-from django.test import SimpleTestCase
+import pytest
 from django.test.utils import override_settings
 from django.utils.connection import ConnectionDoesNotExist
 
 from django_async_backend.utils.connection import BaseAsyncConnectionHandler
 
 default_settings = {
-    "first": {
-        "key": "value1",
-    },
-    "second": {
-        "key": "value2",
-    },
+    "first": {"key": "value1"},
+    "second": {"key": "value2"},
 }
 
 
@@ -29,216 +25,208 @@ class BaseAsyncConnectionHandlerExample(BaseAsyncConnectionHandler):
         return AsyncConnection(alias)
 
 
-class BaseAsyncConnectionHandlerTest(SimpleTestCase):
-    def setUp(self):
-        self.handler = BaseAsyncConnectionHandlerExample(default_settings)
+@pytest.fixture
+def handler():
+    return BaseAsyncConnectionHandlerExample(default_settings)
 
-    def test_settings_from_class(self):
-        self.assertEqual(self.handler.settings, default_settings)
 
-    @override_settings(setting_name=default_settings)
-    def test_settings_from_django_config(self):
-        class CustomNameConnectorHandler(BaseAsyncConnectionHandler):
-            settings_name = "setting_name"
+def test_settings_from_class(handler):
+    assert handler.settings == default_settings
 
-        handler = CustomNameConnectorHandler()
-        self.assertEqual(handler.settings, default_settings)
 
-    def test_create_connection(self):
-        class ConnectionHandler(BaseAsyncConnectionHandler):
-            def create_connection(self, alias):
-                return super().create_connection(alias)
+def test_settings_from_django_config():
+    class CustomNameConnectorHandler(BaseAsyncConnectionHandler):
+        settings_name = "setting_name"
 
-        msg = "Subclasses must implement create_connection()."
-        with self.assertRaisesMessage(NotImplementedError, msg):
-            ConnectionHandler().create_connection(None)
+    with override_settings(setting_name=default_settings):
+        custom = CustomNameConnectorHandler()
+        assert custom.settings == default_settings
 
-    def test_iter(self):
-        self.assertEqual(list(self.handler), list(default_settings))
 
-    def test_getitem(self):
-        conn1 = self.handler["first"]
-        self.assertEqual(conn1.alias, "first")
-        self.assertEqual(id(conn1), id(self.handler["first"]))
+def test_create_connection_not_implemented():
+    class ConnectionHandler(BaseAsyncConnectionHandler):
+        def create_connection(self, alias):
+            return super().create_connection(alias)
 
-        conn2 = self.handler["second"]
-        self.assertEqual(conn2.alias, "second")
-        self.assertEqual(id(conn2), id(self.handler["second"]))
+    with pytest.raises(NotImplementedError, match="Subclasses must implement create_connection()."):
+        ConnectionHandler().create_connection(None)
 
-    def test_getitem_wrong_alias(self):
-        msg = "The connection 'wrong_alias' doesn't exist."
-        with self.assertRaisesRegex(ConnectionDoesNotExist, msg):
-            self.handler["wrong_alias"]
 
-    def test_setitem(self):
-        conn = AsyncConnection("my custom")
-        self.handler["first"] = conn
+def test_iter(handler):
+    assert list(handler) == list(default_settings)
 
-        self.assertEqual(self.handler["first"], conn)
 
-    def test_delitem(self):
-        conn = self.handler["first"]
-        del self.handler["first"]
+def test_getitem_returns_same_instance(handler):
+    conn1 = handler["first"]
+    assert conn1.alias == "first"
+    assert id(conn1) == id(handler["first"])
 
-        self.assertNotEqual(conn, self.handler["first"])
+    conn2 = handler["second"]
+    assert conn2.alias == "second"
+    assert id(conn2) == id(handler["second"])
 
-    def test_all(self):
-        connections = self.handler.all()
 
-        self.assertEqual(len(connections), 2)
+def test_getitem_wrong_alias_raises(handler):
+    with pytest.raises(ConnectionDoesNotExist, match="The connection 'wrong_alias' doesn't exist."):
+        handler["wrong_alias"]
 
-        conn1, conn2 = connections
-        self.assertEqual(conn1.alias, "first")
-        self.assertEqual(conn2.alias, "second")
 
-    def test_all_initialized_only(self):
-        self.assertEqual(self.handler.all(initialized_only=True), [])
+def test_setitem(handler):
+    conn = AsyncConnection("my custom")
+    handler["first"] = conn
+    assert handler["first"] == conn
 
-    async def test_close_all(self):
-        conn1 = self.handler["first"]
-        conn2 = self.handler["second"]
 
-        conn1.close.assert_not_called()
-        conn2.close.assert_not_called()
+def test_delitem_creates_new_instance(handler):
+    conn = handler["first"]
+    del handler["first"]
+    assert conn != handler["first"]
 
-        await self.handler.close_all()
 
-        conn1.close.assert_called_once_with()
-        conn2.close.assert_called_once_with()
+def test_all_returns_all_connections(handler):
+    connections = handler.all()
+    assert len(connections) == 2
+    conn1, conn2 = connections
+    assert conn1.alias == "first"
+    assert conn2.alias == "second"
 
-    async def test_independent_connection_async_concurrent(self):
-        connections = []
-        origin_conn = self.handler["first"]
 
-        async def load():
-            self.assertEqual(origin_conn, self.handler["first"])
+def test_all_initialized_only_empty_when_not_accessed(handler):
+    assert handler.all(initialized_only=True) == []
 
-            async with self.handler._independent_connection():
-                connections.append(self.handler["first"])
 
-        await asyncio.gather(load(), load(), load())
-        connections_ids = set([id(conn) for conn in connections])
+async def test_close_all_closes_each_connection(handler):
+    conn1 = handler["first"]
+    conn2 = handler["second"]
+    conn1.close.assert_not_called()
+    conn2.close.assert_not_called()
 
-        self.assertEqual(len(connections_ids), 3)
-        self.assertEqual(len(connections_ids | {id(origin_conn)}), 4)
+    await handler.close_all()
 
-        for conn in connections:
-            conn.close.assert_called_once_with()
+    conn1.close.assert_called_once_with()
+    conn2.close.assert_called_once_with()
 
-        self.assertEqual(origin_conn, self.handler["first"])
 
-    async def test_independent_connection_nested(self):
-        connections = []
-        origin_conn = self.handler["first"]
+async def test_independent_connection_async_concurrent(handler):
+    connections = []
+    origin_conn = handler["first"]
 
-        async with self.handler._independent_connection():
-            conn1 = self.handler["first"]
-            connections.append(conn1)
+    async def load():
+        assert origin_conn == handler["first"]
+        async with handler._independent_connection():
+            connections.append(handler["first"])
 
-            async with self.handler._independent_connection():
-                conn2 = self.handler["first"]
-                connections.append(conn2)
-                self.assertNotEqual(conn1, conn2)
+    await asyncio.gather(load(), load(), load())
+    connections_ids = {id(conn) for conn in connections}
 
-            self.assertEqual(conn1, self.handler["first"])
+    assert len(connections_ids) == 3
+    assert len(connections_ids | {id(origin_conn)}) == 4
 
-            async with self.handler._independent_connection():
-                conn3 = self.handler["first"]
-                connections.append(conn3)
-                self.assertNotEqual(conn1, conn3)
+    for conn in connections:
+        conn.close.assert_called_once_with()
 
-            self.assertEqual(conn1, self.handler["first"])
+    assert origin_conn == handler["first"]
 
-        connections_ids = set([id(conn) for conn in connections])
 
-        self.assertEqual(len(connections_ids), 3)
-        self.assertEqual(len(connections_ids | {id(origin_conn)}), 4)
+async def test_independent_connection_nested(handler):
+    connections = []
+    origin_conn = handler["first"]
 
-        for conn in connections:
-            conn.close.assert_called_once_with()
+    async with handler._independent_connection():
+        conn1 = handler["first"]
+        connections.append(conn1)
 
-        self.assertEqual(origin_conn, self.handler["first"])
+        async with handler._independent_connection():
+            conn2 = handler["first"]
+            connections.append(conn2)
+            assert conn1 != conn2
 
-    async def test_independent_connection_with_exception(self):
-        class AsyncConnectionWithException:
-            def __init__(self, alias):
-                self.alias = alias
-                self.close = AsyncMock()
-                self.close.side_effect = Exception
+        assert conn1 == handler["first"]
 
-        class BaseAsyncConnectionHandlerWithError(BaseAsyncConnectionHandlerExample):
-            def create_connection(self, alias):
-                return AsyncConnectionWithException(alias)
+        async with handler._independent_connection():
+            conn3 = handler["first"]
+            connections.append(conn3)
+            assert conn1 != conn3
 
-        handler = BaseAsyncConnectionHandlerWithError(default_settings)
-        origin_conn = handler["first"]
-        connections = []
+        assert conn1 == handler["first"]
 
-        async def load():
-            async with handler._independent_connection():
-                connections.append(handler["first"])
+    connections_ids = {id(conn) for conn in connections}
+    assert len(connections_ids) == 3
+    assert len(connections_ids | {id(origin_conn)}) == 4
 
-        with self.assertRaises(Exception):
-            await asyncio.create_task(load())
+    for conn in connections:
+        conn.close.assert_called_once_with()
 
-        with self.assertRaises(Exception):
-            async with handler._independent_connection():
-                connections.append(handler["first"])
+    assert origin_conn == handler["first"]
 
-        connections_ids = set([id(conn) for conn in connections])
 
-        self.assertEqual(len(connections_ids), 2)
-        self.assertEqual(len(connections_ids | {id(origin_conn)}), 3)
+async def test_independent_connection_with_exception():
+    class AsyncConnectionWithException:
+        def __init__(self, alias):
+            self.alias = alias
+            self.close = AsyncMock()
+            self.close.side_effect = Exception
 
-        for conn in connections:
-            conn.close.assert_called_once_with()
+    class BaseAsyncConnectionHandlerWithError(BaseAsyncConnectionHandlerExample):
+        def create_connection(self, alias):
+            return AsyncConnectionWithException(alias)
 
-        self.assertEqual(origin_conn, handler["first"])
+    handler = BaseAsyncConnectionHandlerWithError(default_settings)
+    origin_conn = handler["first"]
+    connections = []
 
-    async def test_thread_critical_for_threads(self):
-        origin_connections_map = {}
-        separate_connections_map = {}
+    async def load():
+        async with handler._independent_connection():
+            connections.append(handler["first"])
 
-        origin_connections_map["first"] = self.handler["first"]
-
-        def target():
-            separate_connections_map["first"] = self.handler["first"]
-            separate_connections_map["second"] = self.handler["second"]
-
-        t = threading.Thread(target=target)
-        t.start()
-        t.join()
-
-        origin_connections_map["second"] = self.handler["second"]
-
-        self.assertNotEqual(
-            origin_connections_map["first"],
-            separate_connections_map["first"],
-        )
-        self.assertNotEqual(
-            origin_connections_map["second"],
-            separate_connections_map["second"],
-        )
-
-    async def test_thread_critical_for_coroutines(self):
-        origin_connections_map = {}
-        separate_connections_map = {}
-
-        origin_connections_map["first"] = self.handler["first"]
-
-        async def load():
-            separate_connections_map["first"] = self.handler["first"]
-            separate_connections_map["second"] = self.handler["second"]
-
+    with pytest.raises(Exception):
         await asyncio.create_task(load())
 
-        origin_connections_map["second"] = self.handler["second"]
+    with pytest.raises(Exception):
+        async with handler._independent_connection():
+            connections.append(handler["first"])
 
-        self.assertEqual(
-            origin_connections_map["first"],
-            separate_connections_map["first"],
-        )
-        self.assertNotEqual(
-            origin_connections_map["second"],
-            separate_connections_map["second"],
-        )
+    connections_ids = {id(conn) for conn in connections}
+    assert len(connections_ids) == 2
+    assert len(connections_ids | {id(origin_conn)}) == 3
+
+    for conn in connections:
+        conn.close.assert_called_once_with()
+
+    assert origin_conn == handler["first"]
+
+
+async def test_thread_critical_isolates_connections_between_threads(handler):
+    origin_connections_map = {}
+    separate_connections_map = {}
+    origin_connections_map["first"] = handler["first"]
+
+    def target():
+        separate_connections_map["first"] = handler["first"]
+        separate_connections_map["second"] = handler["second"]
+
+    t = threading.Thread(target=target)
+    t.start()
+    t.join()
+
+    origin_connections_map["second"] = handler["second"]
+
+    assert origin_connections_map["first"] != separate_connections_map["first"]
+    assert origin_connections_map["second"] != separate_connections_map["second"]
+
+
+async def test_thread_critical_shares_connections_within_task(handler):
+    origin_connections_map = {}
+    separate_connections_map = {}
+    origin_connections_map["first"] = handler["first"]
+
+    async def load():
+        separate_connections_map["first"] = handler["first"]
+        separate_connections_map["second"] = handler["second"]
+
+    await asyncio.create_task(load())
+
+    origin_connections_map["second"] = handler["second"]
+
+    assert origin_connections_map["first"] == separate_connections_map["first"]
+    assert origin_connections_map["second"] != separate_connections_map["second"]

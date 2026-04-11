@@ -1,344 +1,307 @@
-from django.db import (
-    DEFAULT_DB_ALIAS,
-    transaction,
-)
+import logging
+
+import pytest
+from django.db import DEFAULT_DB_ALIAS, transaction
 
 from django_async_backend.db import async_connections
 from django_async_backend.db.transaction import async_atomic
-from django_async_backend.test import AsyncioTransactionTestCase
+from tests.fixtures.reporter_table import fetch_all_reporters
 
 
 class ForcedError(Exception):
     pass
 
 
-async def create_table():
-    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        await cursor.execute(
-            """
-            CREATE TABLE reporter_table_tmp (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL UNIQUE
-            );
-            """
-        )
-
-
-async def drop_table():
-    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        await cursor.execute("DROP TABLE reporter_table_tmp;")
-
-    await async_connections[DEFAULT_DB_ALIAS].close()
-
-
-async def create_instance(id):
+async def _create_int_instance(id):
     async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
         await cursor.execute(f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');")
-
         return int(id)
 
 
-async def get_all():
-    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        res = await cursor.execute("SELECT name FROM reporter_table_tmp order by name;")
-
-        return [int(i[0]) for i in await res.fetchall()]
+async def _fetch_int_ids():
+    rows = await fetch_all_reporters()
+    return [int(r) for r in rows]
 
 
-class TestConnectionOnCommit(AsyncioTransactionTestCase):
-    """
-    Tests for connection.on_commit().
+@pytest.fixture
+async def hook_state(reporter_table_transaction):
+    """Track on_commit notifications. Uses reporter_table_transaction because
+    on_commit semantics require a real BEGIN/COMMIT (not a nested savepoint)."""
+    notified = []
 
-    Creation/checking of database objects in parallel with
-    callback tracking is to verify that the behavior of the
-    two match in all tested cases.
-    """
-
-    async def asyncSetUp(self):
-        await create_table()
-
-    async def asyncTearDown(self):
-        await drop_table()
-
-    def setUp(self):
-        self.notified = []
-
-    def notify(self, id_):
+    def notify(id_):
         if id_ == "error":
             raise ForcedError
-        self.notified.append(id_)
+        notified.append(id_)
 
-    async def do(self, num):
-        """Create a Thing instance and notify about it."""
-        await create_instance(num)
-        await async_connections[DEFAULT_DB_ALIAS].on_commit(lambda: self.notify(num))
+    async def do(num):
+        """Create a reporter and register an on_commit notification."""
+        await _create_int_instance(num)
+        await async_connections[DEFAULT_DB_ALIAS].on_commit(lambda: notify(num))
 
-    async def assertDone(self, nums):
-        self.assertNotified(nums)
-        self.assertEqual(sorted(await get_all()), sorted(nums))
+    async def assert_done(nums):
+        assert notified == nums
+        assert sorted(await _fetch_int_ids()) == sorted(nums)
 
-    def assertNotified(self, nums):
-        self.assertEqual(self.notified, nums)
+    return type(
+        "HookState",
+        (),
+        {
+            "notified": notified,
+            "notify": staticmethod(notify),
+            "do": staticmethod(do),
+            "assert_done": staticmethod(assert_done),
+        },
+    )()
 
-    async def test_executes_immediately_if_no_transaction(self):
-        await self.do(1)
-        await self.assertDone([1])
 
-    async def test_robust_if_no_transaction(self):
-        connection = async_connections[DEFAULT_DB_ALIAS]
+async def test_executes_immediately_if_no_transaction(hook_state):
+    await hook_state.do(1)
+    await hook_state.assert_done([1])
 
-        def robust_callback():
-            raise ForcedError("robust callback")
 
-        with self.assertLogs("django_async_backend.db.backends", "ERROR") as cm:
+async def test_robust_if_no_transaction(hook_state, caplog):
+    connection = async_connections[DEFAULT_DB_ALIAS]
+
+    def robust_callback():
+        raise ForcedError("robust callback")
+
+    with caplog.at_level(logging.ERROR, logger="django_async_backend.db.backends"):
+        await connection.on_commit(robust_callback, robust=True)
+        await hook_state.do(1)
+
+    await hook_state.assert_done([1])
+    log_record = caplog.records[0]
+    assert "robust_callback in on_commit() (robust callback)" in log_record.getMessage()
+    assert log_record.exc_info is not None
+    raised = log_record.exc_info[1]
+    assert isinstance(raised, ForcedError)
+    assert str(raised) == "robust callback"
+
+
+async def test_robust_transaction(hook_state, caplog):
+    connection = async_connections[DEFAULT_DB_ALIAS]
+
+    def robust_callback():
+        raise ForcedError("robust callback")
+
+    with caplog.at_level(logging.ERROR, logger="django_async_backend.db.backends"):
+        async with async_atomic():
             await connection.on_commit(robust_callback, robust=True)
-            await self.do(1)
+            await hook_state.do(1)
 
-        await self.assertDone([1])
-        log_record = cm.records[0]
-        self.assertEqual(
-            log_record.getMessage(),
-            "Error calling TestConnectionOnCommit."
-            "test_robust_if_no_transaction."
-            "<locals>.robust_callback in on_commit() (robust callback).",
-        )
-        self.assertIsNotNone(log_record.exc_info)
-        raised_exception = log_record.exc_info[1]
-        self.assertIsInstance(raised_exception, ForcedError)
-        self.assertEqual(str(raised_exception), "robust callback")
+    await hook_state.assert_done([1])
+    log_record = caplog.records[0]
+    assert "robust_callback in on_commit() during transaction (robust callback)" in log_record.getMessage()
+    assert log_record.exc_info is not None
+    raised = log_record.exc_info[1]
+    assert isinstance(raised, ForcedError)
+    assert str(raised) == "robust callback"
 
-    async def test_robust_transaction(self):
-        connection = async_connections[DEFAULT_DB_ALIAS]
 
-        def robust_callback():
-            raise ForcedError("robust callback")
+async def test_delays_execution_until_after_transaction_commit(hook_state):
+    async with async_atomic():
+        await hook_state.do(1)
+        assert hook_state.notified == []
+    await hook_state.assert_done([1])
 
-        with self.assertLogs("django_async_backend.db.backends", "ERROR") as cm:
-            async with async_atomic():
-                await connection.on_commit(robust_callback, robust=True)
-                await self.do(1)
 
-        await self.assertDone([1])
-        log_record = cm.records[0]
-        self.assertEqual(
-            log_record.getMessage(),
-            "Error calling TestConnectionOnCommit."
-            "test_robust_transaction.<locals>."
-            "robust_callback in on_commit() during"
-            " transaction (robust callback).",
-        )
-        self.assertIsNotNone(log_record.exc_info)
-        raised_exception = log_record.exc_info[1]
-        self.assertIsInstance(raised_exception, ForcedError)
-        self.assertEqual(str(raised_exception), "robust callback")
-
-    async def test_delays_execution_until_after_transaction_commit(self):
+async def test_does_not_execute_if_transaction_rolled_back(hook_state):
+    with pytest.raises(ForcedError):
         async with async_atomic():
-            await self.do(1)
-            self.assertNotified([])
-        await self.assertDone([1])
+            await hook_state.do(1)
+            raise ForcedError
 
-    async def test_does_not_execute_if_transaction_rolled_back(self):
-        try:
+    await hook_state.assert_done([])
+
+
+async def test_executes_only_after_final_transaction_committed(hook_state):
+    async with async_atomic():
+        async with async_atomic():
+            await hook_state.do(1)
+            assert hook_state.notified == []
+        assert hook_state.notified == []
+    await hook_state.assert_done([1])
+
+
+async def test_discards_hooks_from_rolled_back_savepoint(hook_state):
+    async with async_atomic():
+        async with async_atomic():
+            await hook_state.do(1)
+        with pytest.raises(ForcedError):
             async with async_atomic():
-                await self.do(1)
+                await hook_state.do(2)
                 raise ForcedError
-        except ForcedError:
-            pass
+        async with async_atomic():
+            await hook_state.do(3)
 
-        await self.assertDone([])
+    await hook_state.assert_done([1, 3])
 
-    async def test_executes_only_after_final_transaction_committed(self):
+
+async def test_no_hooks_run_from_failed_transaction(hook_state):
+    """If outer transaction fails, no hooks from within it run."""
+    with pytest.raises(ForcedError):
         async with async_atomic():
             async with async_atomic():
-                await self.do(1)
-                self.assertNotified([])
-            self.assertNotified([])
-        await self.assertDone([1])
+                await hook_state.do(1)
+            raise ForcedError
 
-    async def test_discards_hooks_from_rolled_back_savepoint(self):
-        async with async_atomic():
-            # one successful savepoint
-            async with async_atomic():
-                await self.do(1)
-            # one failed savepoint
-            try:
-                async with async_atomic():
-                    await self.do(2)
-                    raise ForcedError
-            except ForcedError:
-                pass
-            # another successful savepoint
-            async with async_atomic():
-                await self.do(3)
+    await hook_state.assert_done([])
 
-        # only hooks registered during successful savepoints execute
-        await self.assertDone([1, 3])
 
-    async def test_no_hooks_run_from_failed_transaction(self):
-        """If outer transaction fails, no hooks from within it run."""
-        try:
+async def test_inner_savepoint_rolled_back_with_outer(hook_state):
+    async with async_atomic():
+        with pytest.raises(ForcedError):
             async with async_atomic():
                 async with async_atomic():
-                    await self.do(1)
+                    await hook_state.do(1)
                 raise ForcedError
-        except ForcedError:
-            pass
+        await hook_state.do(2)
 
-        await self.assertDone([])
+    await hook_state.assert_done([2])
 
-    async def test_inner_savepoint_rolled_back_with_outer(self):
-        async with async_atomic():
-            try:
-                async with async_atomic():
-                    async with async_atomic():
-                        await self.do(1)
-                    raise ForcedError
-            except ForcedError:
-                pass
-            await self.do(2)
 
-        await self.assertDone([2])
-
-    async def test_no_savepoints_atomic_merged_with_outer(self):
-
-        async with async_atomic(), async_atomic():
-            await self.do(1)
-            try:
-                async with async_atomic(savepoint=False):
-                    raise ForcedError
-            except ForcedError:
-                pass
-
-        await self.assertDone([])
-
-    async def test_inner_savepoint_does_not_affect_outer(self):
-        async with async_atomic(), async_atomic():
-            await self.do(1)
-            try:
-                async with async_atomic():
-                    raise ForcedError
-            except ForcedError:
-                pass
-
-        await self.assertDone([1])
-
-    async def test_runs_hooks_in_order_registered(self):
-        async with async_atomic():
-            await self.do(1)
-            async with async_atomic():
-                await self.do(2)
-            await self.do(3)
-
-        await self.assertDone([1, 2, 3])
-
-    async def test_hooks_cleared_after_successful_commit(self):
-        async with async_atomic():
-            await self.do(1)
-        async with async_atomic():
-            await self.do(2)
-
-        await self.assertDone([1, 2])  # not [1, 1, 2]
-
-    async def test_hooks_cleared_after_rollback(self):
-        try:
-            async with async_atomic():
-                await self.do(1)
+async def test_no_savepoints_atomic_merged_with_outer(hook_state):
+    async with async_atomic(), async_atomic():
+        await hook_state.do(1)
+        with pytest.raises(ForcedError):
+            async with async_atomic(savepoint=False):
                 raise ForcedError
-        except ForcedError:
-            pass
 
-        async with async_atomic():
-            await self.do(2)
+    await hook_state.assert_done([])
 
-        await self.assertDone([2])
 
-    async def test_hooks_cleared_on_reconnect(self):
-        connection = async_connections[DEFAULT_DB_ALIAS]
-
-        async with async_atomic():
-            await self.do(1)
-            await connection.close()
-
-        await connection.connect()
-
-        async with async_atomic():
-            await self.do(2)
-
-        await self.assertDone([2])
-
-    async def test_error_in_hook_does_not_prevent_clearing_hooks(self):
-        connection = async_connections[DEFAULT_DB_ALIAS]
-
-        try:
+async def test_inner_savepoint_does_not_affect_outer(hook_state):
+    async with async_atomic(), async_atomic():
+        await hook_state.do(1)
+        with pytest.raises(ForcedError):
             async with async_atomic():
-                await connection.on_commit(lambda: self.notify("error"))
-        except ForcedError:
-            pass
+                raise ForcedError
 
+    await hook_state.assert_done([1])
+
+
+async def test_runs_hooks_in_order_registered(hook_state):
+    async with async_atomic():
+        await hook_state.do(1)
         async with async_atomic():
-            await self.do(1)
+            await hook_state.do(2)
+        await hook_state.do(3)
 
-        await self.assertDone([1])
+    await hook_state.assert_done([1, 2, 3])
 
-    async def test_db_query_in_hook(self):
-        connection = async_connections[DEFAULT_DB_ALIAS]
 
-        async def commit():
-            return [self.notify(t) for t in await get_all()]
+async def test_hooks_cleared_after_successful_commit(hook_state):
+    async with async_atomic():
+        await hook_state.do(1)
+    async with async_atomic():
+        await hook_state.do(2)
 
+    await hook_state.assert_done([1, 2])
+
+
+async def test_hooks_cleared_after_rollback(hook_state):
+    with pytest.raises(ForcedError):
         async with async_atomic():
-            await create_instance(1)
-            await connection.on_commit(commit)
+            await hook_state.do(1)
+            raise ForcedError
 
-        await self.assertDone([1])
+    async with async_atomic():
+        await hook_state.do(2)
 
-    async def test_transaction_in_hook(self):
-        connection = async_connections[DEFAULT_DB_ALIAS]
+    await hook_state.assert_done([2])
 
-        async def on_commit():
-            async with async_atomic():
-                t = await create_instance(1)
-                self.notify(t)
 
+async def test_hooks_cleared_on_reconnect(hook_state):
+    connection = async_connections[DEFAULT_DB_ALIAS]
+
+    async with async_atomic():
+        await hook_state.do(1)
+        await connection.close()
+
+    await connection.connect()
+
+    async with async_atomic():
+        await hook_state.do(2)
+
+    await hook_state.assert_done([2])
+
+
+async def test_error_in_hook_does_not_prevent_clearing_hooks(hook_state):
+    connection = async_connections[DEFAULT_DB_ALIAS]
+
+    with pytest.raises(ForcedError):
         async with async_atomic():
-            await connection.on_commit(on_commit)
+            await connection.on_commit(lambda: hook_state.notify("error"))
 
-        await self.assertDone([1])
+    async with async_atomic():
+        await hook_state.do(1)
 
-    async def test_hook_in_hook(self):
-        connection = async_connections[DEFAULT_DB_ALIAS]
+    await hook_state.assert_done([1])
 
-        async def on_commit(i, add_hook):
-            async with async_atomic():
-                if add_hook:
-                    await connection.on_commit(lambda: on_commit(i + 10, False))
-                t = await create_instance(i)
-                self.notify(t)
 
+async def test_db_query_in_hook(hook_state):
+    connection = async_connections[DEFAULT_DB_ALIAS]
+
+    async def commit():
+        return [hook_state.notify(t) for t in await _fetch_int_ids()]
+
+    async with async_atomic():
+        await _create_int_instance(1)
+        await connection.on_commit(commit)
+
+    await hook_state.assert_done([1])
+
+
+async def test_transaction_in_hook(hook_state):
+    connection = async_connections[DEFAULT_DB_ALIAS]
+
+    async def on_commit():
         async with async_atomic():
-            await connection.on_commit(lambda: on_commit(1, True))
-            await connection.on_commit(lambda: on_commit(2, True))
+            t = await _create_int_instance(1)
+            hook_state.notify(t)
 
-        await self.assertDone([1, 11, 2, 12])
+    async with async_atomic():
+        await connection.on_commit(on_commit)
 
-    async def test_raises_exception_non_autocommit_mode(self):
-        connection = async_connections[DEFAULT_DB_ALIAS]
+    await hook_state.assert_done([1])
 
-        def should_never_be_called():
-            raise AssertionError("this function should never be called")
 
-        try:
-            await connection.set_autocommit(False)
-            msg = "cannot be used in manual transaction management"
-            with self.assertRaisesRegex(transaction.TransactionManagementError, msg):
-                await connection.on_commit(should_never_be_called)
-        finally:
-            await connection.set_autocommit(True)
+async def test_hook_in_hook(hook_state):
+    connection = async_connections[DEFAULT_DB_ALIAS]
 
-    async def test_raises_exception_non_callable(self):
-        msg = "callback must be a callable"
-        connection = async_connections[DEFAULT_DB_ALIAS]
+    async def on_commit(i, add_hook):
+        async with async_atomic():
+            if add_hook:
+                await connection.on_commit(lambda: on_commit(i + 10, False))
+            t = await _create_int_instance(i)
+            hook_state.notify(t)
 
-        with self.assertRaisesRegex(TypeError, msg):
-            await connection.on_commit(None)
+    async with async_atomic():
+        await connection.on_commit(lambda: on_commit(1, True))
+        await connection.on_commit(lambda: on_commit(2, True))
+
+    await hook_state.assert_done([1, 11, 2, 12])
+
+
+async def test_raises_exception_non_autocommit_mode(reporter_table_transaction):
+    connection = async_connections[DEFAULT_DB_ALIAS]
+
+    def should_never_be_called():
+        raise AssertionError("this function should never be called")
+
+    try:
+        await connection.set_autocommit(False)
+        with pytest.raises(
+            transaction.TransactionManagementError,
+            match="cannot be used in manual transaction management",
+        ):
+            await connection.on_commit(should_never_be_called)
+    finally:
+        await connection.set_autocommit(True)
+
+
+async def test_raises_exception_non_callable(reporter_table_transaction):
+    connection = async_connections[DEFAULT_DB_ALIAS]
+    with pytest.raises(TypeError, match="callback must be a callable"):
+        await connection.on_commit(None)

@@ -104,12 +104,16 @@ ignore = [
   "C403",   # Unnecessary list call
   "DTZ001", # Datetime without timezone (test data)
   "F841",   # Unused variables okay in tests
+  "N803",   # Capitalized function args (Django class usage)
   "PERF401", # Use list comprehension (test readability preference)
   "PT006",  # Parametrize tuple style is preference
   "PT009",  # Use pytest.raises instead of unittest-style (we use unittest)
   "PT011",  # Broad pytest.raises okay
+  "PT012",  # Multi-statement pytest.raises blocks (transaction rollback tests)
+  "PT019",  # Fixture-as-parameter without value (state-setup fixtures)
   "PT027",  # Use pytest assert instead of unittest-style (we use unittest)
   "PYI024", # NamedTuple vs TypedDict
+  "RUF043", # Metacharacters in pytest.raises match pattern
   "RUF059", # Unpacked variables (fixture setup returns used for side effects)
   "S101",   # assert in tests
   "S105",   # Hardcoded passwords in test settings

@@ -38,11 +38,41 @@ def pytest_unconfigure(config):
 
 
 @pytest.fixture
+async def reporter_table(async_db):
+    """Create and drop a temporary reporter_table_tmp for tests that need it.
+
+    Uses async_db so table setup runs inside the rolled-back test transaction.
+    """
+    from tests.fixtures.reporter_table import create_reporter_table, drop_reporter_table
+
+    await create_reporter_table()
+    yield
+    await drop_reporter_table()
+
+
+@pytest.fixture
+async def reporter_table_transaction():
+    """Create and drop a temporary reporter_table_tmp without an outer
+    transaction. Use for tests that need to observe actual BEGIN/COMMIT/ROLLBACK
+    statements or manage connection lifecycle directly.
+    """
+    from django_async_backend.db import async_connections
+    from tests.fixtures.reporter_table import create_reporter_table, drop_reporter_table
+
+    await create_reporter_table()
+    try:
+        yield
+    finally:
+        await drop_reporter_table()
+        await async_connections["default"].close()
+
+
+@pytest.fixture
 async def async_db():
     """Wraps each test in an async transaction that rolls back on completion.
 
-    This is the pytest equivalent of AsyncioTestCase._init_transaction /
-    _close_transaction. Use it for any async test that needs database access.
+    Use for any async test that needs database access and should not persist
+    its changes between tests.
     """
     from django_async_backend.db import async_connections
     from django_async_backend.db.transaction import async_atomic
