@@ -21,7 +21,9 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
         for name in async_connections.settings.keys():
             connection = async_connections[name]
             self.connections[name] = connection
-            self.atomic_cms[name] = async_atomic(name)
+            atomic = async_atomic(name)
+            atomic._from_testcase = True
+            self.atomic_cms[name] = atomic
             self.atomics[name] = await self.atomic_cms[name].__aenter__()
 
     async def _close_transaction(self):

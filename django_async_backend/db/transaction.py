@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import (
     AsyncContextDecorator,
     asynccontextmanager,
@@ -82,8 +83,24 @@ class AsyncAtomic(AsyncContextDecorator):
 
         if self.durable and connection.atomic_blocks and not connection.atomic_blocks[-1]._from_testcase:
             raise RuntimeError("A durable atomic block cannot be nested within another atomic block.")
+        # Reject cross-task nesting (same-task savepoints are fine).
+        # Skip check when the outer block was opened by a test case, since
+        # test harnesses open transactions in a setup task and run tests in
+        # a different one.
+        owner = getattr(connection, "_task_connection_owner", None)
+        if connection.in_atomic_block and owner is not None:
+            from_testcase = connection.atomic_blocks and connection.atomic_blocks[0]._from_testcase
+            current = id(asyncio.current_task())
+            if owner != current and not from_testcase:
+                raise RuntimeError(
+                    "Using a transaction in a nested task is forbidden. "
+                    "Use a higher-level transaction that spans all "
+                    "nested tasks, or create a new connection for the "
+                    "task via _independent_connection."
+                )
         if not connection.in_atomic_block:
             # Reset state when entering an outermost atomic block.
+            connection._task_connection_owner = id(asyncio.current_task())
             connection.commit_on_exit = True
             connection.needs_rollback = False
             if not await connection.get_autocommit():

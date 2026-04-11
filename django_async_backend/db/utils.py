@@ -1,3 +1,5 @@
+import asyncio
+
 from asgiref.sync import iscoroutinefunction
 from django.core.exceptions import ImproperlyConfigured
 from django.db import DEFAULT_DB_ALIAS
@@ -77,4 +79,10 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
         if not hasattr(backend, "AsyncDatabaseWrapper"):
             raise self.exception_class(f"The async connection '{alias}' doesn't exist.")
 
-        return backend.AsyncDatabaseWrapper(db, alias)
+        wrapper = backend.AsyncDatabaseWrapper(db, alias)
+        try:
+            task = asyncio.current_task()
+        except RuntimeError:
+            task = None
+        wrapper._task_connection_owner = id(task) if task else None
+        return wrapper

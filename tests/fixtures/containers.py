@@ -35,6 +35,10 @@ def _start_postgres_container(image: str = DEFAULT_POSTGRES_IMAGE) -> PostgresCo
     container.with_env("POSTGRES_PASSWORD", password)
     container.with_env("POSTGRES_DB", dbname)
     container.start()
+    # Postgres logs "ready to accept connections" twice: once during init
+    # (stdout) and once after the restart (stderr). The init completion
+    # message only appears once, right before the final startup.
+    wait_for_logs(container, "PostgreSQL init process complete", timeout=30)
     wait_for_logs(container, "database system is ready to accept connections", timeout=30)
 
     return PostgresContainerInfo(
