@@ -85,7 +85,8 @@ async def test_commit_debug_log(reporter_table_transaction, caplog):
 
     assert len(conn.queries_log) >= 3
     assert conn.queries_log[0]["sql"] == "BEGIN"
-    assert conn.queries_log[1]["sql"] == "INSERT INTO reporter_table_tmp (name) VALUES ('1');"
+    assert "INSERT INTO" in conn.queries_log[1]["sql"]
+    assert "reporter_table_tmp" in conn.queries_log[1]["sql"]
     assert conn.queries_log[2]["sql"] == "COMMIT"
 
     log_messages = [r.getMessage() for r in caplog.records if r.name == "django.db.backends"]
@@ -141,7 +142,7 @@ async def _call_executemany(connection, params=None):
         await cursor.executemany(sql, params)
 
 
-async def test_wrapper_invoked(reporter_table):
+async def test_wrapper_invoked(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
     wrapper = _mock_wrapper()
     with connection.execute_wrapper(wrapper):
@@ -154,7 +155,7 @@ async def test_wrapper_invoked(reporter_table):
     assert context["connection"] == connection
 
 
-async def test_wrapper_invoked_many(reporter_table):
+async def test_wrapper_invoked_many(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
     wrapper = _mock_wrapper()
     with connection.execute_wrapper(wrapper):
@@ -167,7 +168,7 @@ async def test_wrapper_invoked_many(reporter_table):
     assert context["connection"] == connection
 
 
-async def test_database_queried(reporter_table):
+async def test_database_queried(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
     wrapper = _mock_wrapper()
     with connection.execute_wrapper(wrapper):
@@ -179,7 +180,7 @@ async def test_database_queried(reporter_table):
         await _call_executemany(connection)
 
 
-async def test_nested_wrapper_invoked(reporter_table):
+async def test_nested_wrapper_invoked(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
     outer_wrapper = _mock_wrapper()
     inner_wrapper = _mock_wrapper()
@@ -193,7 +194,7 @@ async def test_nested_wrapper_invoked(reporter_table):
         assert inner_wrapper.call_count == 2
 
 
-async def test_outer_wrapper_blocks(reporter_table):
+async def test_outer_wrapper_blocks(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
 
     def blocker(*args):
@@ -212,7 +213,7 @@ async def test_outer_wrapper_blocks(reporter_table):
             assert wrapper.call_count == 2
 
 
-async def test_outer_async_wrapper_blocks(reporter_table):
+async def test_outer_async_wrapper_blocks(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
 
     async def blocker(*args):
@@ -231,7 +232,7 @@ async def test_outer_async_wrapper_blocks(reporter_table):
             assert wrapper.call_count == 2
 
 
-async def test_wrapper_gets_sql(reporter_table):
+async def test_wrapper_gets_sql(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
     wrapper = _mock_wrapper()
     sql = "SELECT 'aloha'" + connection.features.bare_select_suffix
@@ -242,7 +243,7 @@ async def test_wrapper_gets_sql(reporter_table):
     assert reported_sql == sql
 
 
-async def test_wrapper_connection_specific(reporter_table):
+async def test_wrapper_connection_specific(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
     wrapper = _mock_wrapper()
 
@@ -256,7 +257,7 @@ async def test_wrapper_connection_specific(reporter_table):
 
 
 @override_settings(DEBUG=True)
-async def test_wrapper_debug(reporter_table):
+async def test_wrapper_debug(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
 
     def wrap_with_comment(execute, sql, params, many, context):

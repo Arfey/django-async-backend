@@ -116,3 +116,15 @@ class Event(AsyncModel, models.Model):
 
     class Meta:
         db_table = "test_event"
+
+
+class Reporter(AsyncModel, models.Model):
+    """Used by backend and transaction tests that need to observe real
+    BEGIN/COMMIT/ROLLBACK on a table independent of any test transaction."""
+
+    name = models.CharField(max_length=255, unique=True)
+
+    async_object = AsyncManager()
+
+    class Meta:
+        db_table = "reporter_table_tmp"

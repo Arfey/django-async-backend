@@ -39,6 +39,7 @@ from django.db import (
     NotSupportedError,
 )
 from django.db.models.aggregates import Count
+from django.db.models.sql.query import Query as DjangoQuery
 from django.db.models.constants import LOOKUP_SEP
 from django.db.models.expressions import (
     BaseExpression,
@@ -283,8 +284,15 @@ class RawQuery:
 ExplainInfo = namedtuple("ExplainInfo", ("format", "options"))
 
 
-class Query(BaseExpression):
-    """A single SQL query."""
+class Query(DjangoQuery):
+    """A single SQL query.
+
+    Inherits from django.db.models.sql.query.Query (via DjangoQuery alias) so
+    isinstance() checks in Django's lookup code (Exact/In get_prep_lookup) pass
+    and our sliced/values queryset RHS gets the same column-count validation
+    and pk-rewriting that Django's sync path does. Our async overrides
+    (get_compiler, get_aggregation, get_count, etc.) take precedence via MRO.
+    """
 
     alias_prefix = "T"
     empty_result_set_value = None
@@ -565,8 +573,6 @@ class Query(BaseExpression):
             or self.combinator
             or set_returning_annotations
         ):
-            from django.db.models.sql.subqueries import AggregateQuery
-
             inner_query = self.clone()
             inner_query.subquery = True
             outer_query = AggregateQuery(self.model, inner_query)
@@ -2639,6 +2645,19 @@ def get_order_dir(field, default="ASC"):
     if field[0] == "-":
         return field[1:], dirn[1]
     return field, dirn[0]
+
+
+class AggregateQuery(Query):
+    """
+    Async-aware counterpart to django.db.models.sql.subqueries.AggregateQuery.
+    Inheriting from our Query ensures get_compiler() returns our async compiler.
+    """
+
+    compiler = "SQLAggregateCompiler"
+
+    def __init__(self, model, inner_query):
+        self.inner_query = inner_query
+        super().__init__(model)
 
 
 class JoinPromoter:

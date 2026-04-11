@@ -1,6 +1,6 @@
 [project]
 name = "django-async-backend"
-version = "0.1.0"
+version = "0.1.1"
 description = "Django extension providing async capabilities for database and other components"
 readme = "README.md"
 license = { text = "MIT" }

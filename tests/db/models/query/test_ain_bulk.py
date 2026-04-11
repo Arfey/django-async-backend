@@ -51,8 +51,7 @@ async def test_ain_bulk_with_slicing(async_db):
         await sliced_queryset.ain_bulk([obj1.id])
 
 
-async def test_ain_bulk_with_non_model_iterable(async_db):
+async def test_ain_bulk_with_values_iterable(async_db):
     obj1 = await TestModel.async_object.acreate(name="Test1", value=1)
-    queryset = TestModel.async_object.values("name")
-    with pytest.raises(TypeError):
-        await queryset.ain_bulk([obj1.id])
+    result = await TestModel.async_object.values("name").ain_bulk([obj1.id])
+    assert result == {obj1.id: {"name": "Test1"}}

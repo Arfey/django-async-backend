@@ -486,7 +486,7 @@ _PostgresCursor = namedtuple("_PostgresCursor", _CURSOR_FIELDS)
 
 
 @pytest.fixture
-async def reporter_table_with_data(reporter_table):
+async def reporter_table_with_data(async_db):
     """Use async_db-wrapped table so server-side cursors report is_holdable=False
     (cursors are not WITH HOLD inside an active transaction)."""
     await insert_reporter(0)

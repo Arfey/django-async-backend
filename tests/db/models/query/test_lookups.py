@@ -196,12 +196,12 @@ async def test_count(lookup_data):
     assert await Article.async_object.filter(pub_date__exact="2005-07-27 00:00:00").acount() == 3
 
 
-@pytest.mark.skip(
-    reason="needs-followup: acount() on sliced queryset falls through to sync compiler "
-    "(AggregateQuery.get_compiler path) and raises SynchronousOnlyOperation"
-)
-async def test_count_sliced():
-    pass
+async def test_count_sliced(lookup_data):
+    articles = Article.async_object.all()
+    assert await articles.acount() == 7
+    assert await articles[:4].acount() == 4
+    assert await articles[1:100].acount() == 6
+    assert await articles[10:100].acount() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -315,109 +315,172 @@ async def test_in_bulk_sliced_queryset(lookup_data):
 
 
 # ain_bulk() with values()/values_list() is not supported by our async
-# backend (it rejects non-ModelIterable querysets). All these tests are
-# skipped; see needs-followup.
-_IN_BULK_VALUES_SKIP_REASON = "needs-followup: our ain_bulk() rejects values()/values_list() querysets"
+async def test_in_bulk_values_empty(lookup_data):
+    arts = await Article.async_object.values().ain_bulk([])
+    assert arts == {}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_empty():
-    pass
+async def test_in_bulk_values_all(lookup_data):
+    d = lookup_data
+    await Article.async_object.exclude(pk__in=[d.a1.pk, d.a2.pk]).adelete()
+    arts = await Article.async_object.values().ain_bulk()
+    assert arts == {
+        d.a1.pk: {
+            "id": d.a1.pk,
+            "author_id": d.au1.pk,
+            "headline": "Article 1",
+            "pub_date": d.a1.pub_date,
+            "slug": "a1",
+        },
+        d.a2.pk: {
+            "id": d.a2.pk,
+            "author_id": d.au1.pk,
+            "headline": "Article 2",
+            "pub_date": d.a2.pub_date,
+            "slug": "a2",
+        },
+    }
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_all():
-    pass
+async def test_in_bulk_values_pks(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values().ain_bulk([d.a1.pk])
+    assert arts == {
+        d.a1.pk: {
+            "id": d.a1.pk,
+            "author_id": d.au1.pk,
+            "headline": "Article 1",
+            "pub_date": d.a1.pub_date,
+            "slug": "a1",
+        },
+    }
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_pks():
-    pass
+async def test_in_bulk_values_fields(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values("headline").ain_bulk([d.a1.pk])
+    assert arts == {d.a1.pk: {"headline": "Article 1"}}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_fields():
-    pass
+async def test_in_bulk_values_fields_including_pk(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values("pk", "headline").ain_bulk([d.a1.pk])
+    assert arts == {d.a1.pk: {"pk": d.a1.pk, "headline": "Article 1"}}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_fields_including_pk():
-    pass
+async def test_in_bulk_values_fields_pk(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values("pk").ain_bulk([d.a1.pk])
+    assert arts == {d.a1.pk: {"pk": d.a1.pk}}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_fields_pk():
-    pass
+async def test_in_bulk_values_fields_id(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values("id").ain_bulk([d.a1.pk])
+    assert arts == {d.a1.pk: {"id": d.a1.pk}}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_fields_id():
-    pass
+async def test_in_bulk_values_alternative_field_name(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values("headline").ain_bulk([d.a1.slug], field_name="slug")
+    assert arts == {d.a1.slug: {"headline": "Article 1"}}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_alternative_field_name():
-    pass
+async def test_in_bulk_values_list_empty(lookup_data):
+    arts = await Article.async_object.values_list().ain_bulk([])
+    assert arts == {}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_empty():
-    pass
+async def test_in_bulk_values_list_all(lookup_data):
+    d = lookup_data
+    await Article.async_object.exclude(pk__in=[d.a1.pk, d.a2.pk]).adelete()
+    arts = await Article.async_object.values_list().ain_bulk()
+    assert arts == {
+        d.a1.pk: (d.a1.pk, "Article 1", d.a1.pub_date, d.au1.pk, "a1"),
+        d.a2.pk: (d.a2.pk, "Article 2", d.a2.pub_date, d.au1.pk, "a2"),
+    }
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_all():
-    pass
+async def test_in_bulk_values_list_fields(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values_list("headline").ain_bulk([d.a1.pk, d.a2.pk])
+    assert arts == {d.a1.pk: ("Article 1",), d.a2.pk: ("Article 2",)}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_fields():
-    pass
+async def test_in_bulk_values_list_fields_including_pk(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values_list("pk", "headline").ain_bulk([d.a1.pk, d.a2.pk])
+    assert arts == {
+        d.a1.pk: (d.a1.pk, "Article 1"),
+        d.a2.pk: (d.a2.pk, "Article 2"),
+    }
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_fields_including_pk():
-    pass
+async def test_in_bulk_values_list_fields_pk(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values_list("pk").ain_bulk([d.a1.pk, d.a2.pk])
+    assert arts == {d.a1.pk: (d.a1.pk,), d.a2.pk: (d.a2.pk,)}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_fields_pk():
-    pass
+async def test_in_bulk_values_list_fields_id(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values_list("id").ain_bulk([d.a1.pk, d.a2.pk])
+    assert arts == {d.a1.pk: (d.a1.pk,), d.a2.pk: (d.a2.pk,)}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_fields_id():
-    pass
+async def test_in_bulk_values_list_named(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values_list(named=True).ain_bulk([d.a1.pk, d.a2.pk])
+    assert isinstance(arts, dict)
+    assert len(arts) == 2
+    arts1 = arts[d.a1.pk]
+    assert arts1._fields == ("pk", "id", "headline", "pub_date", "author_id", "slug")
+    assert arts1.pk == d.a1.pk
+    assert arts1.headline == "Article 1"
+    assert arts1.pub_date == d.a1.pub_date
+    assert arts1.author_id == d.au1.pk
+    assert arts1.slug == "a1"
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_named():
-    pass
+async def test_in_bulk_values_list_named_fields(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values_list("pk", "headline", named=True).ain_bulk([d.a1.pk, d.a2.pk])
+    assert isinstance(arts, dict)
+    assert len(arts) == 2
+    arts1 = arts[d.a1.pk]
+    assert arts1._fields == ("pk", "headline")
+    assert arts1.pk == d.a1.pk
+    assert arts1.headline == "Article 1"
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_named_fields():
-    pass
+async def test_in_bulk_values_list_named_fields_alternative_field(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values_list("headline", named=True).ain_bulk(
+        [d.a1.slug, d.a2.slug], field_name="slug"
+    )
+    assert len(arts) == 2
+    arts1 = arts[d.a1.slug]
+    assert arts1._fields == ("slug", "headline")
+    assert arts1.slug == "a1"
+    assert arts1.headline == "Article 1"
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_named_fields_alternative_field():
-    pass
+async def test_in_bulk_values_list_flat_field(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values_list("headline", flat=True).ain_bulk([d.a1.pk, d.a2.pk])
+    assert arts == {d.a1.pk: "Article 1", d.a2.pk: "Article 2"}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_flat_field():
-    pass
+async def test_in_bulk_values_list_flat_field_pk(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values_list("pk", flat=True).ain_bulk([d.a1.pk, d.a2.pk])
+    assert arts == {d.a1.pk: d.a1.pk, d.a2.pk: d.a2.pk}
 
 
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_flat_field_pk():
-    pass
-
-
-@pytest.mark.skip(reason=_IN_BULK_VALUES_SKIP_REASON)
-async def test_in_bulk_values_list_flat_field_id():
-    pass
+async def test_in_bulk_values_list_flat_field_id(lookup_data):
+    d = lookup_data
+    arts = await Article.async_object.values_list("id", flat=True).ain_bulk([d.a1.pk, d.a2.pk])
+    assert arts == {d.a1.pk: d.a1.pk, d.a2.pk: d.a2.pk}
 
 
 @pytest.mark.skip(reason="RemovedInDjango70Warning deprecation path; values_list(flat=True) with no field")
@@ -844,12 +907,10 @@ async def test_in_ignore_none_with_unhashable_items(lookup_data):
     assert results == [d.a1]
 
 
-@pytest.mark.skip(
-    reason="needs-followup: our async in-lookup with multi-column subquery falls through "
-    "to DB and raises ProgrammingError instead of ValueError('must have 1 selected field')"
-)
-async def test_in_select_mismatch():
-    pass
+async def test_in_select_mismatch(async_db):
+    msg = "The QuerySet value for the 'in' lookup must have 1 selected fields \\(received 2\\)"
+    with pytest.raises(ValueError, match=msg):
+        Article.async_object.filter(id__in=Article.async_object.values("id", "headline"))
 
 
 # ---------------------------------------------------------------------------
@@ -1188,28 +1249,24 @@ async def test_lookup_collision(async_db):
     assert await Game.async_object.filter(season__gt__in=[222, 333]).acount() == 5
     assert await Game.async_object.filter(season__gt__gt=111).acount() == 5
 
-    # Players who played in 2009 (.distinct().acount() hits sync compiler path;
-    # materialize and count the unique rows instead — see needs-followup).
-    async def distinct_count(qs):
-        return len({p.pk async for p in qs})
-
-    assert await distinct_count(Player.async_object.filter(games__season__year=2009)) == 2
-    assert await distinct_count(Player.async_object.filter(games__season__year__exact=2009)) == 2
-    assert await distinct_count(Player.async_object.filter(games__season__gt=111)) == 2
-    assert await distinct_count(Player.async_object.filter(games__season__gt__exact=111)) == 2
+    # Players who played in 2009
+    assert await Player.async_object.filter(games__season__year=2009).distinct().acount() == 2
+    assert await Player.async_object.filter(games__season__year__exact=2009).distinct().acount() == 2
+    assert await Player.async_object.filter(games__season__gt=111).distinct().acount() == 2
+    assert await Player.async_object.filter(games__season__gt__exact=111).distinct().acount() == 2
 
     # Players who played in 2010
-    assert await distinct_count(Player.async_object.filter(games__season__year=2010)) == 1
-    assert await distinct_count(Player.async_object.filter(games__season__year__exact=2010)) == 1
-    assert await distinct_count(Player.async_object.filter(games__season__gt=222)) == 1
-    assert await distinct_count(Player.async_object.filter(games__season__gt__exact=222)) == 1
+    assert await Player.async_object.filter(games__season__year=2010).distinct().acount() == 1
+    assert await Player.async_object.filter(games__season__year__exact=2010).distinct().acount() == 1
+    assert await Player.async_object.filter(games__season__gt=222).distinct().acount() == 1
+    assert await Player.async_object.filter(games__season__gt__exact=222).distinct().acount() == 1
 
     # Players who played in 2011
-    assert await distinct_count(Player.async_object.filter(games__season__year=2011)) == 2
-    assert await distinct_count(Player.async_object.filter(games__season__year__exact=2011)) == 2
-    assert await distinct_count(Player.async_object.filter(games__season__gt=333)) == 2
-    assert await distinct_count(Player.async_object.filter(games__season__year__gt=2010)) == 2
-    assert await distinct_count(Player.async_object.filter(games__season__gt__gt=222)) == 2
+    assert await Player.async_object.filter(games__season__year=2011).distinct().acount() == 2
+    assert await Player.async_object.filter(games__season__year__exact=2011).distinct().acount() == 2
+    assert await Player.async_object.filter(games__season__gt=333).distinct().acount() == 2
+    assert await Player.async_object.filter(games__season__year__gt=2010).distinct().acount() == 2
+    assert await Player.async_object.filter(games__season__gt__gt=222).distinct().acount() == 2
 
 
 # ---------------------------------------------------------------------------
@@ -1246,26 +1303,26 @@ async def test_exact_none_transform(async_db):
     assert await Season.async_object.filter(nulled_text_field__nulled=None).aexists()
 
 
-@pytest.mark.skip(
-    reason="needs-followup: filter(fk=qs[:1]) emits a multi-column subquery that "
-    "PostgreSQL rejects ('subquery must return only one column'); Django's sync path "
-    "rewrites this to select only pk"
-)
-async def test_exact_sliced_queryset_limit_one():
-    pass
+async def test_exact_sliced_queryset_limit_one(lookup_data):
+    d = lookup_data
+    qs = Article.async_object.filter(author=Author.async_object.all()[:1])
+    actual = sorted([a.pk async for a in qs])
+    assert actual == sorted(a.pk for a in [d.a1, d.a2, d.a3, d.a4])
 
 
-@pytest.mark.skip(reason="needs-followup: filter(fk=qs[1:2]) emits a multi-column subquery (see above)")
-async def test_exact_sliced_queryset_limit_one_offset():
-    pass
+async def test_exact_sliced_queryset_limit_one_offset(lookup_data):
+    d = lookup_data
+    qs = Article.async_object.filter(author=Author.async_object.all()[1:2])
+    actual = sorted([a.pk async for a in qs])
+    assert actual == sorted(a.pk for a in [d.a5, d.a6, d.a7])
 
 
-@pytest.mark.skip(
-    reason="needs-followup: same as above — our async path doesn't raise the "
-    "ValueError('must be limited to one result using slicing') at query build time"
-)
-async def test_exact_sliced_queryset_not_limited_to_one():
-    pass
+async def test_exact_sliced_queryset_not_limited_to_one(lookup_data):
+    msg = "The QuerySet value for an exact lookup must be limited to one result using slicing."
+    with pytest.raises(ValueError, match=msg):
+        [_ async for _ in Article.async_object.filter(author=Author.async_object.all()[:2])]
+    with pytest.raises(ValueError, match=msg):
+        [_ async for _ in Article.async_object.filter(author=Author.async_object.all()[1:])]
 
 
 @pytest.mark.skip(reason="MySQL-specific test; we target PostgreSQL")
@@ -1342,12 +1399,10 @@ async def test_exact_query_rhs_with_selected_columns(async_db):
     assert result == newest_author
 
 
-@pytest.mark.skip(
-    reason="needs-followup: our async path doesn't raise ValueError for multi-column "
-    "values()[:1] subqueries in exact lookups; falls through to DB"
-)
-async def test_exact_query_rhs_with_selected_columns_mismatch():
-    pass
+async def test_exact_query_rhs_with_selected_columns_mismatch(async_db):
+    msg = "The QuerySet value for the exact lookup must have 1 selected fields \\(received 2\\)"
+    with pytest.raises(ValueError, match=msg):
+        Author.async_object.filter(id=Author.async_object.values("id", "name")[:1])
 
 
 async def test_isnull_non_boolean_value(lookup_data):

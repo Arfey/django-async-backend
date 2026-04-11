@@ -75,6 +75,7 @@ from django.db.models.functions import (
     Coalesce,
     Concat,
     ExtractDay,
+    Left,
     Length,
     Lower,
     Substr,
@@ -1027,12 +1028,22 @@ async def test_outerref_with_operator(basic_expressions_data):
     assert (await outer.aget()).name == "Test GmbH"
 
 
-@pytest.mark.skip(
-    reason="needs-followup: queryset RHS in __in subquery emits multiple columns "
-    "(our async path doesn't auto-select pk)"
-)
-async def test_nested_outerref_with_function():
-    pass
+async def test_nested_outerref_with_function(basic_expressions_data):
+    d = basic_expressions_data
+    d.gmbh.point_of_contact = await Employee.async_object.aget(lastname="Meyer")
+    await d.gmbh.asave()
+    inner = Employee.async_object.filter(
+        lastname__startswith=Left(OuterRef(OuterRef("lastname")), 1),
+    )
+    qs = Employee.async_object.annotate(
+        ceo_company=Subquery(
+            Company.async_object.filter(
+                point_of_contact__in=inner,
+                ceo__pk=OuterRef("pk"),
+            ).values("name"),
+        ),
+    ).filter(ceo_company__isnull=False)
+    assert (await qs.aget()).ceo_company == "Test GmbH"
 
 
 async def test_annotation_with_outerref(basic_expressions_data):
@@ -1065,12 +1076,22 @@ async def test_annotation_with_outerref_and_output_field(basic_expressions_data)
     assert isinstance(gmbh_salary.max_ceo_salary_raise, Decimal)
 
 
-@pytest.mark.skip(
-    reason="needs-followup: queryset RHS in __in subquery emits multiple columns "
-    "(our async path doesn't auto-select pk)"
-)
-async def test_annotation_with_nested_outerref():
-    pass
+async def test_annotation_with_nested_outerref(basic_expressions_data):
+    d = basic_expressions_data
+    d.gmbh.point_of_contact = await Employee.async_object.aget(lastname="Meyer")
+    await d.gmbh.asave()
+    inner = Employee.async_object.annotate(
+        outer_lastname=OuterRef(OuterRef("lastname")),
+    ).filter(lastname__startswith=Left("outer_lastname", 1))
+    qs = Employee.async_object.annotate(
+        ceo_company=Subquery(
+            Company.async_object.filter(
+                point_of_contact__in=inner,
+                ceo__pk=OuterRef("pk"),
+            ).values("name"),
+        ),
+    ).filter(ceo_company__isnull=False)
+    assert (await qs.aget()).ceo_company == "Test GmbH"
 
 
 async def test_annotation_with_deeply_nested_outerref(basic_expressions_data):

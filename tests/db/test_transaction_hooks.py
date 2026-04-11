@@ -2,6 +2,7 @@ import logging
 
 import pytest
 from django.db import DEFAULT_DB_ALIAS, transaction
+from shared.models import Reporter
 
 from django_async_backend.db import async_connections
 from django_async_backend.db.transaction import async_atomic
@@ -13,9 +14,8 @@ class ForcedError(Exception):
 
 
 async def _create_int_instance(id):
-    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
-        await cursor.execute(f"INSERT INTO reporter_table_tmp (name) VALUES ('{id}');")
-        return int(id)
+    await Reporter.async_object.acreate(name=str(id))
+    return int(id)
 
 
 async def _fetch_int_ids():
