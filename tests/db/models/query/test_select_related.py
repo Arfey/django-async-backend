@@ -8,7 +8,7 @@ async def test_select_related_basic(async_db):
 
     books = [b async for b in Book.async_object.select_related("author")]
     assert len(books) == 1
-    # The author should be cached — accessing it should not need a query
+    # The author should be cached; accessing it should not need a query
     assert books[0].author.name == "Author1"
 
 

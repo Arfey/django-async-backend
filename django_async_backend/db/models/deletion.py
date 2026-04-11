@@ -1,7 +1,7 @@
 """
 Async deletion support with cascade handling.
 
-Provides AsyncCollector — an async version of Django's Collector that
+Provides AsyncCollector, an async version of Django's Collector that
 handles CASCADE, SET_NULL, SET_DEFAULT, and DO_NOTHING relationships.
 
 Skips pre_delete/post_delete signals.
@@ -10,6 +10,7 @@ Skips pre_delete/post_delete signals.
 from collections import Counter, defaultdict
 from functools import partial, reduce
 from operator import attrgetter, or_
+from typing import Any
 
 from django.db import connections, models
 from django.db.models import query_utils
@@ -40,7 +41,7 @@ class AsyncCollector:
         self.origin = origin
         self.data = defaultdict(set)
         self.field_updates = defaultdict(list)
-        self.restricted_objects = defaultdict(partial(defaultdict, set))
+        self.restricted_objects: defaultdict[Any, defaultdict[Any, set[Any]]] = defaultdict(partial(defaultdict, set))
         self.fast_deletes = []
         self.dependencies = defaultdict(set)
         self._pending_collects = []
@@ -347,8 +348,8 @@ class AsyncCollector:
                         )
 
     def sort(self):
-        sorted_models = []
-        concrete_models = set()
+        sorted_models: list[Any] = []
+        concrete_models: set[Any] = set()
         models_list = list(self.data)
         while len(sorted_models) < len(models_list):
             found = False
@@ -362,7 +363,7 @@ class AsyncCollector:
                     found = True
             if not found:
                 return
-        self.data = {model: self.data[model] for model in sorted_models}
+        self.data = defaultdict(set, {model: self.data[model] for model in sorted_models})
 
     def instances_with_model(self):
         for model, instances in self.data.items():
@@ -379,7 +380,7 @@ class AsyncCollector:
             self.data[model] = sorted(instances, key=attrgetter("pk"))
 
         self.sort()
-        deleted_counter = Counter()
+        deleted_counter: Counter[str] = Counter()
 
         # Single object fast-delete optimization
         if len(self.data) == 1:
@@ -453,7 +454,7 @@ class AsyncCollector:
 
         if isinstance(qs, QuerySet):
             return await qs._raw_delete(using=self.using)
-        # Django queryset — wrap it in our async queryset
+        # Django queryset: wrap it in our async queryset
         async_qs = QuerySet(model=qs.model, using=self.using)
         # Rebuild the filter from the Django queryset
         return await async_qs.filter(pk__in=qs)._raw_delete(using=self.using)

@@ -56,7 +56,7 @@ async def test_adelete_cascade_fk(async_db):
     await TestModel.async_object.acreate(name="Child2", value=3, relative=parent)
     assert await TestModel.async_object.acount() == 6  # 3 from setUp + 3
 
-    # Delete the parent — children should be cascade-deleted
+    # Delete the parent. Children should be cascade-deleted.
     num_deleted, _ = await TestModel.async_object.filter(pk=parent.pk).adelete()
     assert num_deleted == 3  # parent + 2 children
     assert await TestModel.async_object.acount() == 3  # only setUp items

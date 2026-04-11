@@ -27,7 +27,7 @@ class DatabaseWrapper(_DatabaseWrapper):
             "OPTIONS", {}
         ).get("pool"):
             warnings.warn(
-                "Using the asynchronous Django backend with a connection pool is"
+                "Using the asynchronous Django backend with a connection pool is "
                 "unsafe in synchronous mode. Connection pools require the same "
                 "event loop for each request to manage state, but the WSGI "
                 "handler creates a new event loop for every request.",

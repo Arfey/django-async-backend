@@ -336,6 +336,7 @@ class AsyncAtomicInsideTransactionTests(AsyncAtomicTests):
     async def asyncSetUp(self):
         await super().asyncSetUp()
         self.atomic = async_atomic()
+        self.atomic._from_testcase = True
         await self.atomic.__aenter__()
 
     async def asyncTearDown(self):
@@ -603,7 +604,7 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
     async def test_concurrent_gather_atomic_raises(self):
         """gather() where each task opens async_atomic() raises.
 
-        This is the original issue #11 pattern — no parent atomic,
+        This is the original issue #11 pattern: no parent atomic,
         each child independently opens async_atomic(). The first
         child stamps the connection, subsequent children see the
         mismatch.

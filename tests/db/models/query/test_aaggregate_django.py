@@ -263,7 +263,7 @@ async def test_annotate_ordering(async_db):
 @pytest.mark.skip(
     reason=(
         "annotate(agg).aaggregate(agg) requires a subquery-wrapped compiler "
-        "which falls back to Django's sync compiler — backend limitation."
+        "which falls back to Django's sync compiler (backend limitation)."
     )
 )
 async def test_aggregate_annotation(async_db):
@@ -323,7 +323,7 @@ async def test_aggregation_expressions(async_db):
 @pytest.mark.skip(
     reason=(
         "annotate(agg).aaggregate(agg) requires a subquery-wrapped compiler "
-        "which falls back to Django's sync compiler — backend limitation."
+        "which falls back to Django's sync compiler (backend limitation)."
     )
 )
 async def test_aggregate_over_complex_annotation(async_db):
@@ -474,7 +474,7 @@ async def test_aggregation_default_group_by(async_db):
     an author (like Publisher) with no books gets the default value for a Sum.
     """
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
-    # Charlie has no books — Sum("books__id") should fall back to default=0
+    # Charlie has no books, so Sum("books__id") should fall back to default=0
     a3 = await Author.async_object.acreate(name="Charlie")
     results = [
         obj
@@ -542,7 +542,7 @@ async def test_coalesced_empty_result_set_nested(async_db):
 @pytest.mark.skip(
     reason=(
         "aggregate() on a sliced queryset requires a subquery-wrapped compiler "
-        "which falls back to Django's sync compiler — backend limitation."
+        "which falls back to Django's sync compiler (backend limitation)."
     )
 )
 async def test_aggregate_over_sliced_queryset(async_db):
@@ -618,7 +618,7 @@ async def test_values_aggregation(async_db):
 @pytest.mark.skip(
     reason=(
         "values().annotate().aaggregate() requires a subquery-wrapped compiler "
-        "which falls back to Django's sync compiler — backend limitation."
+        "which falls back to Django's sync compiler (backend limitation)."
     )
 )
 async def test_values_annotate_aggregate(async_db):

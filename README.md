@@ -3,8 +3,8 @@
 > **Note:** This is a fork of [Arfey/django-async-backend](https://github.com/Arfey/django-async-backend), developed with AI assistance to explore the remaining blockers for a fully async Django ORM. The goal is to identify what works, what doesn't, and hopefully contribute something useful upstream.
 >
 > **Django core limitations** (not fixable in this package):
-> - **Signals** — Django's signal dispatch is synchronous. `asave()`/`adelete()` skip `pre_save`/`post_save`/`pre_delete`/`post_delete`.
-> - **Connection lifecycle** — Django's `request_finished` signal closes connections synchronously. ASGI deployments need the `close_async_connections` middleware (see below).
+> - **Signals**: Django's signal dispatch is synchronous. `asave()`/`adelete()` skip `pre_save`/`post_save`/`pre_delete`/`post_delete`.
+> - **Connection lifecycle**: Django's `request_finished` signal closes connections synchronously. ASGI deployments need the `close_async_connections` middleware (see below).
 
 ## Installation & Django Integration
 
@@ -61,7 +61,7 @@ async with async_atomic():
     await MyModel.async_object.acreate(name="test")
 ```
 
-Nested `async_atomic` blocks create savepoints. Cross-task transaction reuse is detected and raises `RuntimeError` — use `_independent_connection()` or a parent-level transaction instead.
+Nested `async_atomic` blocks create savepoints. Cross-task transaction reuse is detected and raises `RuntimeError`. Use `_independent_connection()` or a parent-level transaction instead.
 
 ---
 

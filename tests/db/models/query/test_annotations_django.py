@@ -479,7 +479,7 @@ async def test_annotation_and_alias_filter_in_subquery(async_db):
         await Book.async_object.acreate(title=f"Bk{i}", author=a1)
     await Book.async_object.acreate(title="Solo", author=a2)
 
-    # Authors with more than 1 book — must project to a single column for pk__in
+    # Authors with more than 1 book: must project to a single column for pk__in
     many_books_qs = (
         Author.async_object.annotate(bc=Count("books")).filter(bc__gt=1).alias(is_prolific=Value(1)).values("pk")
     )

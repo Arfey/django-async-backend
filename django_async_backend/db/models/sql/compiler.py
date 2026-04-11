@@ -202,7 +202,7 @@ class SQLCompiler:
         for expr in expressions:
             try:
                 sql, params = self.compile(expr)
-            except (EmptyResultSet, FullResultSet):
+            except EmptyResultSet, FullResultSet:
                 continue
             if allows_group_by_select_index and (position := selected_expr_positions.get(expr)) is not None:
                 sql, params = str(position), ()

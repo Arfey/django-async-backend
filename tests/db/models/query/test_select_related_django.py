@@ -33,7 +33,7 @@ async def test_access_fks_without_select_related(async_db):
     # we don't have assertNumQueries in async pytest style, but correctness matters).
     reviews = [r async for r in Review.async_object.all()]
     assert len(reviews) == 1
-    # Accessing .book and then .author each issue a lazy query — result must be correct.
+    # Accessing .book and then .author each issue a lazy query, but the result must be correct.
     review = reviews[0]
     fetched_author = await Book.async_object.aget(pk=review.book_id)
     assert fetched_author.author_id == author.pk
@@ -46,7 +46,7 @@ async def test_access_fks_with_select_related(async_db):
     await Review.async_object.acreate(text="ReviewSR", book=book)
 
     review = await Review.async_object.select_related("book__author").aget(text="ReviewSR")
-    # Both levels should be cached — no additional DB hit needed.
+    # Both levels should be cached; no additional DB hit needed.
     assert review.book.title == "BookSR"
     assert review.book.author.name == "AuthorSR"
 
@@ -95,7 +95,7 @@ async def test_list_with_depth(async_db):
     assert len(reviews) == 1
     # book is pre-fetched
     assert reviews[0].book.title == "DepthBook"
-    # author_id is a column on book — still accessible without a query
+    # author_id is a column on book, still accessible without a query
     assert reviews[0].book.author_id == author.pk
 
 
@@ -161,14 +161,14 @@ async def test_chaining(async_db):
     select_related() calls accumulate: each call adds to the set of
     pre-fetched relations.
     Equivalent to Django's test_chaining (HybridSpecies with two FKs).
-    We use EditorNote which has book FK, and Book which has author FK — two
+    We use EditorNote which has book FK, and Book which has author FK. Two
     separate select_related calls on the same queryset.
     """
     author = await Author.async_object.acreate(name="ChainAuthor")
     book = await Book.async_object.acreate(title="ChainBook", author=author)
     await Review.async_object.acreate(text="ChainReview", book=book)
 
-    # Chain two select_related calls — both must be honoured.
+    # Chain two select_related calls; both must be honoured.
     qs = Review.async_object.select_related("book").select_related("book__author")
     reviews = [r async for r in qs]
     assert len(reviews) == 1
@@ -224,14 +224,14 @@ async def test_non_relational_field(async_db):
     Equivalent to Django's test_non_relational_field.
     """
     non_relational_error = "Non-relational field given in select_related: '%s'. Choices are: %s"
-    # 'text' is a CharField on Review — not a relation
+    # 'text' is a CharField on Review, not a relation
     with pytest.raises(FieldError, match="Non-relational field given in select_related"):
         [r async for r in Review.async_object.select_related("text__something")]
 
     with pytest.raises(FieldError, match="Non-relational field given in select_related"):
         [r async for r in Review.async_object.select_related("text")]
 
-    # Author has no FK fields at all — choices would be "(none)"
+    # Author has no FK fields at all, so choices would be "(none)"
     with pytest.raises(FieldError, match="Non-relational field given in select_related"):
         [a async for a in Author.async_object.select_related("name")]
 

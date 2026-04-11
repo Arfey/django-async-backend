@@ -15,6 +15,8 @@ class AbstractBaseModel(AsyncModel, models.Model):
 
 
 class TestModel(AbstractBaseModel):
+    __test__ = False  # prevent pytest collection
+
     relative = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,

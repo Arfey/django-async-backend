@@ -4,9 +4,12 @@ version = "0.0.4"
 description = "Django extension providing async capabilities for database and other components"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 keywords = ["django", "asyncio", "database", "postgresql", "async"]
-authors = [{ name = "Arfey", email = "arfey@gmail.com" }]
+authors = [
+  { name = "Arfey", email = "arfey@gmail.com" },
+  { name = "Oliver Haas", email = "ohaas@e1plus.de" },
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Web Environment",
@@ -18,27 +21,26 @@ classifiers = [
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Internet :: WWW/HTTP",
   "Topic :: Software Development :: Libraries",
 ]
 dependencies = ["Django>=6", "psycopg[binary]>=3"]
 
 [project.urls]
-Homepage = "https://github.com/Arfey/django-async-backend"
-Repository = "https://github.com/Arfey/django-async-backend.git"
+Homepage = "https://github.com/oliverhaas/django-async-backend"
+Repository = "https://github.com/oliverhaas/django-async-backend.git"
 
 [dependency-groups]
 dev = [
-  "mypy==1.19.1",
+  "mypy==1.20.0",
   "pre-commit==4.5.1",
   "psycopg[pool]>=3",
   "pytest-asyncio==1.3.0",
   "pytest-cov==7.1.0",
   "pytest-django==4.12.0",
-  "pytest==9.0.2",
-  "ruff==0.15.8",
+  "pytest==9.0.3",
+  "ruff==0.15.10",
   "testcontainers==4.14.2",
 ]
 
@@ -53,25 +55,25 @@ packages = ["django_async_backend"]
 include = ["django_async_backend", "LICENSE", "README.md"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 120
 fix = true
 
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-  "ANN",    # Type annotations — will add incrementally
+  "ANN",    # Type annotations (will add incrementally)
   "COM812", # Conflicts with ruff-format
-  "D",      # Docstrings — will add incrementally
+  "D",      # Docstrings (will add incrementally)
   "E501",   # Line length handled by config
   "EM",     # Exception strings inline are fine
   "FBT",    # Boolean params common in Django ORM API
   "PERF203", # try/except in loop is fine
-  "PLR0913", # Too many args — Django ORM methods have many params
+  "PLR0913", # Too many args: Django ORM methods have many params
   "PLR2004", # Magic values are fine in ORM code
   "SLF001", # Private member access needed for Django internals
   "TRY003", # Long exception messages are helpful
-  "ERA001", # Commented-out code — keeping some Django reference code
+  "ERA001", # Commented-out code: keeping some Django reference code
   "TRY002", # Raise vanilla exceptions (Django patterns)
   "TRY301", # Raise within try (Django patterns)
   "PLC0415", # Dynamic imports (intentional)
@@ -115,7 +117,7 @@ ignore = [
   "SIM117", # Multiple with statements
   "SIM118", # Use key in dict
 ]
-# Django-derived files — these are ported from Django's source with async modifications.
+# Django-derived files: ported from Django's source with async modifications.
 # Applying strict linting would require rewriting Django's own patterns.
 "django_async_backend/db/models/query.py" = ["ALL"]
 "django_async_backend/db/models/sql/compiler.py" = ["ALL"]
@@ -126,11 +128,9 @@ ignore = [
 "django_async_backend/utils/**" = ["ALL"]
 "django_async_backend/db/models/base.py" = ["ALL"]
 "django_async_backend/test.py" = ["ALL"]
-"test_example/**" = ["ALL"]
-"tests_django/**" = ["ALL"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 ignore_missing_imports = true
 check_untyped_defs = true
 warn_redundant_casts = true
@@ -140,10 +140,28 @@ warn_unused_ignores = true
 module = "tests.*"
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+module = [
+  "django_async_backend.db.models.query",
+  "django_async_backend.db.models.sql.*",
+  "django_async_backend.db.models.base",
+  "django_async_backend.db.backends.*",
+  "django_async_backend.db.transaction",
+  "django_async_backend.db.utils",
+  "django_async_backend.utils.*",
+  "django_async_backend.test",
+]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 pythonpath = ["tests"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+filterwarnings = [
+  # __getitem__ creates a coroutine that is never awaited when the queryset
+  # is used as a subquery expression (Django reads .query for SQL only).
+  "ignore:coroutine 'QuerySet.__getitem__:RuntimeWarning",
+]
 
 [tool.coverage.run]
 omit = ["tests/*"]

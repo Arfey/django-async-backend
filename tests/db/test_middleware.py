@@ -118,7 +118,7 @@ class TestCloseAsyncConnections:
             async with await new_connection.cursor() as cursor:
                 await cursor.execute("SELECT 1")
 
-            # Try to get another connection from the same pool — should timeout
+            # Try to get another connection from the same pool. Should timeout.
             conn2 = new_connection.copy()
             with pytest.raises(PoolTimeout):
                 await conn2.connect()

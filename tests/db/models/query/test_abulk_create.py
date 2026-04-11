@@ -69,7 +69,7 @@ async def test_abulk_create_without_ignore_conflicts_raises(async_db):
 
 
 async def test_abulk_create_ignore_conflicts_all_duplicates(async_db):
-    """All rows are duplicates — nothing inserted, no error."""
+    """All rows are duplicates; nothing inserted, no error."""
     await TestModel.async_object.abulk_create([TestModel(name="X", value=1)])
     await TestModel.async_object.abulk_create(
         [TestModel(name="X", value=99)],

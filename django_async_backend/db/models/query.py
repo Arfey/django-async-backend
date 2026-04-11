@@ -324,7 +324,7 @@ class QuerySet(AltersData):
     def __iter__(self):
         # Sync iteration works when results are already cached (e.g. after
         # await _fetch_all()). Django internals like get_prefetch_querysets
-        # iterate querysets synchronously — the caller must ensure the
+        # iterate querysets synchronously; the caller must ensure the
         # cache is populated before sync iteration.
         if self._result_cache is not None:
             return iter(self._result_cache)
@@ -454,7 +454,7 @@ class QuerySet(AltersData):
             # attribute.
             try:
                 arg.default_alias
-            except (AttributeError, TypeError):
+            except AttributeError, TypeError:
                 raise TypeError("Complex aggregates require an alias")
             kwargs[arg.default_alias] = arg
 
@@ -786,7 +786,7 @@ class QuerySet(AltersData):
         Create a new object with the given kwargs, saving it to the database
         and returning the created object.
 
-        Bypasses Model.save() — no pre_save/post_save signals, no multi-table
+        Bypasses Model.save(): no pre_save/post_save signals, no multi-table
         inheritance parent saving. Equivalent to bulk_create for a single object.
         """
         reverse_one_to_one_fields = frozenset(kwargs).intersection(self.model._meta._reverse_one_to_one_field_names)
@@ -1291,7 +1291,7 @@ class QuerySet(AltersData):
                         "The named annotation '%s' conflicts with the "
                         "default name for another annotation." % arg.default_alias
                     )
-            except (TypeError, AttributeError):
+            except TypeError, AttributeError:
                 raise TypeError("Complex annotations require an alias")
             annotations[arg.default_alias] = arg
         annotations.update(kwargs)
@@ -1876,7 +1876,7 @@ class RawQuerySet:
         return model_init_names, model_init_order, annotation_fields
 
     async def aget_columns(self):
-        """Async version of columns property — executes query to get column info."""
+        """Async version of columns property. Executes query to get column info."""
         columns = await self.query.aget_columns()
         for query_name, model_name in self.translations.items():
             try:
@@ -2121,7 +2121,7 @@ async def prefetch_related_objects(model_instances, *related_lookups):
                 if not hasattr(obj, "_prefetched_objects_cache"):
                     try:
                         obj._prefetched_objects_cache = {}
-                    except (AttributeError, TypeError):
+                    except AttributeError, TypeError:
                         # Must be an immutable object from
                         # values_list(flat=True), for example (TypeError) or
                         # a QuerySet subclass that isn't returning Model
@@ -2349,7 +2349,7 @@ async def prefetch_one_level(instances, prefetcher, lookup, level):
 
     rel_qs = _filter_prefetch_queryset(rel_qs, field.name, instances)
 
-    # Evaluate async — this is the key fix.
+    # Evaluate async, which is the key fix.
     if rel_qs._result_cache is None:
         await rel_qs._fetch_all()
 

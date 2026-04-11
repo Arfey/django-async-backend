@@ -49,7 +49,7 @@ async def events(async_db):
 
 
 # ---------------------------------------------------------------------------
-# dates() — kind='year'
+# dates() - kind='year'
 # ---------------------------------------------------------------------------
 
 
@@ -66,7 +66,7 @@ async def test_dates_year_desc(events):
 
 
 # ---------------------------------------------------------------------------
-# dates() — kind='month'
+# dates() - kind='month'
 # ---------------------------------------------------------------------------
 
 
@@ -91,7 +91,7 @@ async def test_dates_month_desc(events):
 
 
 # ---------------------------------------------------------------------------
-# dates() — kind='week'
+# dates() - kind='week'
 # ---------------------------------------------------------------------------
 
 
@@ -99,9 +99,9 @@ async def test_dates_week(events):
     """dates() with kind='week' returns one entry per distinct ISO week start."""
     result = [d async for d in Event.async_object.dates("date", "week")]
     # Jan 5 2020 is a Sunday; ISO week starts Monday Dec 30 2019
-    # Jan 28 2020 — week starts Mon Jan 27
-    # Mar 15 2020 — week starts Mon Mar 9
-    # Jul 4 2021  — week starts Mon Jun 28
+    # Jan 28 2020 (week starts Mon Jan 27)
+    # Mar 15 2020 (week starts Mon Mar 9)
+    # Jul 4 2021  (week starts Mon Jun 28)
     assert len(result) == 4
     # Results are date objects
     for d in result:
@@ -109,7 +109,7 @@ async def test_dates_week(events):
 
 
 # ---------------------------------------------------------------------------
-# dates() — kind='day'
+# dates() - kind='day'
 # ---------------------------------------------------------------------------
 
 
@@ -136,7 +136,7 @@ async def test_dates_day_desc(events):
 
 
 # ---------------------------------------------------------------------------
-# dates() — empty queryset
+# dates() - empty queryset
 # ---------------------------------------------------------------------------
 
 
@@ -147,7 +147,7 @@ async def test_dates_empty_queryset(async_db):
 
 
 # ---------------------------------------------------------------------------
-# dates() — with filter
+# dates() - with filter
 # ---------------------------------------------------------------------------
 
 
@@ -164,7 +164,7 @@ async def test_dates_with_filter_month(events):
 
 
 # ---------------------------------------------------------------------------
-# dates() — invalid arguments
+# dates() - invalid arguments
 # ---------------------------------------------------------------------------
 
 
@@ -187,7 +187,7 @@ async def test_dates_invalid_field(async_db):
 
 
 # ---------------------------------------------------------------------------
-# datetimes() — kind='year'
+# datetimes() - kind='year'
 # ---------------------------------------------------------------------------
 
 
@@ -207,7 +207,7 @@ async def test_datetimes_year_desc(events):
 
 
 # ---------------------------------------------------------------------------
-# datetimes() — kind='month'
+# datetimes() - kind='month'
 # ---------------------------------------------------------------------------
 
 
@@ -221,7 +221,7 @@ async def test_datetimes_month(events):
 
 
 # ---------------------------------------------------------------------------
-# datetimes() — kind='week'
+# datetimes() - kind='week'
 # ---------------------------------------------------------------------------
 
 
@@ -234,7 +234,7 @@ async def test_datetimes_week(events):
 
 
 # ---------------------------------------------------------------------------
-# datetimes() — kind='day'
+# datetimes() - kind='day'
 # ---------------------------------------------------------------------------
 
 
@@ -245,7 +245,7 @@ async def test_datetimes_day(events):
 
 
 # ---------------------------------------------------------------------------
-# datetimes() — kind='hour'
+# datetimes() - kind='hour'
 # ---------------------------------------------------------------------------
 
 
@@ -256,7 +256,7 @@ async def test_datetimes_hour(events):
 
 
 # ---------------------------------------------------------------------------
-# datetimes() — kind='minute'
+# datetimes() - kind='minute'
 # ---------------------------------------------------------------------------
 
 
@@ -267,7 +267,7 @@ async def test_datetimes_minute(events):
 
 
 # ---------------------------------------------------------------------------
-# datetimes() — kind='second'
+# datetimes() - kind='second'
 # ---------------------------------------------------------------------------
 
 
@@ -278,7 +278,7 @@ async def test_datetimes_second(events):
 
 
 # ---------------------------------------------------------------------------
-# datetimes() — empty queryset
+# datetimes() - empty queryset
 # ---------------------------------------------------------------------------
 
 
@@ -289,7 +289,7 @@ async def test_datetimes_empty_queryset(async_db):
 
 
 # ---------------------------------------------------------------------------
-# datetimes() — with filter
+# datetimes() - with filter
 # ---------------------------------------------------------------------------
 
 
@@ -302,7 +302,7 @@ async def test_datetimes_with_filter(events):
 
 
 # ---------------------------------------------------------------------------
-# datetimes() — invalid arguments
+# datetimes() - invalid arguments
 # ---------------------------------------------------------------------------
 
 
