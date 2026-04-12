@@ -1,15 +1,11 @@
 """
 Port of Django's lookup/tests.py to our async backend.
 
-Source: /tmp/django-src/tests/lookup/tests.py
-
-Skipped categories:
+Omitted categories:
 - Tests using isolate_apps / dynamic schema.
 - Tests using related manager ops (tag.articles.add/set, hunter_pence.games.set,
   author.article_set, etc.). Where possible these are rewritten to seed the M2M
   through-table directly via a raw async cursor or to set FKs directly.
-- MySQL-specific tests (we target PostgreSQL).
-- Tests using register_lookup with custom transforms on unrelated fields.
 """
 
 from __future__ import annotations

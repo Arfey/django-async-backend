@@ -1,13 +1,9 @@
 """
 Port of Django's expressions/tests.py to our async backend.
 
-Source: /tmp/django-src/tests/expressions/tests.py
-
-Skipped categories:
+Omitted categories:
 - Tests using isolate_apps / dynamic schema.
 - Tests using related-manager ops that our AsyncManager isn't wired into.
-- Tests using acount() on sliced/distinct querysets (needs-followup).
-- Tests using sliced-queryset subquery RHS (needs-followup).
 - Oracle / MySQL / SQLite specific tests (we target PostgreSQL).
 """
 
@@ -969,10 +965,6 @@ async def test_subquery_filter_by_aggregate(async_db):
         ),
     )
     assert (await qs.aget()).float == 1.2
-
-
-    # test_subquery_filter_by_lazy: removed — SimpleLazyObject wraps a sync ORM
-    # callback that can't see rows created in the async transaction.
 
 
 async def test_aggregate_subquery_annotation(basic_expressions_data):
