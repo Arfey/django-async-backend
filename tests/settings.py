@@ -23,6 +23,7 @@ DATABASES = {
 }
 
 INSTALLED_APPS = [
+    "django_async_backend",
     "shared",
     "lookup",
     "expressions",

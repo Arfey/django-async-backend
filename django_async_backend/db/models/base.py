@@ -46,6 +46,8 @@ def _register_async_date_accessors(sender, **kwargs):
 class_prepared.connect(_register_async_date_accessors)
 
 
+
+
 class AsyncModel:
     """Mixin that adds truly async asave() and adelete() to Django models."""
 

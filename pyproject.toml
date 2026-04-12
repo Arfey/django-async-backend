@@ -148,6 +148,7 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = [
   "django_async_backend.db.models.query",
+  "django_async_backend.db.models.related_managers",
   "django_async_backend.db.models.sql.*",
   "django_async_backend.db.models.base",
   "django_async_backend.db.backends.*",
