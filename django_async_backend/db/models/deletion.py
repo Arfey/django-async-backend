@@ -124,15 +124,7 @@ class AsyncCollector:
             return [objs[i : i + conn_batch_size] for i in range(0, len(objs), conn_batch_size)]
         return [objs]
 
-    def related_objects(self, related_model, related_fields, objs):
-        predicate = query_utils.Q.create(
-            [(f"{related_field.name}__in", objs) for related_field in related_fields],
-            connector=query_utils.Q.OR,
-        )
-        return related_model._base_manager.using(self.using).filter(predicate)
-
     async def arelated_objects(self, related_model, related_fields, objs):
-        """Async version: returns materialized list using async queryset."""
         from django_async_backend.db.models.query import QuerySet
 
         predicate = query_utils.Q.create(
@@ -449,12 +441,4 @@ class AsyncCollector:
         return sum(deleted_counter.values()), dict(deleted_counter)
 
     async def _async_raw_delete(self, qs):
-        """Execute _raw_delete on a queryset, handling both sync and async querysets."""
-        from django_async_backend.db.models.query import QuerySet
-
-        if isinstance(qs, QuerySet):
-            return await qs._raw_delete(using=self.using)
-        # Django queryset: wrap it in our async queryset
-        async_qs = QuerySet(model=qs.model, using=self.using)
-        # Rebuild the filter from the Django queryset
-        return await async_qs.filter(pk__in=qs)._raw_delete(using=self.using)
+        return await qs._raw_delete(using=self.using)

@@ -4,7 +4,6 @@ Port of Django's lookup/tests.py to our async backend.
 Source: /tmp/django-src/tests/lookup/tests.py
 
 Skipped categories:
-- Tests using assertNumQueries (no async equivalent).
 - Tests using isolate_apps / dynamic schema.
 - Tests using related manager ops (tag.articles.add/set, hunter_pence.games.set,
   author.article_set, etc.). Where possible these are rewritten to seed the M2M
@@ -17,6 +16,7 @@ from __future__ import annotations
 
 import collections.abc
 from datetime import datetime
+from unittest import mock
 
 import pytest
 from django.core.exceptions import FieldError
@@ -50,7 +50,9 @@ from lookup.models import (
     Freebie,
     Game,
     Player,
+    Product,
     Season,
+    Stock,
     Tag,
 )
 
@@ -274,9 +276,15 @@ async def test_in_bulk_preserve_ordering(lookup_data):
     assert list(res) == [d.a2.id, d.a1.id]
 
 
-@pytest.mark.skip(reason="assertNumQueries / mock.patch.object not applicable to async backend")
-async def test_in_bulk_preserve_ordering_with_batch_size():
-    pass
+async def test_in_bulk_preserve_ordering_with_batch_size(lookup_data):
+    from tests.fixtures.query_counter import async_assert_num_queries
+
+    d = lookup_data
+    connection = async_connections[DEFAULT_DB_ALIAS]
+    with mock.patch.object(connection.ops, "bulk_batch_size", return_value=2):
+        async with async_assert_num_queries(2):
+            res = await Article.async_object.ain_bulk([d.a4.id, d.a3.id, d.a2.id, d.a1.id])
+    assert list(res) == [d.a4.id, d.a3.id, d.a2.id, d.a1.id]
 
 
 async def test_in_bulk_distinct_field(lookup_data):
@@ -301,11 +309,6 @@ async def test_in_bulk_multiple_distinct_field(lookup_data):
             .distinct("headline", "pub_date")
             .ain_bulk(field_name="pub_date")
         )
-
-
-@pytest.mark.skip(reason="isolate_apps not supported in async pytest port")
-async def test_in_bulk_non_unique_meta_constaint():
-    pass
 
 
 async def test_in_bulk_sliced_queryset(lookup_data):
@@ -481,21 +484,6 @@ async def test_in_bulk_values_list_flat_field_id(lookup_data):
     d = lookup_data
     arts = await Article.async_object.values_list("id", flat=True).ain_bulk([d.a1.pk, d.a2.pk])
     assert arts == {d.a1.pk: d.a1.pk, d.a2.pk: d.a2.pk}
-
-
-@pytest.mark.skip(reason="RemovedInDjango70Warning deprecation path; values_list(flat=True) with no field")
-async def test_in_bulk_values_list_flat_empty():
-    pass
-
-
-@pytest.mark.skip(reason="RemovedInDjango70Warning deprecation path; values_list(flat=True) with no field")
-async def test_in_bulk_values_list_flat_all():
-    pass
-
-
-@pytest.mark.skip(reason="RemovedInDjango70Warning deprecation path; values_list(flat=True) with no field")
-async def test_in_bulk_values_list_flat_pks():
-    pass
 
 
 # ---------------------------------------------------------------------------
@@ -690,11 +678,6 @@ async def test_values_list_filter_and_no_fields(lookup_data):
     ]
 
 
-@pytest.mark.skip(reason="RemovedInDjango70Warning deprecation path")
-async def test_values_list_flat_no_fields():
-    pass
-
-
 async def test_values_list_single_field(lookup_data):
     results = [r async for r in Article.async_object.values_list("headline")]
     assert results == [
@@ -799,19 +782,29 @@ async def test_values_list_flat_more_than_one_field(lookup_data):
         Article.async_object.values_list("id", "headline", flat=True)
 
 
-@pytest.mark.skip(reason="RemovedInDjango70Warning deprecation path")
-async def test_values_list_flat_empty_warning():
-    pass
-
-
 # ---------------------------------------------------------------------------
 # get_next_by / get_previous_by
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="get_next_by_FOO/get_previous_by_FOO are sync helpers; no async equivalent")
-async def test_get_next_previous_by():
-    pass
+async def test_get_next_previous_by(lookup_data):
+    d = lookup_data
+    assert repr(await d.a1.aget_next_by_pub_date()) == "<Article: Article 2>"
+    assert repr(await d.a2.aget_next_by_pub_date()) == "<Article: Article 3>"
+    assert repr(await d.a2.aget_next_by_pub_date(headline__endswith="6")) == "<Article: Article 6>"
+    assert repr(await d.a3.aget_next_by_pub_date()) == "<Article: Article 7>"
+    assert repr(await d.a4.aget_next_by_pub_date()) == "<Article: Article 6>"
+    with pytest.raises(Article.DoesNotExist):
+        await d.a5.aget_next_by_pub_date()
+    assert repr(await d.a6.aget_next_by_pub_date()) == "<Article: Article 5>"
+    assert repr(await d.a7.aget_next_by_pub_date()) == "<Article: Article 4>"
+
+    assert repr(await d.a7.aget_previous_by_pub_date()) == "<Article: Article 3>"
+    assert repr(await d.a6.aget_previous_by_pub_date()) == "<Article: Article 4>"
+    assert repr(await d.a5.aget_previous_by_pub_date()) == "<Article: Article 6>"
+    assert repr(await d.a4.aget_previous_by_pub_date()) == "<Article: Article 7>"
+    assert repr(await d.a3.aget_previous_by_pub_date()) == "<Article: Article 2>"
+    assert repr(await d.a2.aget_previous_by_pub_date()) == "<Article: Article 1>"
 
 
 # ---------------------------------------------------------------------------
@@ -875,11 +868,6 @@ async def test_in(lookup_data):
 
 async def test_in_empty_list(lookup_data):
     assert [a async for a in Article.async_object.filter(id__in=[])] == []
-
-
-@pytest.mark.skip(reason="Cross-database subquery; 'other' DB isn't populated the same way")
-async def test_in_different_database():
-    pass
 
 
 async def test_in_keeps_value_ordering(lookup_data):
@@ -989,9 +977,18 @@ async def test_unsupported_lookups(lookup_data):
         [a async for a in Article.async_object.filter(pub_date__gt__lt__foo="blahblah")]
 
 
-@pytest.mark.skip(reason="register_lookup context manager sync-ish; skip to avoid flakiness")
-async def test_unsupported_lookups_custom_lookups():
-    pass
+async def test_unsupported_lookups_custom_lookups(lookup_data):
+    from django.db.models.functions import Length
+    from django.test.utils import register_lookup
+
+    slug_field = Article._meta.get_field("slug")
+    msg = (
+        "Unsupported lookup 'lengtp' for SlugField or join on the field not "
+        "permitted, perhaps you meant length?"
+    )
+    with pytest.raises(FieldError, match="lengtp"):
+        with register_lookup(slug_field, Length):
+            [a async for a in Article.async_object.filter(slug__lengtp=20)]
 
 
 async def test_relation_nested_lookup_error(lookup_data):
@@ -1009,14 +1006,26 @@ async def test_unsupported_lookup_reverse_foreign_key(lookup_data):
         [a async for a in Author.async_object.filter(article__title="Article 1")]
 
 
-@pytest.mark.skip(reason="register_lookup decorator-style custom lookup on FK")
-async def test_unsupported_lookup_reverse_foreign_key_custom_lookups():
-    pass
+async def test_unsupported_lookup_reverse_foreign_key_custom_lookups(lookup_data):
+    from django.db.models.functions import Abs
+    from django.test.utils import register_lookup
+
+    fk_field = Article._meta.get_field("author")
+    msg = "Unsupported lookup 'abspl' for ManyToOneRel"
+    with pytest.raises(FieldError, match=msg):
+        with register_lookup(fk_field, Abs, lookup_name="abspk"):
+            [a async for a in Author.async_object.filter(article__abspl=2)]
 
 
-@pytest.mark.skip(reason="register_lookup decorator-style; uses Abs transform on FK")
-async def test_filter_by_reverse_related_field_transform():
-    pass
+async def test_filter_by_reverse_related_field_transform(lookup_data):
+    from django.db.models.functions import Abs
+    from django.test.utils import register_lookup
+
+    d = lookup_data
+    fk_field = Article._meta.get_field("author")
+    with register_lookup(fk_field, Abs):
+        results = [a async for a in Author.async_object.filter(article__abs=d.a1.pk)]
+    assert results == [d.au1]
 
 
 # ---------------------------------------------------------------------------
@@ -1325,16 +1334,6 @@ async def test_exact_sliced_queryset_not_limited_to_one(lookup_data):
         [_ async for _ in Article.async_object.filter(author=Author.async_object.all()[1:])]
 
 
-@pytest.mark.skip(reason="MySQL-specific test; we target PostgreSQL")
-async def test_exact_booleanfield():
-    pass
-
-
-@pytest.mark.skip(reason="MySQL-specific test; we target PostgreSQL")
-async def test_exact_booleanfield_annotation():
-    pass
-
-
 async def test_custom_field_none_rhs(async_db):
     season = await Season.async_object.acreate(year=2012, nulled_text_field=None)
     assert await Season.async_object.filter(pk=season.pk, nulled_text_field__isnull=True).aexists()
@@ -1426,9 +1425,23 @@ async def test_isnull_textfield(lookup_data):
     assert results == [d.au1]
 
 
-@pytest.mark.skip(reason="Stock/Product lookup with Q as RHS on a BooleanField is niche; skip for initial port")
-async def test_lookup_rhs():
-    pass
+async def test_lookup_rhs(async_db):
+    product = await Product.async_object.acreate(name="GME", qty_target=5000)
+    stock_1 = await Stock.async_object.acreate(product=product, short=True, qty_available=180)
+    stock_2 = await Stock.async_object.acreate(product=product, short=False, qty_available=5100)
+    await Stock.async_object.acreate(product=product, short=False, qty_available=4000)
+    results = {s.pk async for s in Stock.async_object.filter(short=Q(qty_available__lt=F("product__qty_target")))}
+    assert results == {stock_1.pk, stock_2.pk}
+    results2 = {
+        s.pk
+        async for s in Stock.async_object.filter(
+            short=ExpressionWrapper(
+                Q(qty_available__lt=F("product__qty_target")),
+                output_field=BooleanField(),
+            )
+        )
+    }
+    assert results2 == {stock_1.pk, stock_2.pk}
 
 
 async def test_lookup_direct_value_rhs_unwrapped(lookup_data):

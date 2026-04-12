@@ -4,7 +4,6 @@ Port of Django's expressions/tests.py to our async backend.
 Source: /tmp/django-src/tests/expressions/tests.py
 
 Skipped categories:
-- Tests using assertNumQueries / CaptureQueriesContext (no async equivalent).
 - Tests using isolate_apps / dynamic schema.
 - Tests using related-manager ops that our AsyncManager isn't wired into.
 - Tests using acount() on sliced/distinct querysets (needs-followup).
@@ -972,14 +971,28 @@ async def test_subquery_filter_by_aggregate(async_db):
     assert (await qs.aget()).float == 1.2
 
 
-@pytest.mark.skip(reason="SimpleLazyObject subquery filter not easily portable to async fixture")
-async def test_subquery_filter_by_lazy():
-    pass
+    # test_subquery_filter_by_lazy: removed — SimpleLazyObject wraps a sync ORM
+    # callback that can't see rows created in the async transaction.
 
 
-@pytest.mark.skip(reason="assertNumQueries not supported")
-async def test_aggregate_subquery_annotation():
-    pass
+async def test_aggregate_subquery_annotation(basic_expressions_data):
+    from tests.fixtures.query_counter import async_capture_queries
+
+    async with async_capture_queries() as queries:
+        aggregate = await Company.async_object.annotate(
+            ceo_salary=Subquery(
+                Employee.async_object.filter(
+                    id=OuterRef("ceo_id"),
+                ).values("salary")
+            ),
+        ).aaggregate(
+            ceo_salary_gt_20=Count("pk", filter=Q(ceo_salary__gt=20)),
+        )
+    assert aggregate == {"ceo_salary_gt_20": 1}
+    assert len(queries) == 1
+    sql = queries[0]["sql"]
+    assert sql.count("SELECT") <= 3
+    assert "GROUP BY" not in sql
 
 
 async def test_object_create_with_f_expression_in_subquery(basic_expressions_data):
@@ -1000,9 +1013,19 @@ async def test_object_create_with_f_expression_in_subquery(basic_expressions_dat
     assert biggest_company.num_employees == 100001
 
 
-@pytest.mark.skip(reason="assertNumQueries not supported")
-async def test_aggregate_rawsql_annotation():
-    pass
+async def test_aggregate_rawsql_annotation(basic_expressions_data):
+    from tests.fixtures.query_counter import async_capture_queries
+
+    async with async_capture_queries() as queries:
+        aggregate = await Company.async_object.annotate(
+            salary=RawSQL("SUM(num_chairs) OVER (ORDER BY num_employees)", []),
+        ).aaggregate(
+            count=Count("pk"),
+        )
+        assert aggregate == {"count": 3}
+    assert len(queries) == 1
+    sql = queries[0]["sql"]
+    assert "GROUP BY" not in sql
 
 
 def test_explicit_output_field():
@@ -1685,9 +1708,15 @@ async def test_lefthand_bitwise_or(numeric_op_data):
     assert (await Number.async_object.aget(pk=d.n1.pk)).integer == -10
 
 
-@pytest.mark.skip(reason="register_lookup on CharField not easily portable to async path")
-async def test_lefthand_transformed_field_bitwise_or():
-    pass
+async def test_lefthand_transformed_field_bitwise_or(async_db):
+    from django.db.models.functions import Length
+    from django.test.utils import register_lookup
+
+    await Employee.async_object.acreate(firstname="Max", lastname="Mustermann")
+    with register_lookup(CharField, Length):
+        qs = Employee.async_object.annotate(bitor=F("lastname__length").bitor(48))
+        result = await qs.aget()
+    assert result.bitor == 58
 
 
 async def test_lefthand_power(numeric_op_data):
@@ -2284,9 +2313,35 @@ def test_output_field_does_not_create_broken_validators():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="assertNumQueries / CaptureQueriesContext not supported")
-async def test_exists_optimizations():
-    pass
+async def test_exists_optimizations(async_db):
+    from tests.fixtures.query_counter import async_capture_queries
+
+    now = datetime.datetime.now(tz=datetime.UTC)
+    await Experiment.async_object.acreate(
+        name="test",
+        assigned=now.date(),
+        completed=now.date(),
+        estimated_time=datetime.timedelta(hours=1),
+        start=now,
+        end=now,
+    )
+    connection = async_connections[DEFAULT_DB_ALIAS]
+    async with async_capture_queries() as queries:
+        results = [
+            r
+            async for r in Experiment.async_object.values(
+                exists=Exists(
+                    Experiment.async_object.order_by("pk"),
+                ),
+            ).order_by()
+        ]
+    assert len(results) == 1
+    assert results[0]["exists"] is True
+    assert len(queries) == 1
+    sql = queries[0]["sql"]
+    assert connection.ops.quote_name(Experiment._meta.pk.column) not in sql
+    assert "LIMIT" in sql
+    assert "ORDER BY" not in sql
 
 
 async def test_negated_empty_exists(async_db):

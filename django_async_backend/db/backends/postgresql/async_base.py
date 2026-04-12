@@ -69,6 +69,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
 
     Database = Database
     features_class = DatabaseWrapper.features_class
+    introspection_class = DatabaseWrapper.introspection_class
     ops_class = AsyncDatabaseOperations
 
     # PostgreSQL backend-specific attributes.

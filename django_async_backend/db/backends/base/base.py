@@ -51,6 +51,7 @@ class BaseAsyncDatabaseWrapper:
     vendor = "unknown"
     display_name = "unknown"
     features_class = None
+    introspection_class = None
     ops_class = None
 
     queries_limit = 9000
@@ -118,6 +119,8 @@ class BaseAsyncDatabaseWrapper:
 
         self.features = self.features_class(self)
         self.ops = self.ops_class(self)
+        if self.introspection_class:
+            self.introspection = self.introspection_class(self)
 
     def __repr__(self):
         return f"<{self.__class__.__qualname__} vendor={self.vendor!r} alias={self.alias!r}>"

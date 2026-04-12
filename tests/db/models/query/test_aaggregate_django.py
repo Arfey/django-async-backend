@@ -260,12 +260,6 @@ async def test_annotate_ordering(async_db):
     assert results[1]["book_count"] == 1
 
 
-@pytest.mark.skip(
-    reason=(
-        "annotate(agg).aaggregate(agg) requires a subquery-wrapped compiler "
-        "which falls back to Django's sync compiler (backend limitation)."
-    )
-)
 async def test_aggregate_annotation(async_db):
     """annotate then aggregate applies aggregate over the annotation."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
@@ -320,12 +314,6 @@ async def test_aggregation_expressions(async_db):
     assert result["av"] == 25
 
 
-@pytest.mark.skip(
-    reason=(
-        "annotate(agg).aaggregate(agg) requires a subquery-wrapped compiler "
-        "which falls back to Django's sync compiler (backend limitation)."
-    )
-)
 async def test_aggregate_over_complex_annotation(async_db):
     """Aggregate over an annotation that itself uses expressions."""
     a1, a2, b1, b2, b3, r1, r2 = await _make_author_books(async_db)
@@ -539,12 +527,6 @@ async def test_coalesced_empty_result_set_nested(async_db):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(
-    reason=(
-        "aggregate() on a sliced queryset requires a subquery-wrapped compiler "
-        "which falls back to Django's sync compiler (backend limitation)."
-    )
-)
 async def test_aggregate_over_sliced_queryset(async_db):
     """aggregate() on a sliced queryset works correctly."""
     await TestModel.async_object.abulk_create([TestModel(name=f"SL{i}", value=i * 10) for i in range(1, 6)])
@@ -615,12 +597,6 @@ async def test_values_aggregation(async_db):
     assert max_result["max_val"] == 20
 
 
-@pytest.mark.skip(
-    reason=(
-        "values().annotate().aaggregate() requires a subquery-wrapped compiler "
-        "which falls back to Django's sync compiler (backend limitation)."
-    )
-)
 async def test_values_annotate_aggregate(async_db):
     """values + annotate per group, then aggregate over the groups."""
     await TestModel.async_object.abulk_create(

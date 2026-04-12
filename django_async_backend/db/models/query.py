@@ -19,7 +19,6 @@ from django.core import exceptions
 from django.db import (
     IntegrityError,
     NotSupportedError,
-    connections,
     router,
 )
 from django.db.models import (
@@ -486,7 +485,7 @@ class QuerySet(AltersData):
         if self.query.can_filter() and not self.query.distinct_fields:
             clone = clone.order_by()
         limit = None
-        if not clone.query.select_for_update or connections[clone.db].features.supports_select_for_update_with_limit:
+        if not clone.query.select_for_update or async_connections[clone.db].features.supports_select_for_update_with_limit:
             limit = MAX_GET_RESULTS
             clone.query.set_limits(high=limit)
         num = len([i async for i in clone])
@@ -521,7 +520,7 @@ class QuerySet(AltersData):
     def _check_bulk_create_options(self, ignore_conflicts, update_conflicts, update_fields, unique_fields):
         if ignore_conflicts and update_conflicts:
             raise ValueError("ignore_conflicts and update_conflicts are mutually exclusive.")
-        db_features = connections[self.db].features
+        db_features = async_connections[self.db].features
         if ignore_conflicts:
             if not db_features.supports_ignore_conflicts:
                 raise NotSupportedError("This database backend does not support ignoring conflicts.")
@@ -724,7 +723,7 @@ class QuerySet(AltersData):
         if id_list is not None:
             filter_key = f"{field_name}__in"
             id_list = tuple(id_list)
-            batch_size = connections[self.db].ops.bulk_batch_size([opts.pk], id_list)
+            batch_size = async_connections[self.db].ops.bulk_batch_size([opts.pk], id_list)
             if batch_size and batch_size < len(id_list):
                 rows = []
                 for offset in range(0, len(id_list), batch_size):
@@ -990,7 +989,7 @@ class QuerySet(AltersData):
         for obj in objs:
             obj._prepare_related_fields_for_save(operation_name="bulk_update", fields=fields)
         self._for_write = True
-        connection = connections[self.db]
+        connection = async_connections[self.db]
         max_batch_size = connection.ops.bulk_batch_size([opts.pk, opts.pk, *fields], objs)
         batch_size = min(batch_size, max_batch_size) if batch_size else max_batch_size
         requires_casting = connection.features.requires_casted_case_in_updates
@@ -1608,7 +1607,7 @@ class QuerySet(AltersData):
         """
         Helper method for bulk_create() to insert objs one batch at a time.
         """
-        connection = connections[self.db]
+        connection = async_connections[self.db]
         ops = connection.ops
         max_batch_size = max(ops.bulk_batch_size(fields, objs), 1)
         batch_size = min(batch_size, max_batch_size) if batch_size else max_batch_size
@@ -1709,7 +1708,7 @@ class QuerySet(AltersData):
                     update_fields=update_fields,
                     unique_fields=unique_fields,
                 )
-                connection = connections[self.db]
+                connection = async_connections[self.db]
                 if connection.features.can_return_rows_from_bulk_insert and on_conflict is None:
                     assert len(returned_columns) == len(objs_without_pk)
                 for obj_without_pk, results in zip(objs_without_pk, returned_columns):
@@ -1889,7 +1888,7 @@ class RawQuerySet:
 
     def resolve_model_init_order(self):
         """Resolve the init field names and value positions."""
-        converter = connections[self.db].introspection.identifier_converter
+        converter = async_connections[self.db].introspection.identifier_converter
         model_init_fields = [field for column_name, field in self.model_fields.items() if column_name in self.columns]
         annotation_fields = [
             (column, pos) for pos, column in enumerate(self.columns) if column not in self.model_fields
@@ -1900,9 +1899,7 @@ class RawQuerySet:
 
     async def aresolve_model_init_order(self):
         """Async version of resolve_model_init_order."""
-        from django.db import connections as django_connections
-
-        converter = django_connections[self.db].introspection.identifier_converter
+        converter = async_connections[self.db].introspection.identifier_converter
         columns = await self.aget_columns()
         model_init_fields = [field for column_name, field in self.model_fields.items() if column_name in columns]
         annotation_fields = [(column, pos) for pos, column in enumerate(columns) if column not in self.model_fields]
@@ -2027,7 +2024,7 @@ class RawQuerySet:
     @cached_property
     def model_fields(self):
         """A dict mapping column names to model field names."""
-        converter = connections[self.db].introspection.identifier_converter
+        converter = async_connections[self.db].introspection.identifier_converter
         return {
             converter(field.column): field
             for field in self.model._meta.fields

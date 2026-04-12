@@ -13,12 +13,37 @@ Limitations:
     - adelete() uses raw delete (no cascade handling)
 """
 
+from functools import partialmethod
+
 from django.db import connections, router
+from django.db.models import DateField, DateTimeField, Q
+from django.db.models.signals import class_prepared
 
 from django_async_backend.db.transaction import (
     async_atomic,
     async_mark_for_rollback_on_error,
 )
+
+
+def _register_async_date_accessors(sender, **kwargs):
+    """Attach aget_next_by_FOO / aget_previous_by_FOO for each non-null date field."""
+    if not issubclass(sender, AsyncModel):
+        return
+    for field in sender._meta.local_fields:
+        if isinstance(field, (DateField, DateTimeField)) and not field.null:
+            setattr(
+                sender,
+                "aget_next_by_%s" % field.name,
+                partialmethod(sender._aget_next_or_previous_by_FIELD, field=field, is_next=True),
+            )
+            setattr(
+                sender,
+                "aget_previous_by_%s" % field.name,
+                partialmethod(sender._aget_next_or_previous_by_FIELD, field=field, is_next=False),
+            )
+
+
+class_prepared.connect(_register_async_date_accessors)
 
 
 class AsyncModel:
@@ -41,6 +66,29 @@ class AsyncModel:
                     f"{klass.__name__} overrides delete() without overriding adelete(). "
                     f"This will silently skip logic when adelete() is called."
                 )
+
+    async def _aget_next_or_previous_by_FIELD(self, field, is_next, **kwargs):
+        if not self._is_pk_set():
+            raise ValueError("get_next/get_previous cannot be used on unsaved objects.")
+        op = "gt" if is_next else "lt"
+        order = "" if is_next else "-"
+        param = getattr(self, field.attname)
+        q = Q.create([(field.name, param), (f"pk__{op}", self.pk)], connector=Q.AND)
+        q = Q.create([q, (f"{field.name}__{op}", param)], connector=Q.OR)
+        from django_async_backend.db.models.query import QuerySet
+
+        qs = (
+            QuerySet(model=self.__class__, using=self._state.db)
+            .filter(**kwargs)
+            .filter(q)
+            .order_by(f"{order}{field.name}", f"{order}pk")
+        )
+        try:
+            return await qs[0]
+        except IndexError:
+            raise self.DoesNotExist(
+                "%s matching query does not exist." % self.__class__._meta.object_name
+            )
 
     async def asave(
         self,

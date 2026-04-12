@@ -42,7 +42,7 @@ class AsyncCursorWrapper:
         try:
             await self.close()
         except self.db.Database.Error:
-            pass
+            logger.debug("Error closing cursor", exc_info=True)
 
     # The following methods cannot be implemented in __getattr__, because the
     # code must run when the method is invoked, not just when it is accessed.
