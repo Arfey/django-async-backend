@@ -46,8 +46,6 @@ def _register_async_date_accessors(sender, **kwargs):
 class_prepared.connect(_register_async_date_accessors)
 
 
-
-
 class AsyncModel:
     """Mixin that adds truly async asave() and adelete() to Django models."""
 
@@ -88,9 +86,7 @@ class AsyncModel:
         try:
             return await qs[0]
         except IndexError:
-            raise self.DoesNotExist(
-                "%s matching query does not exist." % self.__class__._meta.object_name
-            )
+            raise self.DoesNotExist("%s matching query does not exist." % self.__class__._meta.object_name)
 
     async def asave(
         self,

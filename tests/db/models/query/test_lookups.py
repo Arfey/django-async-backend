@@ -978,10 +978,7 @@ async def test_unsupported_lookups_custom_lookups(lookup_data):
     from django.test.utils import register_lookup
 
     slug_field = Article._meta.get_field("slug")
-    msg = (
-        "Unsupported lookup 'lengtp' for SlugField or join on the field not "
-        "permitted, perhaps you meant length?"
-    )
+    msg = "Unsupported lookup 'lengtp' for SlugField or join on the field not permitted, perhaps you meant length?"
     with pytest.raises(FieldError, match="lengtp"):
         with register_lookup(slug_field, Length):
             [a async for a in Article.async_object.filter(slug__lengtp=20)]

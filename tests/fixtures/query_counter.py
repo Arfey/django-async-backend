@@ -25,8 +25,6 @@ async def async_assert_num_queries(num, *, using=DEFAULT_DB_ALIAS):
     async with async_capture_queries(using) as queries:
         yield queries
     executed = len(queries)
-    assert executed == num, (
-        f"{executed} queries executed, {num} expected\n"
-        "Captured queries were:\n"
-        + "\n".join(f"{i}. {q['sql']}" for i, q in enumerate(queries, start=1))
+    assert executed == num, f"{executed} queries executed, {num} expected\nCaptured queries were:\n" + "\n".join(
+        f"{i}. {q['sql']}" for i, q in enumerate(queries, start=1)
     )

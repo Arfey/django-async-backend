@@ -112,15 +112,11 @@ async def test_reverse_fk_acreate(async_db):
 async def test_reverse_fk_aget_or_create(async_db):
     author = await Author.async_object.acreate(name="Judy")
 
-    article, created = await author.article_set.aget_or_create(
-        headline="J1", defaults={"pub_date": "2025-01-01"}
-    )
+    article, created = await author.article_set.aget_or_create(headline="J1", defaults={"pub_date": "2025-01-01"})
     assert created is True
     assert article.author_id == author.pk
 
-    article2, created2 = await author.article_set.aget_or_create(
-        headline="J1", defaults={"pub_date": "2025-01-01"}
-    )
+    article2, created2 = await author.article_set.aget_or_create(headline="J1", defaults={"pub_date": "2025-01-01"})
     assert created2 is False
     assert article2.pk == article.pk
 
@@ -128,9 +124,7 @@ async def test_reverse_fk_aget_or_create(async_db):
 async def test_reverse_fk_aupdate_or_create(async_db):
     author = await Author.async_object.acreate(name="Karl")
 
-    article, created = await author.article_set.aupdate_or_create(
-        headline="K1", defaults={"pub_date": "2025-01-01"}
-    )
+    article, created = await author.article_set.aupdate_or_create(headline="K1", defaults={"pub_date": "2025-01-01"})
     assert created is True
     assert article.author_id == author.pk
 
@@ -219,15 +213,11 @@ async def test_m2m_acreate(async_db):
 async def test_m2m_aget_or_create(async_db):
     tag = await Tag.async_object.acreate(name="travel")
 
-    article, created = await tag.articles.aget_or_create(
-        headline="M14", defaults={"pub_date": "2025-01-01"}
-    )
+    article, created = await tag.articles.aget_or_create(headline="M14", defaults={"pub_date": "2025-01-01"})
     assert created is True
     assert await tag.articles.filter(pk=article.pk).aexists()
 
-    article2, created2 = await tag.articles.aget_or_create(
-        headline="M14", defaults={"pub_date": "2025-01-01"}
-    )
+    article2, created2 = await tag.articles.aget_or_create(headline="M14", defaults={"pub_date": "2025-01-01"})
     assert created2 is False
     assert article2.pk == article.pk
 
@@ -235,9 +225,7 @@ async def test_m2m_aget_or_create(async_db):
 async def test_m2m_aupdate_or_create(async_db):
     tag = await Tag.async_object.acreate(name="health")
 
-    article, created = await tag.articles.aupdate_or_create(
-        headline="M15", defaults={"pub_date": "2025-01-01"}
-    )
+    article, created = await tag.articles.aupdate_or_create(headline="M15", defaults={"pub_date": "2025-01-01"})
     assert created is True
     assert await tag.articles.filter(pk=article.pk).aexists()
 

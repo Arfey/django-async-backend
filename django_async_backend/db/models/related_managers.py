@@ -49,9 +49,7 @@ class AsyncReverseManyToOneMixin:
 
         def check_and_update_obj(obj):
             if not isinstance(obj, self.model):
-                raise TypeError(
-                    "'%s' instance expected, got %r" % (self.model._meta.object_name, obj)
-                )
+                raise TypeError("'%s' instance expected, got %r" % (self.model._meta.object_name, obj))
             setattr(obj, self.field.name, self.instance)
 
         if bulk:
@@ -59,15 +57,11 @@ class AsyncReverseManyToOneMixin:
             for obj in objs:
                 check_and_update_obj(obj)
                 if obj._state.adding or obj._state.db != db:
-                    raise ValueError(
-                        "%r instance isn't saved. Use bulk=False or save the object first." % obj
-                    )
+                    raise ValueError("%r instance isn't saved. Use bulk=False or save the object first." % obj)
                 pks.append(obj.pk)
             from django_async_backend.db.models.query import QuerySet
 
-            await QuerySet(model=self.model, using=db).filter(pk__in=pks).aupdate(
-                **{self.field.name: self.instance}
-            )
+            await QuerySet(model=self.model, using=db).filter(pk__in=pks).aupdate(**{self.field.name: self.instance})
         else:
             async with async_atomic(using=db, savepoint=False):
                 for obj in objs:
@@ -142,15 +136,11 @@ def _add_async_reverse_fk_nullable_methods(cls, rel):
         old_ids = set()
         for obj in objs:
             if not isinstance(obj, self.model):
-                raise TypeError(
-                    "'%s' instance expected, got %r" % (self.model._meta.object_name, obj)
-                )
+                raise TypeError("'%s' instance expected, got %r" % (self.model._meta.object_name, obj))
             if self.field.get_local_related_value(obj) == val:
                 old_ids.add(obj.pk)
             else:
-                raise self.field.remote_field.model.DoesNotExist(
-                    "%r is not related to %r." % (obj, self.instance)
-                )
+                raise self.field.remote_field.model.DoesNotExist("%r is not related to %r." % (obj, self.instance))
         await self._aclear(_get_async_queryset(self, for_write=True).filter(pk__in=old_ids), bulk)
 
     aremove.alters_data = True
@@ -248,9 +238,11 @@ class AsyncManyToManyMixin:
                 await self.aadd(*objs, through_defaults=through_defaults)
             else:
                 old_ids = set()
-                async for val in _get_through_queryset(self, db=db).filter(
-                    **{self.source_field_name: self.related_val[0]}
-                ).values_list(self.target_field_name, flat=True):
+                async for val in (
+                    _get_through_queryset(self, db=db)
+                    .filter(**{self.source_field_name: self.related_val[0]})
+                    .values_list(self.target_field_name, flat=True)
+                ):
                     old_ids.add(val)
 
                 new_objs = []
@@ -327,12 +319,16 @@ class AsyncManyToManyMixin:
         # Async version of _get_missing_target_ids — the sync version
         # uses Django's default manager which triggers SynchronousOnlyOperation.
         existing = set()
-        async for val in _get_through_queryset(self, db=db).filter(
-            **{
-                source_field_name: self.related_val[0],
-                "%s__in" % target_field_name: target_ids,
-            }
-        ).values_list(target_field_name, flat=True):
+        async for val in (
+            _get_through_queryset(self, db=db)
+            .filter(
+                **{
+                    source_field_name: self.related_val[0],
+                    "%s__in" % target_field_name: target_ids,
+                }
+            )
+            .values_list(target_field_name, flat=True)
+        ):
             existing.add(val)
         missing_target_ids = target_ids.difference(existing)
 
