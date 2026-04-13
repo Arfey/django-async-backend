@@ -4,7 +4,7 @@ Async deletion support with cascade handling.
 Provides AsyncCollector, an async version of Django's Collector that
 handles CASCADE, SET_NULL, SET_DEFAULT, and DO_NOTHING relationships.
 
-Skips pre_delete/post_delete signals.
+Fires pre_delete/post_delete signals via asend().
 """
 
 from collections import Counter, defaultdict
@@ -13,7 +13,7 @@ from operator import attrgetter, or_
 from typing import Any
 
 from django.db import connections, models
-from django.db.models import query_utils
+from django.db.models import query_utils, signals
 from django.db.models.deletion import (
     CASCADE,
     DO_NOTHING,
@@ -65,7 +65,16 @@ class AsyncCollector:
             return None
         # Queue for later async processing
         self._pending_collects.append(
-            (objs, source, nullable, collect_related, source_attr, reverse_dependency, keep_parents, fail_on_restricted)
+            (
+                objs,
+                source,
+                nullable,
+                collect_related,
+                source_attr,
+                reverse_dependency,
+                keep_parents,
+                fail_on_restricted,
+            ),
         )
         # Still need to add objects to self.data immediately so the on_delete
         # handlers can track what's been collected
@@ -96,8 +105,8 @@ class AsyncCollector:
             model = objs[0].__class__
             self.restricted_objects[model][field].update(objs)
 
-    def _has_signal_listeners(self, _model):
-        return False  # We always skip signals
+    def _has_signal_listeners(self, model):
+        return signals.pre_delete.has_listeners(model) or signals.post_delete.has_listeners(model)
 
     def can_fast_delete(self, objs, from_field=None):
         if from_field and from_field.remote_field.on_delete is not CASCADE:
@@ -365,7 +374,7 @@ class AsyncCollector:
     async def adelete(self):
         """
         Async version of Collector.delete(). Executes the deletion plan
-        built by acollect(). Skips signals.
+        built by acollect(). Fires pre_delete/post_delete signals via asend().
         """
         # Sort instances by PK
         for model, instances in self.data.items():
@@ -390,7 +399,15 @@ class AsyncCollector:
                     return count, {model._meta.label: count}
 
         async with async_atomic(using=self.using, savepoint=False):
-            # Signals skipped intentionally.
+            # Send pre_delete signals
+            for model, obj in self.instances_with_model():
+                if not model._meta.auto_created:
+                    await signals.pre_delete.asend(
+                        sender=model,
+                        instance=obj,
+                        using=self.using,
+                        origin=self.origin,
+                    )
 
             # Fast deletes (bulk)
             for qs in self.fast_deletes:
@@ -432,6 +449,15 @@ class AsyncCollector:
                 count = await async_qs.filter(pk__in=pk_list)._raw_delete(using=self.using)
                 if count:
                     deleted_counter[model._meta.label] += count
+
+                if not model._meta.auto_created:
+                    for obj in instances:
+                        await signals.post_delete.asend(
+                            sender=model,
+                            instance=obj,
+                            using=self.using,
+                            origin=self.origin,
+                        )
 
         # Nullify PKs
         for instances in self.data.values():

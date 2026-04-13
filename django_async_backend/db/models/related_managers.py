@@ -204,7 +204,7 @@ class AsyncManyToManyMixin:
     async def aclear(self):
         db = router.db_for_write(self.through, instance=self.instance)
         async with async_atomic(using=db, savepoint=False):
-            signals.m2m_changed.send(
+            await signals.m2m_changed.asend(
                 sender=self.through,
                 action="pre_clear",
                 instance=self.instance,
@@ -217,7 +217,7 @@ class AsyncManyToManyMixin:
             filters = self._build_remove_filters(super().get_queryset().using(db))
             await _get_through_queryset(self, db=db).filter(filters).adelete()
 
-            signals.m2m_changed.send(
+            await signals.m2m_changed.asend(
                 sender=self.through,
                 action="post_clear",
                 instance=self.instance,
@@ -308,7 +308,7 @@ class AsyncManyToManyMixin:
                         **{
                             "%s_id" % source_field_name: self.related_val[0],
                             "%s_id" % target_field_name: target_id,
-                        }
+                        },
                     )
                     for target_id in target_ids
                 ],
@@ -325,7 +325,7 @@ class AsyncManyToManyMixin:
                 **{
                     source_field_name: self.related_val[0],
                     "%s__in" % target_field_name: target_ids,
-                }
+                },
             )
             .values_list(target_field_name, flat=True)
         ):
@@ -334,7 +334,7 @@ class AsyncManyToManyMixin:
 
         async with async_atomic(using=db, savepoint=False):
             if must_send_signals:
-                signals.m2m_changed.send(
+                await signals.m2m_changed.asend(
                     sender=self.through,
                     action="pre_add",
                     instance=self.instance,
@@ -359,7 +359,7 @@ class AsyncManyToManyMixin:
             )
 
             if must_send_signals:
-                signals.m2m_changed.send(
+                await signals.m2m_changed.asend(
                     sender=self.through,
                     action="post_add",
                     instance=self.instance,
@@ -383,7 +383,7 @@ class AsyncManyToManyMixin:
 
         db = router.db_for_write(self.through, instance=self.instance)
         async with async_atomic(using=db, savepoint=False):
-            signals.m2m_changed.send(
+            await signals.m2m_changed.asend(
                 sender=self.through,
                 action="pre_remove",
                 instance=self.instance,
@@ -396,14 +396,14 @@ class AsyncManyToManyMixin:
             target_model_qs = super().get_queryset()
             if target_model_qs._has_filters():
                 old_vals = target_model_qs.using(db).filter(
-                    **{"%s__in" % self.target_field.target_field.attname: old_ids}
+                    **{"%s__in" % self.target_field.target_field.attname: old_ids},
                 )
             else:
                 old_vals = old_ids
             filters = self._build_remove_filters(old_vals)
             await _get_through_queryset(self, db=db).filter(filters).adelete()
 
-            signals.m2m_changed.send(
+            await signals.m2m_changed.asend(
                 sender=self.through,
                 action="post_remove",
                 instance=self.instance,

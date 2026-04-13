@@ -113,7 +113,7 @@ class ModelIterable(BaseIterable):
                     *[
                         (field.attname if from_field == "self" else queryset.model._meta.get_field(from_field).attname)
                         for from_field in field.from_fields
-                    ]
+                    ],
                 ),
             )
             for field, related_objs in queryset._known_related_objects.items()
@@ -328,7 +328,7 @@ class QuerySet(AltersData):
         if self._result_cache is not None:
             return iter(self._result_cache)
         raise TypeError(
-            "Async QuerySet cannot be iterated synchronously. Use 'async for' or call await qs._fetch_all() first."
+            "Async QuerySet cannot be iterated synchronously. Use 'async for' or call await qs._fetch_all() first.",
         )
 
     def __aiter__(self):
@@ -479,7 +479,7 @@ class QuerySet(AltersData):
         """
         if self.query.combinator and (args or kwargs):
             raise NotSupportedError(
-                "Calling QuerySet.get(...) with filters after %s() is not supported." % self.query.combinator
+                "Calling QuerySet.get(...) with filters after %s() is not supported." % self.query.combinator,
             )
         clone = self._chain() if self.query.combinator else self.filter(*args, **kwargs)
         if self.query.can_filter() and not self.query.distinct_fields:
@@ -501,7 +501,7 @@ class QuerySet(AltersData):
             % (
                 self.model._meta.object_name,
                 (num if not limit or num < limit else "more than %s" % (limit - 1)),
-            )
+            ),
         )
 
     def _prepare_for_bulk_create(self, objs):
@@ -533,13 +533,13 @@ class QuerySet(AltersData):
                 raise NotSupportedError("This database backend does not support updating conflicts.")
             if not update_fields:
                 raise ValueError(
-                    "Fields that will be updated when a row insertion fails on conflicts must be provided."
+                    "Fields that will be updated when a row insertion fails on conflicts must be provided.",
                 )
             if unique_fields and not db_features.supports_update_conflicts_with_target:
                 raise NotSupportedError(
                     "This database backend does not support updating "
                     "conflicts with specifying unique fields that can trigger "
-                    "the upsert."
+                    "the upsert.",
                 )
             if not unique_fields and db_features.supports_update_conflicts_with_target:
                 raise ValueError("Unique fields that can trigger the upsert must be provided.")
@@ -604,7 +604,7 @@ class QuerySet(AltersData):
                 % (
                     self.model._meta.object_name,
                     "', '".join(sorted(invalid_params)),
-                )
+                ),
             )
         return params
 
@@ -622,7 +622,7 @@ class QuerySet(AltersData):
         if order_by is None:
             raise ValueError(
                 "earliest() and latest() require either fields as positional "
-                "arguments or 'get_latest_by' in the model's Meta."
+                "arguments or 'get_latest_by' in the model's Meta.",
             )
         obj = self._chain()
         obj.query.set_limits(high=1)
@@ -821,46 +821,11 @@ class QuerySet(AltersData):
     async def acreate(self, **kwargs):
         """
         Create a new object with the given kwargs, saving it to the database
-        and returning the created object.
-
-        Bypasses Model.save(): no pre_save/post_save signals, no multi-table
-        inheritance parent saving. Equivalent to bulk_create for a single object.
+        and returning the created object. Fires pre_save/post_save signals.
         """
-        reverse_one_to_one_fields = frozenset(kwargs).intersection(self.model._meta._reverse_one_to_one_field_names)
-        if reverse_one_to_one_fields:
-            raise ValueError(
-                "The following fields do not exist in this model: %s" % ", ".join(reverse_one_to_one_fields)
-            )
-
-        obj = self.model(**kwargs)
-        obj._prepare_related_fields_for_save(operation_name="create")
         self._for_write = True
-
-        opts = obj._meta
-        fields = [f for f in opts.local_concrete_fields if not f.generated]
-
-        # Exclude auto PK field if not explicitly set
-        if not obj._is_pk_set():
-            fields = [f for f in fields if not isinstance(f, AutoField)]
-
-        # Run field pre_save (handles auto_now, auto_now_add, defaults, etc.)
-        for f in fields:
-            f.pre_save(obj, add=True)
-
-        returning_fields = opts.db_returning_fields
-        result = await self._insert(
-            [obj],
-            fields=fields,
-            returning_fields=returning_fields,
-            using=self.db,
-            raw=False,
-        )
-        if result:
-            for value, field in zip(result[0], returning_fields):
-                setattr(obj, field.attname, value)
-
-        obj._state.adding = False
-        obj._state.db = self.db
+        obj = self.model(**kwargs)
+        await obj.asave(force_insert=True, using=self.db)
         return obj
 
     acreate.alters_data = True
@@ -1326,7 +1291,7 @@ class QuerySet(AltersData):
                 if arg.default_alias in kwargs:
                     raise ValueError(
                         "The named annotation '%s' conflicts with the "
-                        "default name for another annotation." % arg.default_alias
+                        "default name for another annotation." % arg.default_alias,
                     )
             except TypeError, AttributeError:
                 raise TypeError("Complex annotations require an alias")
@@ -1340,7 +1305,7 @@ class QuerySet(AltersData):
                 chain.from_iterable(
                     ((field.name, field.attname) if hasattr(field, "attname") else (field.name,))
                     for field in self.model._meta.get_fields()
-                )
+                ),
             )
 
         for alias, annotation in annotations.items():
@@ -1639,7 +1604,7 @@ class QuerySet(AltersData):
                         update_fields=update_fields,
                         unique_fields=unique_fields,
                         returning_fields=returning_fields,
-                    )
+                    ),
                 )
         return inserted_rows
 
@@ -1821,13 +1786,13 @@ class QuerySet(AltersData):
                 % (
                     method_name,
                     ", ".join(invalid_args),
-                )
+                ),
             )
 
     def _not_support_combined_queries(self, operation_name):
         if self.query.combinator:
             raise NotSupportedError(
-                "Calling QuerySet.%s() after %s() is not supported." % (operation_name, self.query.combinator)
+                "Calling QuerySet.%s() after %s() is not supported." % (operation_name, self.query.combinator),
             )
 
     def _check_operator_queryset(self, other, operator_):
@@ -1843,7 +1808,7 @@ class QuerySet(AltersData):
         ):
             raise TypeError(
                 f"Cannot use QuerySet.{method}() on an unordered queryset performing "
-                f"aggregation. Add an ordering with order_by()."
+                f"aggregation. Add an ordering with order_by().",
             )
 
 
@@ -2126,7 +2091,7 @@ async def prefetch_related_objects(model_instances, *related_lookups):
             if lookup.queryset is not None:
                 raise ValueError(
                     "'%s' lookup was already seen with a different queryset. "
-                    "You may need to adjust the ordering of your lookups." % lookup.prefetch_to
+                    "You may need to adjust the ordering of your lookups." % lookup.prefetch_to,
                 )
 
             continue
@@ -2185,7 +2150,7 @@ async def prefetch_related_objects(model_instances, *related_lookups):
                         through_attr,
                         first_obj.__class__.__name__,
                         lookup.prefetch_through,
-                    )
+                    ),
                 )
 
             if level == len(through_attrs) - 1 and prefetcher is None:
@@ -2195,7 +2160,7 @@ async def prefetch_related_objects(model_instances, *related_lookups):
                 raise ValueError(
                     "'%s' does not resolve to an item that supports "
                     "prefetching - this is an invalid parameter to "
-                    "prefetch_related()." % lookup.prefetch_through
+                    "prefetch_related()." % lookup.prefetch_through,
                 )
 
             obj_to_fetch = None

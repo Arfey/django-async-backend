@@ -2,9 +2,8 @@
 
 > **Note:** This is a fork of [Arfey/django-async-backend](https://github.com/Arfey/django-async-backend), developed with AI assistance to explore the remaining blockers for a fully async Django ORM. The goal is to identify what works, what doesn't, and hopefully contribute something useful upstream.
 >
-> **Django core limitations** (not fixable in this package):
-> - **Signals**: Django's signal dispatch is synchronous. `asave()`/`adelete()` skip `pre_save`/`post_save`/`pre_delete`/`post_delete`.
-> - **Connection lifecycle**: Django's `request_finished` signal closes connections synchronously. ASGI deployments need the `close_async_connections` middleware (see below).
+> **Django core limitation** (not fixable in this package):
+> - **Connection lifecycle**: Django's `request_finished` signal closes sync connections only. ASGI deployments need the `close_async_connections` middleware (see below) to return async connections to the pool.
 
 ## Installation & Django Integration
 
@@ -86,8 +85,8 @@ class MyModel(AsyncModel, models.Model):
 |--------|--------|-------|
 | `aget`, `acreate`, `acount`, `aexists` | Supported | |
 | `abulk_create` | Supported | With `ignore_conflicts` and `update_conflicts` |
-| `abulk_update`, `aupdate`, `adelete` | Supported | No signals |
-| `aget_or_create`, `aupdate_or_create` | Supported | No signals |
+| `abulk_update`, `aupdate`, `adelete` | Supported | |
+| `aget_or_create`, `aupdate_or_create` | Supported | |
 | `afirst`, `alast`, `aearliest`, `alatest` | Supported | |
 | `ain_bulk`, `araw`, `aexplain`, `acontains` | Supported | |
 | `aaggregate`, `aiterator` | Supported | |
@@ -104,9 +103,27 @@ class MyModel(AsyncModel, models.Model):
 
 | Method | Status | Notes |
 |--------|--------|-------|
-| `asave()` | Supported | No signals, requires `AsyncModel` |
-| `adelete()` | Supported | CASCADE/SET_NULL/PROTECT/RESTRICT, no signals |
+| `asave()` | Supported | Fires `pre_save`/`post_save` via `asend()` |
+| `adelete()` | Supported | CASCADE/SET_NULL/PROTECT/RESTRICT, fires `pre_delete`/`post_delete` |
 | `arefresh_from_db()` | Supported | |
+| `aget_next_by_FOO()` | Supported | Auto-generated for date/datetime fields |
+| `aget_previous_by_FOO()` | Supported | Auto-generated for date/datetime fields |
+
+### Related Manager Methods
+
+Reverse FK and M2M managers on `AsyncModel` subclasses automatically get async methods:
+
+| Method | Reverse FK | M2M | Notes |
+|--------|-----------|-----|-------|
+| `aadd()` | Yes | Yes | Bulk and non-bulk modes for FK |
+| `aremove()` | Yes (nullable FK only) | Yes | |
+| `aclear()` | Yes (nullable FK only) | Yes | |
+| `aset()` | Yes | Yes | With `clear=True/False` |
+| `acreate()` | Yes | Yes | |
+| `aget_or_create()` | Yes | Yes | |
+| `aupdate_or_create()` | Yes | Yes | |
+
+M2M operations fire `m2m_changed` signals via `asend()`.
 
 ---
 

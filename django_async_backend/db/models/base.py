@@ -8,16 +8,17 @@ Usage:
     class MyModel(AsyncModel, models.Model):
         name = models.CharField(max_length=100)
 
-Limitations:
-    - No pre_save/post_save/pre_delete/post_delete signals
-    - adelete() uses raw delete (no cascade handling)
+Signals:
+    - asave() fires pre_save/post_save via asend()
+    - adelete() fires pre_delete/post_delete via asend()
+    - m2m_changed signals fired via asend() for async related manager ops
 """
 
 from functools import partialmethod
 
 from django.db import connections, router
 from django.db.models import DateField, DateTimeField, Q
-from django.db.models.signals import class_prepared
+from django.db.models.signals import class_prepared, pre_save, post_save
 
 from django_async_backend.db.transaction import (
     async_atomic,
@@ -59,12 +60,12 @@ class AsyncModel:
             if "save" in klass.__dict__ and "asave" not in klass.__dict__:
                 raise TypeError(
                     f"{klass.__name__} overrides save() without overriding asave(). "
-                    f"This will silently skip logic when asave() is called."
+                    f"This will silently skip logic when asave() is called.",
                 )
             if "delete" in klass.__dict__ and "adelete" not in klass.__dict__:
                 raise TypeError(
                     f"{klass.__name__} overrides delete() without overriding adelete(). "
-                    f"This will silently skip logic when adelete() is called."
+                    f"This will silently skip logic when adelete() is called.",
                 )
 
     async def _aget_next_or_previous_by_FIELD(self, field, is_next, **kwargs):
@@ -97,7 +98,7 @@ class AsyncModel:
         update_fields=None,
     ):
         """
-        Async version of Model.save(). Skips pre_save/post_save signals.
+        Async version of Model.save(). Fires pre_save/post_save signals via asend().
         """
         self._prepare_related_fields_for_save(operation_name="save")
 
@@ -119,7 +120,7 @@ class AsyncModel:
             if not_updatable_fields:
                 raise ValueError(
                     "The following fields do not exist in this model, are m2m "
-                    "fields, primary keys, or are non-concrete fields: %s" % ", ".join(not_updatable_fields)
+                    "fields, primary keys, or are non-concrete fields: %s" % ", ".join(not_updatable_fields),
                 )
         elif not force_insert and deferred_non_generated_fields and using == self._state.db and self._is_pk_set():
             field_names = set()
@@ -149,17 +150,24 @@ class AsyncModel:
         update_fields=None,
     ):
         """
-        Async version of Model.save_base(). Skips signals.
+        Async version of Model.save_base(). Fires pre_save/post_save signals.
         """
         using = using or router.db_for_write(self.__class__, instance=self)
         assert not (force_insert and (force_update or update_fields))
         assert update_fields is None or update_fields
-        cls = self.__class__
+        cls = origin = self.__class__
         if cls._meta.proxy:
             cls = cls._meta.concrete_model
         meta = cls._meta
 
-        # Signals skipped intentionally.
+        if not meta.auto_created:
+            await pre_save.asend(
+                sender=origin,
+                instance=self,
+                raw=raw,
+                using=using,
+                update_fields=update_fields,
+            )
 
         if meta.parents:
             context_manager = async_atomic(using=using, savepoint=False)
@@ -181,6 +189,17 @@ class AsyncModel:
 
         self._state.db = using
         self._state.adding = False
+
+        if not meta.auto_created:
+            await post_save.asend(
+                sender=origin,
+                instance=self,
+                created=(not updated),
+                update_fields=update_fields,
+                raw=raw,
+                using=using,
+            )
+
         return updated
 
     async def _asave_parents(
@@ -374,14 +393,15 @@ class AsyncModel:
         """
         Async delete of this model instance.
 
-        Handles CASCADE and SET_NULL via AsyncCollector. Skips signals.
+        Handles CASCADE and SET_NULL via AsyncCollector.
+        Fires pre_delete/post_delete signals via asend().
         """
         from django_async_backend.db.models.deletion import AsyncCollector
 
         if not self._is_pk_set():
             raise ValueError(
                 "%s object can't be deleted because its %s attribute is set "
-                "to None." % (self._meta.object_name, self._meta.pk.attname)
+                "to None." % (self._meta.object_name, self._meta.pk.attname),
             )
         using = using or router.db_for_write(self.__class__, instance=self)
 
@@ -411,7 +431,7 @@ class AsyncModel:
                 return
             if any(LOOKUP_SEP in f for f in fields):
                 raise ValueError(
-                    'Found "%s" in fields argument. Relations and transforms are not allowed in fields.' % LOOKUP_SEP
+                    'Found "%s" in fields argument. Relations and transforms are not allowed in fields.' % LOOKUP_SEP,
                 )
 
         qs = self._get_async_queryset(self.__class__, using or self._state.db or self.db)
