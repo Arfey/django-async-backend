@@ -29,6 +29,9 @@ class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
             conn.dec_task_sharing()
 
     def _callSetUp(self):
+        # Replicates IsolatedAsyncioTestCase._callSetUp (CPython 3.13) and
+        # injects _enter_task_sharing before asyncSetUp. We can't super()
+        # because we need to run code between setUp and asyncSetUp.
         self._asyncioRunner.get_loop()
         self._asyncioTestContext.run(self.setUp)
         self._callAsync(self._enter_task_sharing)

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import sys
 
 from django.db import (
@@ -612,20 +613,31 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
     async def asyncTearDown(self):
         await drop_table()
 
-    async def test_child_task_cursor_raises(self):
-        """A child task using the parent's connection raises."""
-        # asyncSetUp's inc_task_sharing is still active across the whole
-        # test, so temporarily dec to exercise the guard.
-        conn = async_connections[DEFAULT_DB_ALIAS]
+    @contextlib.asynccontextmanager
+    async def _strict_task_sharing(self, conn):
+        """Temporarily disable task sharing the test framework enabled.
+
+        AsyncioTransactionTestCase inc_task_sharing for the whole test
+        lifecycle so setUp and test methods (which run in different
+        tasks) can share one connection. To exercise validate_task_sharing
+        itself we need to turn that off for the scope of the assertion.
+        """
         conn.dec_task_sharing()
         try:
+            yield
+        finally:
+            conn.inc_task_sharing()
+
+    async def test_child_task_cursor_raises(self):
+        """A child task using the parent's connection raises."""
+        conn = async_connections[DEFAULT_DB_ALIAS]
+        async with self._strict_task_sharing(conn):
             async def writer():
                 await create_instance("should_fail")
 
             with self.assertRaisesRegex(DatabaseError, "same task"):
                 await asyncio.create_task(writer())
-        finally:
-            conn.inc_task_sharing()
+        self.assertEqual(await get_all(), [])
 
     async def test_cross_task_transaction_inheritance_raises(self):
         """Cross-task connection use with one task in atomic raises.
@@ -633,11 +645,11 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
         Reproduces the bug pattern: main task issues raw SQL while an
         audit task has opened an async_atomic. Without per-query
         validation this is silent data loss; with validation the
-        interloping cursor use raises DatabaseError.
+        interloping cursor use raises DatabaseError and — crucially —
+        nothing is written to the database.
         """
         conn = async_connections[DEFAULT_DB_ALIAS]
-        conn.dec_task_sharing()
-        try:
+        async with self._strict_task_sharing(conn):
             async def main_task():
                 await create_instance("main")
 
@@ -657,8 +669,38 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
                 len(errors) > 0,
                 "Expected DatabaseError from cross-task connection use",
             )
-        finally:
-            conn.inc_task_sharing()
+        # The real regression guard: nothing got committed.
+        self.assertEqual(await get_all(), [])
+
+    async def test_cross_task_set_autocommit_raises(self):
+        """Cross-task set_autocommit raises (class C: session state)."""
+        conn = async_connections[DEFAULT_DB_ALIAS]
+        async with self._strict_task_sharing(conn):
+            async def toggle():
+                await conn.set_autocommit(False)
+
+            with self.assertRaisesRegex(DatabaseError, "same task"):
+                await asyncio.create_task(toggle())
+
+    async def test_inc_task_sharing_allows_cross_task_use(self):
+        """inc_task_sharing is the documented escape hatch."""
+        conn = async_connections[DEFAULT_DB_ALIAS]
+        # Test framework already has it inc'd; verify cross-task use
+        # actually works rather than relying on implicit state.
+
+        async def writer():
+            await create_instance("shared")
+
+        await asyncio.create_task(writer())
+        self.assertEqual(await get_all(), ["shared"])
+
+    async def test_dec_task_sharing_below_zero_raises(self):
+        """Refcount cannot be decremented below zero."""
+        conn = async_connections[DEFAULT_DB_ALIAS]
+        async with self._strict_task_sharing(conn):
+            # Sharing count is now 0; another dec should raise.
+            with self.assertRaisesRegex(RuntimeError, "below zero"):
+                conn.dec_task_sharing()
 
     async def test_nested_savepoint_same_task_works(self):
         """Nested async_atomic() in the same task is a savepoint."""

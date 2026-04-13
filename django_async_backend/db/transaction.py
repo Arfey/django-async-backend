@@ -70,7 +70,6 @@ class AsyncAtomic(AsyncContextDecorator):
         self.using = using
         self.savepoint = savepoint
         self.durable = durable
-        self._from_testcase = False
 
     async def get_connection(self, using):
         if using is None:
@@ -80,11 +79,7 @@ class AsyncAtomic(AsyncContextDecorator):
     async def __aenter__(self):
         connection = await self.get_connection(self.using)
 
-        if (
-            self.durable
-            and connection.atomic_blocks
-            and not connection.atomic_blocks[-1]._from_testcase
-        ):
+        if self.durable and connection.atomic_blocks:
             raise RuntimeError(
                 "A durable atomic block cannot be nested within another "
                 "atomic block."

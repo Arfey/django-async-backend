@@ -23,6 +23,17 @@ def close_async_connections(get_response):
         try:
             return await get_response(request)
         finally:
-            await asyncio.shield(async_connections.close_all())
+            # asyncio.shield runs close_all in a sub-task, which would
+            # fail validate_task_sharing. Explicitly allow the shielded
+            # close to touch connections owned by the request task.
+            conns = async_connections.all(initialized_only=True)
+            for conn in conns:
+                conn.inc_task_sharing()
+            try:
+                await asyncio.shield(async_connections.close_all())
+            finally:
+                for conn in conns:
+                    if conn._task_sharing_count > 0:
+                        conn.dec_task_sharing()
 
     return middleware

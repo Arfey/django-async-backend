@@ -1,4 +1,5 @@
 import _thread
+import asyncio
 import copy
 import datetime
 import logging
@@ -482,8 +483,8 @@ class BaseAsyncDatabaseWrapper:
         explicit BEGIN with SQLite. This option will be ignored for other
         backends.
         """
-        self.validate_no_atomic_block()
         self.validate_task_sharing()
+        self.validate_no_atomic_block()
         await self.close_if_health_check_failed()
         await self.ensure_connection()
 
@@ -633,6 +634,9 @@ class BaseAsyncDatabaseWrapper:
             )
 
     # ##### Task safety handling #####
+    #
+    # Unlike thread sharing, task sharing needs no lock: asyncio is
+    # single-threaded per event loop and refcount mutations never yield.
 
     @property
     def allow_task_sharing(self):
@@ -659,9 +663,11 @@ class BaseAsyncDatabaseWrapper:
         can start/commit/rollback a transaction or toggle session state
         while another task's queries are interleaving on the same protocol
         stream, causing silent data loss or state corruption.
-        """
-        import asyncio
 
+        When _task is None the wrapper was constructed outside of
+        ``create_connection`` (e.g. ``wrapper.copy()`` in tests); such
+        wrappers have no task ownership and skip the guard.
+        """
         if self._task is None or self.allow_task_sharing:
             return
         try:
@@ -670,11 +676,13 @@ class BaseAsyncDatabaseWrapper:
             current = None
         if self._task is current:
             return
+        owner_name = self._task.get_name() if self._task else "<none>"
+        current_name = current.get_name() if current else "<none>"
         raise DatabaseError(
             "AsyncDatabaseWrapper objects created in one asyncio task can "
             "only be used in that same task. The object with alias '%s' "
-            "was created in task %r and this is task %r."
-            % (self.alias, self._task, current)
+            "was created in task %s and this is task %s."
+            % (self.alias, owner_name, current_name)
         )
 
     # ##### Miscellaneous #####
