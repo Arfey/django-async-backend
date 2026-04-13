@@ -1,4 +1,3 @@
-import asyncio
 from contextlib import (
     AsyncContextDecorator,
     asynccontextmanager,
@@ -91,26 +90,8 @@ class AsyncAtomic(AsyncContextDecorator):
                 "atomic block."
             )
 
-        # Reject cross-task nesting (same-task savepoints are fine).
-        # Outermost blocks marked _from_testcase deliberately span tasks
-        # (IsolatedAsyncioTestCase runs setUp and tests in separate tasks).
-        if (
-            connection.in_atomic_block
-            and not (
-                connection.atomic_blocks
-                and connection.atomic_blocks[0]._from_testcase
-            )
-            and connection._task_connection_owner is not asyncio.current_task()
-        ):
-            raise RuntimeError(
-                "Using a transaction in a nested task is forbidden. "
-                "Use a higher-level transaction that spans all "
-                "nested tasks, or create a new connection for the "
-                "task via _independent_connection."
-            )
         if not connection.in_atomic_block:
             # Reset state when entering an outermost atomic block.
-            connection._task_connection_owner = asyncio.current_task()
             connection.commit_on_exit = True
             connection.needs_rollback = False
             if not await connection.get_autocommit():

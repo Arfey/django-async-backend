@@ -352,7 +352,6 @@ class AsyncAtomicInsideTransactionTests(AsyncAtomicTests):
     async def asyncSetUp(self):
         await super().asyncSetUp()
         self.atomic = async_atomic()
-        self.atomic._from_testcase = True
         await self.atomic.__aenter__()
 
     async def asyncTearDown(self):
@@ -596,15 +595,15 @@ class IndependentConnectionTransaction(AsyncioTransactionTestCase):
 
 class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
     """
-    Child tasks created via gather/create_task inherit the parent's
-    connection via ContextVar. If a child opens its own async_atomic(),
-    it would create overlapping transactions on the shared connection,
-    corrupting state. A guard in __aenter__ raises RuntimeError with
-    a clear message instead of allowing silent corruption.
+    Child tasks that inherit a parent's connection via ContextVar can
+    corrupt transaction state or silently lose writes by sharing the
+    same psycopg async connection. validate_task_sharing on every
+    cursor/commit/rollback rejects the sharing with DatabaseError
+    (unless explicitly allowed via inc_task_sharing).
 
     Correct patterns:
-      - Wrap all tasks in a single parent async_atomic()
       - Use _independent_connection() per task
+      - inc_task_sharing() around code that deliberately shares
     """
 
     async def asyncSetUp(self):
@@ -613,43 +612,53 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
     async def asyncTearDown(self):
         await drop_table()
 
-    async def test_child_task_atomic_raises(self):
-        """async_atomic() in a child task raises RuntimeError."""
-
-        async def writer():
-            async with async_atomic():
+    async def test_child_task_cursor_raises(self):
+        """A child task using the parent's connection raises."""
+        # asyncSetUp's inc_task_sharing is still active across the whole
+        # test, so temporarily dec to exercise the guard.
+        conn = async_connections[DEFAULT_DB_ALIAS]
+        conn.dec_task_sharing()
+        try:
+            async def writer():
                 await create_instance("should_fail")
 
-        async with async_atomic():
-            with self.assertRaisesRegex(
-                RuntimeError, "nested task"
-            ):
+            with self.assertRaisesRegex(DatabaseError, "same task"):
                 await asyncio.create_task(writer())
+        finally:
+            conn.inc_task_sharing()
 
-    async def test_concurrent_gather_atomic_raises(self):
-        """gather() where each task opens async_atomic() raises.
+    async def test_cross_task_transaction_inheritance_raises(self):
+        """Cross-task connection use with one task in atomic raises.
 
-        This is the original issue #11 pattern — no parent atomic,
-        each child independently opens async_atomic(). The first
-        child stamps the connection, subsequent children see the
-        mismatch.
+        Reproduces the bug pattern: main task issues raw SQL while an
+        audit task has opened an async_atomic. Without per-query
+        validation this is silent data loss; with validation the
+        interloping cursor use raises DatabaseError.
         """
-        barrier = asyncio.Barrier(10)
+        conn = async_connections[DEFAULT_DB_ALIAS]
+        conn.dec_task_sharing()
+        try:
+            async def main_task():
+                await create_instance("main")
 
-        async def writer(task_id):
-            await barrier.wait()
-            async with async_atomic():
-                await create_instance(f"t{task_id}")
-                await asyncio.sleep(0)
+            async def audit_task():
+                try:
+                    async with async_atomic():
+                        await create_instance("audit")
+                        raise RuntimeError("rollback")
+                except RuntimeError:
+                    pass
 
-        results = await asyncio.gather(
-            *(writer(i) for i in range(10)), return_exceptions=True
-        )
-        errors = [r for r in results if isinstance(r, RuntimeError)]
-        self.assertTrue(
-            len(errors) > 0,
-            "Expected RuntimeError from concurrent async_atomic()",
-        )
+            results = await asyncio.gather(
+                main_task(), audit_task(), return_exceptions=True
+            )
+            errors = [r for r in results if isinstance(r, DatabaseError)]
+            self.assertTrue(
+                len(errors) > 0,
+                "Expected DatabaseError from cross-task connection use",
+            )
+        finally:
+            conn.inc_task_sharing()
 
     async def test_nested_savepoint_same_task_works(self):
         """Nested async_atomic() in the same task is a savepoint."""

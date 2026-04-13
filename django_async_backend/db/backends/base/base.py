@@ -81,6 +81,11 @@ class BaseAsyncDatabaseWrapper:
         self.savepoint_ids = []
         # Stack of active 'atomic' blocks.
         self.atomic_blocks = []
+        # asyncio task that owns this connection. Set by the connection
+        # handler at creation time and validated on every operation so
+        # two tasks can't share one connection's transaction/session state.
+        self._task = None
+        self._task_sharing_count = 0
         # Tracks if the outermost 'atomic' block should commit on exit,
         # ie. if autocommit was active on entry.
         self.commit_on_exit = True
@@ -289,6 +294,7 @@ class BaseAsyncDatabaseWrapper:
         Validate the connection is usable and perform database cursor wrapping.
         """
         self.validate_thread_sharing()
+        self.validate_task_sharing()
         if self.queries_logged:
             wrapped_cursor = self.make_debug_cursor(cursor)
         else:
@@ -328,6 +334,7 @@ class BaseAsyncDatabaseWrapper:
     async def commit(self):
         """Commit a transaction and reset the dirty flag."""
         self.validate_thread_sharing()
+        self.validate_task_sharing()
         self.validate_no_atomic_block()
         await self._commit()
         # A successful commit means that the database connection works.
@@ -337,6 +344,7 @@ class BaseAsyncDatabaseWrapper:
     async def rollback(self):
         """Roll back a transaction and reset the dirty flag."""
         self.validate_thread_sharing()
+        self.validate_task_sharing()
         self.validate_no_atomic_block()
         await self._rollback()
         # A successful rollback means that the database connection works.
@@ -347,6 +355,7 @@ class BaseAsyncDatabaseWrapper:
     async def close(self):
         """Close the connection to the database."""
         self.validate_thread_sharing()
+        self.validate_task_sharing()
         self.run_on_commit = []
 
         # Don't call validate_no_atomic_block() to avoid making it difficult
@@ -401,6 +410,7 @@ class BaseAsyncDatabaseWrapper:
         sid = "s%s_x%d" % (tid, self.savepoint_state)
 
         self.validate_thread_sharing()
+        self.validate_task_sharing()
         await self._savepoint(sid)
 
         return sid
@@ -413,6 +423,7 @@ class BaseAsyncDatabaseWrapper:
             return
 
         self.validate_thread_sharing()
+        self.validate_task_sharing()
         await self._savepoint_rollback(sid)
 
         # Remove any callbacks registered while this savepoint was active.
@@ -430,6 +441,7 @@ class BaseAsyncDatabaseWrapper:
             return
 
         self.validate_thread_sharing()
+        self.validate_task_sharing()
         await self._savepoint_commit(sid)
 
     def clean_savepoints(self):
@@ -471,6 +483,7 @@ class BaseAsyncDatabaseWrapper:
         backends.
         """
         self.validate_no_atomic_block()
+        self.validate_task_sharing()
         await self.close_if_health_check_failed()
         await self.ensure_connection()
 
@@ -618,6 +631,51 @@ class BaseAsyncDatabaseWrapper:
                 "thread id %s."
                 % (self.alias, self._thread_ident, _thread.get_ident())
             )
+
+    # ##### Task safety handling #####
+
+    @property
+    def allow_task_sharing(self):
+        return self._task_sharing_count > 0
+
+    def inc_task_sharing(self):
+        self._task_sharing_count += 1
+
+    def dec_task_sharing(self):
+        if self._task_sharing_count <= 0:
+            raise RuntimeError(
+                "Cannot decrement the task sharing count below zero."
+            )
+        self._task_sharing_count -= 1
+
+    def validate_task_sharing(self):
+        """
+        Validate that the connection isn't accessed by an asyncio task other
+        than the one that originally created it, unless the connection was
+        explicitly authorized to be shared between tasks via
+        `inc_task_sharing()`. Raise DatabaseError if the validation fails.
+
+        Sharing a psycopg async connection across tasks is unsafe: one task
+        can start/commit/rollback a transaction or toggle session state
+        while another task's queries are interleaving on the same protocol
+        stream, causing silent data loss or state corruption.
+        """
+        import asyncio
+
+        if self._task is None or self.allow_task_sharing:
+            return
+        try:
+            current = asyncio.current_task()
+        except RuntimeError:
+            current = None
+        if self._task is current:
+            return
+        raise DatabaseError(
+            "AsyncDatabaseWrapper objects created in one asyncio task can "
+            "only be used in that same task. The object with alias '%s' "
+            "was created in task %r and this is task %r."
+            % (self.alias, self._task, current)
+        )
 
     # ##### Miscellaneous #####
 

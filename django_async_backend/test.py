@@ -9,7 +9,30 @@ from django_async_backend.db.transaction import async_atomic
 
 class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
     # todo: fix problem with creating models
-    pass
+
+    async def _enter_task_sharing(self):
+        # IsolatedAsyncioTestCase runs setUp, test, and tearDown in
+        # different asyncio tasks but tests expect to share a single
+        # connection across them. Mark every configured connection as
+        # task-shared for the duration of the test. Register dec as an
+        # async cleanup so it runs after user cleanups (LIFO ordering
+        # means the first-registered cleanup is the last to execute).
+        self._shared_connections = []
+        for name in async_connections.settings.keys():
+            conn = async_connections[name]
+            conn.inc_task_sharing()
+            self._shared_connections.append(conn)
+        self.addAsyncCleanup(self._exit_task_sharing)
+
+    async def _exit_task_sharing(self):
+        for conn in self._shared_connections:
+            conn.dec_task_sharing()
+
+    def _callSetUp(self):
+        self._asyncioRunner.get_loop()
+        self._asyncioTestContext.run(self.setUp)
+        self._callAsync(self._enter_task_sharing)
+        self._callAsync(self.asyncSetUp)
 
 
 class AsyncioTestCase(AsyncioTransactionTestCase):
@@ -23,7 +46,6 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
             connection = async_connections[name]
             self.connections[name] = connection
             self.atomic_cms[name] = async_atomic(name)
-            self.atomic_cms[name]._from_testcase = True
             self.atomics[name] = await self.atomic_cms[name].__aenter__()
 
     async def _close_transaction(self):
@@ -39,6 +61,7 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
         # correct loop instance.
         self._asyncioRunner.get_loop()
         self._asyncioTestContext.run(self.setUp)
+        self._callAsync(self._enter_task_sharing)
         self._callAsync(self._init_transaction)
         self._callAsync(self.asyncSetUp)
 

@@ -1,4 +1,3 @@
-import asyncio
 from contextlib import asynccontextmanager
 
 from django.utils.connection import BaseConnectionHandler
@@ -7,9 +6,19 @@ from django.utils.connection import BaseConnectionHandler
 class BaseAsyncConnectionHandler(BaseConnectionHandler):
 
     async def close_all(self):
-        await asyncio.gather(
-            *[conn.close() for conn in self.all(initialized_only=True)]
-        )
+        # close_all() is called from middleware cleanup paths that may
+        # shield into a new task (asyncio.shield wraps in a sub-task),
+        # so grant task sharing while closing — the alternative is
+        # forcing every caller to inc/dec around the call.
+        conns = self.all(initialized_only=True)
+        for conn in conns:
+            conn.inc_task_sharing()
+        try:
+            for conn in conns:
+                await conn.close()
+        finally:
+            for conn in conns:
+                conn.dec_task_sharing()
 
     @asynccontextmanager
     async def _independent_connection(self):
@@ -31,9 +40,8 @@ class BaseAsyncConnectionHandler(BaseConnectionHandler):
                 self[conn.alias] = self.create_connection(conn.alias)
             yield
         finally:
-            close_task = asyncio.gather(*[conn.close() for conn in self.all()])
-
+            new_connections = self.all()
             for conn in connections:
                 self[conn.alias] = conn
-
-            await close_task
+            for conn in new_connections:
+                await conn.close()

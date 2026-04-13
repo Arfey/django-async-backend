@@ -86,7 +86,6 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
                 f"The async connection '{alias}' doesn't exist."
             )
 
-        wrapper = backend.AsyncDatabaseWrapper(db, alias)
         try:
             task = asyncio.current_task()
         except RuntimeError:
@@ -96,5 +95,6 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
                 "Cannot create an async connection without a running "
                 "event loop."
             )
-        wrapper._task_connection_owner = task
+        wrapper = backend.AsyncDatabaseWrapper(db, alias)
+        wrapper._task = task
         return wrapper
