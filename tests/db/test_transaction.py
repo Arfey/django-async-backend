@@ -352,6 +352,7 @@ class AsyncAtomicInsideTransactionTests(AsyncAtomicTests):
     async def asyncSetUp(self):
         await super().asyncSetUp()
         self.atomic = async_atomic()
+        self.atomic._from_testcase = True
         await self.atomic.__aenter__()
 
     async def asyncTearDown(self):
@@ -633,20 +634,18 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
         child stamps the connection, subsequent children see the
         mismatch.
         """
-        errors = []
         barrier = asyncio.Barrier(10)
 
         async def writer(task_id):
-            try:
-                await barrier.wait()
-                async with async_atomic():
-                    await create_instance(f"t{task_id}")
-                    await asyncio.sleep(0)
-            except RuntimeError as e:
-                errors.append((task_id, e))
+            await barrier.wait()
+            async with async_atomic():
+                await create_instance(f"t{task_id}")
+                await asyncio.sleep(0)
 
-        await asyncio.gather(*(writer(i) for i in range(10)))
-
+        results = await asyncio.gather(
+            *(writer(i) for i in range(10)), return_exceptions=True
+        )
+        errors = [r for r in results if isinstance(r, RuntimeError)]
         self.assertTrue(
             len(errors) > 0,
             "Expected RuntimeError from concurrent async_atomic()",
@@ -673,38 +672,34 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
     async def test_parent_atomic_avoids_corruption(self):
         """Single parent async_atomic wrapping gather() works."""
         barrier = asyncio.Barrier(10)
-        errors = []
 
         async def writer(task_id):
-            try:
-                await barrier.wait()
-                await create_instance(f"p{task_id}")
-                await asyncio.sleep(0)
-            except Exception as e:
-                errors.append((task_id, e))
+            await barrier.wait()
+            await create_instance(f"p{task_id}")
+            await asyncio.sleep(0)
 
         async with async_atomic():
-            await asyncio.gather(*(writer(i) for i in range(10)))
+            results = await asyncio.gather(
+                *(writer(i) for i in range(10)), return_exceptions=True
+            )
 
-        self.assertEqual(errors, [])
+        self.assertEqual([r for r in results if isinstance(r, Exception)], [])
         self.assertEqual(len(await get_all()), 10)
 
     async def test_independent_connection_avoids_corruption(self):
         """_independent_connection() per task avoids corruption."""
         barrier = asyncio.Barrier(10)
-        errors = []
 
         async def writer(task_id):
-            try:
-                await barrier.wait()
-                async with async_connections._independent_connection():
-                    async with async_atomic():
-                        await create_instance(f"i{task_id}")
-                        await asyncio.sleep(0)
-            except Exception as e:
-                errors.append((task_id, e))
+            await barrier.wait()
+            async with async_connections._independent_connection():
+                async with async_atomic():
+                    await create_instance(f"i{task_id}")
+                    await asyncio.sleep(0)
 
-        await asyncio.gather(*(writer(i) for i in range(10)))
+        results = await asyncio.gather(
+            *(writer(i) for i in range(10)), return_exceptions=True
+        )
 
-        self.assertEqual(errors, [])
+        self.assertEqual([r for r in results if isinstance(r, Exception)], [])
         self.assertEqual(len(await get_all()), 10)
