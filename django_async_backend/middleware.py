@@ -33,7 +33,6 @@ def close_async_connections(get_response):
                 await asyncio.shield(async_connections.close_all())
             finally:
                 for conn in conns:
-                    if conn._task_sharing_count > 0:
-                        conn.dec_task_sharing()
+                    conn.dec_task_sharing()
 
     return middleware

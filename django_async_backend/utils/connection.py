@@ -34,5 +34,8 @@ class BaseAsyncConnectionHandler(BaseConnectionHandler):
             new_connections = self.all()
             for conn in connections:
                 self[conn.alias] = conn
+            # Sequential close, not asyncio.gather: each independent
+            # conn is task-owned by the current task, and gather's
+            # sub-tasks would fail validate_task_sharing.
             for conn in new_connections:
                 await conn.close()
