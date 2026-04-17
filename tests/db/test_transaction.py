@@ -725,11 +725,11 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
         self.assertEqual(await get_all(), [])
 
     async def test_inc_task_sharing_allows_cross_task_use(self):
-        """inc_task_sharing is the documented escape hatch."""
-        conn = async_connections[DEFAULT_DB_ALIAS]
-        # Test framework already has it inc'd; verify cross-task use
-        # actually works rather than relying on implicit state.
+        """inc_task_sharing is the documented escape hatch.
 
+        Test framework already has it inc'd; verify cross-task use
+        actually works rather than relying on implicit state.
+        """
         async def writer():
             await create_instance("shared")
 
