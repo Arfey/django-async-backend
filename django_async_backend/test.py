@@ -10,7 +10,13 @@ from django_async_backend.db.transaction import async_atomic
 class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
     # todo: fix problem with creating models
 
-    async def _enter_task_sharing(self):
+    async def _async_pre_setup(self):
+        """Hook run between setUp and asyncSetUp.
+
+        Subclasses can override to add their own pre-setup, but must call
+        super() first so connection task-sharing is enabled before their
+        setup touches any connection.
+        """
         # IsolatedAsyncioTestCase runs setUp, test, and tearDown in
         # different asyncio tasks but tests expect to share a single
         # connection across them. Mark every configured connection as
@@ -29,18 +35,19 @@ class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
             conn.dec_task_sharing()
 
     def _callSetUp(self):
-        # Replicates IsolatedAsyncioTestCase._callSetUp (CPython 3.13) and
-        # injects _enter_task_sharing before asyncSetUp. We can't super()
-        # because we need to run code between setUp and asyncSetUp.
+        # Mirrors IsolatedAsyncioTestCase._callSetUp and inserts
+        # _async_pre_setup between setUp and asyncSetUp. We can't super()
+        # because we need to run code between those two hooks.
         self._asyncioRunner.get_loop()
         self._asyncioTestContext.run(self.setUp)
-        self._callAsync(self._enter_task_sharing)
+        self._callAsync(self._async_pre_setup)
         self._callAsync(self.asyncSetUp)
 
 
 class AsyncioTestCase(AsyncioTransactionTestCase):
 
-    async def _init_transaction(self):
+    async def _async_pre_setup(self):
+        await super()._async_pre_setup()
         self.connections = {}
         self.atomic_cms = {}
         self.atomics = {}
@@ -57,16 +64,6 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
             connection.set_rollback(True)
             await self.atomic_cms[name].__aexit__(None, None, None)
             await connection.close()
-
-    def _callSetUp(self):
-        # Force loop to be initialized and set as the current loop
-        # so that setUp functions can use get_event_loop() and get the
-        # correct loop instance.
-        self._asyncioRunner.get_loop()
-        self._asyncioTestContext.run(self.setUp)
-        self._callAsync(self._enter_task_sharing)
-        self._callAsync(self._init_transaction)
-        self._callAsync(self.asyncSetUp)
 
     def _callTearDown(self):
         self._callAsync(self.asyncTearDown)

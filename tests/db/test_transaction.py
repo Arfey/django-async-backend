@@ -682,6 +682,48 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
             with self.assertRaisesRegex(DatabaseError, "same task"):
                 await asyncio.create_task(toggle())
 
+    async def test_cross_task_close_raises(self):
+        """close() is a user-facing API — must fire the guard too."""
+        conn = async_connections[DEFAULT_DB_ALIAS]
+        async with self._strict_task_sharing(conn):
+            async def closer():
+                await conn.close()
+
+            with self.assertRaisesRegex(DatabaseError, "same task"):
+                await asyncio.create_task(closer())
+
+    async def test_fanout_gather_atomic_raises(self):
+        """Fan-out pattern from issue #11: N gather'd tasks each open
+        their own async_atomic on the shared connection.
+
+        Proves validate_task_sharing short-circuits *every* child's
+        atomic entry rather than only the first one in sibling/audit
+        shape. Without strict sharing this would match issue #11's
+        ProgrammingError 'connection in transaction status INTRANS';
+        with strict sharing we expect clean DatabaseError instead.
+        """
+        conn = async_connections[DEFAULT_DB_ALIAS]
+        async with self._strict_task_sharing(conn):
+            barrier = asyncio.Barrier(5)
+
+            async def writer(i):
+                await barrier.wait()
+                async with async_atomic():
+                    await create_instance(f"fanout{i}")
+
+            results = await asyncio.gather(
+                *(writer(i) for i in range(5)), return_exceptions=True
+            )
+            db_errors = [
+                r for r in results if isinstance(r, DatabaseError)
+            ]
+            self.assertEqual(
+                len(db_errors), 5,
+                f"expected 5 DatabaseError, got {results!r}",
+            )
+        # Nothing persisted: the guard short-circuits before BEGIN.
+        self.assertEqual(await get_all(), [])
+
     async def test_inc_task_sharing_allows_cross_task_use(self):
         """inc_task_sharing is the documented escape hatch."""
         conn = async_connections[DEFAULT_DB_ALIAS]
