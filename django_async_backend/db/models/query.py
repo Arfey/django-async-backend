@@ -2136,13 +2136,13 @@ async def prefetch_related_objects(model_instances, *related_lookups):
                 )
 
             # Check if terminal lookups have a valid prefetcher
-            for lookup in lookups:
-                lk_attrs = lookup.prefetch_through.split(LOOKUP_SEP)
+            for lk in lookups:
+                lk_attrs = lk.prefetch_through.split(LOOKUP_SEP)
                 if level == len(lk_attrs) - 1 and prefetcher is None:
                     raise ValueError(
                         "'%s' does not resolve to an item that supports "
                         "prefetching - this is an invalid parameter to "
-                        "prefetch_related()." % lookup.prefetch_through,
+                        "prefetch_related()." % lk.prefetch_through,
                     )
 
             obj_to_fetch = None
@@ -2189,18 +2189,14 @@ async def prefetch_related_objects(model_instances, *related_lookups):
                 obj_list = new_obj_list
 
         # Collect lookups that go deeper (have more levels beyond this one)
-        deeper = []
-        for lookup in lookups:
-            lk_attrs = lookup.prefetch_through.split(LOOKUP_SEP)
-            if len(lk_attrs) > level + 1:
-                deeper.append(lookup)
+        deeper = [lk for lk in lookups if len(lk.prefetch_through.split(LOOKUP_SEP)) > level + 1]
 
         if deeper and obj_list:
             # Re-group by next-level attr and recurse with parallel fan-out
             next_groups: dict[str, list] = {}
-            for lookup in deeper:
-                next_attr = lookup.prefetch_through.split(LOOKUP_SEP)[level + 1]
-                next_groups.setdefault(next_attr, []).append(lookup)
+            for lk in deeper:
+                next_attr = lk.prefetch_through.split(LOOKUP_SEP)[level + 1]
+                next_groups.setdefault(next_attr, []).append(lk)
 
             if len(next_groups) == 1:
                 additional_from_level.extend(
@@ -2330,7 +2326,9 @@ async def _prefetch_fk_queryset(instances, prefetcher, lookup, level, *, forward
         rel_qs = current_querysets[0]
     elif forward:
         # Forward FK: use our async QuerySet on the target model.
-        rel_qs = QuerySet(model=field.remote_field.model)
+        target_model = field.remote_field.model
+        db = router.db_for_read(target_model, instance=instances[0])
+        rel_qs = QuerySet(model=target_model, using=db)
     else:
         # Reverse FK: use the base manager's queryset.
         rel_qs = BaseManager.get_queryset(prefetcher)
