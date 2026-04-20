@@ -8,7 +8,7 @@ from django_async_backend.db.backends.postgresql.base import DatabaseWrapper
 
 
 class TestDatabaseWrapper(TestCase):
-    def test_warning_with_pool(self):
+    async def test_warning_with_pool(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
         settings_dict = connection.settings_dict.copy()
@@ -17,7 +17,7 @@ class TestDatabaseWrapper(TestCase):
         with self.assertWarns(RuntimeWarning):
             DatabaseWrapper(settings_dict).get_connection_params()
 
-    def test_no_warning_without_pool(self):
+    async def test_no_warning_without_pool(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
         settings_dict = connection.settings_dict.copy()
@@ -35,7 +35,7 @@ class TestDatabaseWrapper(TestCase):
             "RuntimeWarning was raised even though pool option is not enabled.",
         )
 
-    def test_no_warning_when_pool_warning_disabled(self):
+    async def test_no_warning_when_pool_warning_disabled(self):
         connection = async_connections[DEFAULT_DB_ALIAS]
 
         settings_dict = connection.settings_dict.copy()

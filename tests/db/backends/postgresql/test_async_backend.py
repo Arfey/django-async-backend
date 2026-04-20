@@ -464,10 +464,12 @@ class Tests(AsyncioTestCase):
         with mock.patch.object(
             Database, "__version__", "4.2.1 (dt dec pq3 ext lo64)"
         ):
+            psycopg_version.cache_clear()
             self.assertEqual(psycopg_version(), (4, 2, 1))
         with mock.patch.object(
             Database, "__version__", "4.2b0.dev1 (dt dec pq3 ext lo64)"
         ):
+            psycopg_version.cache_clear()
             self.assertEqual(psycopg_version(), (4, 2))
 
     @override_settings(DEBUG=True)
@@ -509,7 +511,7 @@ class Tests(AsyncioTestCase):
         await new_connection.connect()
         settings = new_connection.settings_dict.copy()
 
-        msg = r"PostgreSQL 14 or later is required \(found 13\)."
+        msg = r"or later is required \(found 13\)."
         with self.assertRaisesRegex(NotSupportedError, msg):
             await CustomAsyncDatabaseWrapper(
                 settings

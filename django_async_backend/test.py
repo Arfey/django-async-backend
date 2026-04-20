@@ -1,3 +1,4 @@
+import asyncio
 from unittest import IsolatedAsyncioTestCase
 
 from django.core.signals import request_started
@@ -7,9 +8,29 @@ from django_async_backend.db import async_connections
 from django_async_backend.db.transaction import async_atomic
 
 
+def _refresh_connection_task_ownership_decorator(fn):
+    async def inner(*args, **kwargs):
+        task = asyncio.current_task()
+        for name in async_connections.settings.keys():
+            connection = async_connections[name]
+            connection._task = task
+        return await fn(*args, **kwargs)
+
+    return inner
+
+
 class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
     # todo: fix problem with creating models
-    pass
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        for name, method in list(vars(cls).items()):
+            if name.startswith("test") and callable(method):
+                setattr(
+                    cls,
+                    name,
+                    _refresh_connection_task_ownership_decorator(method),
+                )
 
 
 class AsyncioTestCase(AsyncioTransactionTestCase):
