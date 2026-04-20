@@ -464,12 +464,10 @@ class Tests(AsyncioTestCase):
         with mock.patch.object(
             Database, "__version__", "4.2.1 (dt dec pq3 ext lo64)"
         ):
-            psycopg_version.cache_clear()
             self.assertEqual(psycopg_version(), (4, 2, 1))
         with mock.patch.object(
             Database, "__version__", "4.2b0.dev1 (dt dec pq3 ext lo64)"
         ):
-            psycopg_version.cache_clear()
             self.assertEqual(psycopg_version(), (4, 2))
 
     @override_settings(DEBUG=True)
