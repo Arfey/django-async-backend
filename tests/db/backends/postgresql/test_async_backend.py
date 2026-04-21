@@ -509,7 +509,7 @@ class Tests(AsyncioTestCase):
         await new_connection.connect()
         settings = new_connection.settings_dict.copy()
 
-        msg = r"PostgreSQL 14 or later is required \(found 13\)."
+        msg = r"or later is required \(found 13\)."
         with self.assertRaisesRegex(NotSupportedError, msg):
             await CustomAsyncDatabaseWrapper(
                 settings

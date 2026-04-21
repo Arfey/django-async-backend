@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import (
     AsyncContextDecorator,
     asynccontextmanager,
@@ -79,6 +80,14 @@ class AsyncAtomic(AsyncContextDecorator):
 
     async def __aenter__(self):
         connection = await self.get_connection(self.using)
+
+        if connection._task is not asyncio.current_task():
+            raise RuntimeError(
+                "Transactions cannot be used within nested tasks. "
+                "Consider using a higher-level transaction that "
+                "encompasses all nested tasks, or establish a separate "
+                "connection for the task (e.g., _independent_connection)."
+            )
 
         if (
             self.durable

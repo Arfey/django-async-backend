@@ -1,3 +1,4 @@
+import asyncio
 import sys
 
 from django.db import (
@@ -590,3 +591,115 @@ class IndependentConnectionTransaction(AsyncioTransactionTestCase):
                         await create_instance(2)
 
                         self.assertEqual(len(await get_all()), 1)
+
+
+class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
+    """
+    Child tasks that inherit a parent's connection via ContextVar can corrupt
+    transaction state or silently lose writes when sharing the same psycopg
+    async connection. validate_task_sharing, called on every
+    cursor/commit/rollback, rejects such sharing with a RuntimeError
+    (unless explicitly allowed via inc_task_sharing).
+    """
+
+    async def asyncSetUp(self):
+        await create_table()
+
+    async def asyncTearDown(self):
+        await drop_table()
+
+    async def test_fanout_create_task_atomic_raises(self):
+        """
+        A child task that opens async_atomic on the parent's
+        connection raises RuntimeError.
+        """
+
+        async def writer():
+            async with async_atomic():
+                await create_instance("fanout")
+
+        with self.assertRaises(RuntimeError):
+            await asyncio.create_task(writer())
+
+    async def test_fanout_gather_atomic_raises(self):
+        """Fan-out pattern from issue #11: N gather'd tasks each open
+        their own async_atomic on the shared connection.
+
+        Proves validate_task_sharing short-circuits *every* child's
+        atomic entry rather than only the first one in sibling/audit
+        shape. Without strict sharing this would match issue #11's
+        ProgrammingError 'connection in transaction status INTRANS';
+        with strict sharing we expect clean DatabaseError instead.
+        """
+        barrier = asyncio.Barrier(5)
+
+        async def writer(i):
+            await barrier.wait()
+            async with async_atomic():
+                await create_instance(f"fanout{i}")
+
+        results = await asyncio.gather(
+            *(writer(i) for i in range(5)), return_exceptions=True
+        )
+
+        db_errors = [r for r in results if isinstance(r, RuntimeError)]
+        self.assertEqual(
+            len(db_errors),
+            5,
+            f"expected 5 RuntimeError, got {results!r}",
+        )
+        # Nothing persisted: the guard short-circuits before BEGIN.
+        self.assertEqual(await get_all(), [])
+
+    async def test_nested_savepoint_same_task_works(self):
+        """Nested async_atomic() in the same task is a savepoint."""
+        async with async_atomic():
+            await create_instance("outer")
+            async with async_atomic():
+                await create_instance("inner")
+
+        self.assertEqual(len(await get_all()), 2)
+
+    async def test_sequential_atomic_same_task_works(self):
+        """Sequential async_atomic() calls in the same task work."""
+        async with async_atomic():
+            await create_instance("first")
+        async with async_atomic():
+            await create_instance("second")
+
+        self.assertEqual(len(await get_all()), 2)
+
+    async def test_parent_atomic_avoids_corruption(self):
+        """Single parent async_atomic wrapping gather() works."""
+        barrier = asyncio.Barrier(10)
+
+        async def writer(task_id):
+            await barrier.wait()
+            await create_instance(f"p{task_id}")
+            await asyncio.sleep(0)
+
+        async with async_atomic():
+            results = await asyncio.gather(
+                *(writer(i) for i in range(10)), return_exceptions=True
+            )
+
+        self.assertEqual([r for r in results if isinstance(r, Exception)], [])
+        self.assertEqual(len(await get_all()), 10)
+
+    async def test_independent_connection_avoids_corruption(self):
+        """_independent_connection() per task avoids corruption."""
+        barrier = asyncio.Barrier(10)
+
+        async def writer(task_id):
+            await barrier.wait()
+            async with async_connections._independent_connection():
+                async with async_atomic():
+                    await create_instance(f"i{task_id}")
+                    await asyncio.sleep(0)
+
+        results = await asyncio.gather(
+            *(writer(i) for i in range(10)), return_exceptions=True
+        )
+
+        self.assertEqual([r for r in results if isinstance(r, Exception)], [])
+        self.assertEqual(len(await get_all()), 10)

@@ -1,3 +1,5 @@
+import asyncio
+from functools import wraps
 from unittest import IsolatedAsyncioTestCase
 
 from django.core.signals import request_started
@@ -7,9 +9,52 @@ from django_async_backend.db import async_connections
 from django_async_backend.db.transaction import async_atomic
 
 
+def _refresh_connection_task_ownership_decorator(fn):
+    @wraps(fn)
+    async def inner(*args, **kwargs):
+        task = asyncio.current_task()
+        for name in async_connections.settings.keys():
+            connection = async_connections[name]
+            connection._task = task
+        return await fn(*args, **kwargs)
+
+    return inner
+
+
 class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
     # todo: fix problem with creating models
-    pass
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        for name, method in list(vars(cls).items()):
+            if name.startswith("test") and callable(method):
+                setattr(
+                    cls,
+                    name,
+                    _refresh_connection_task_ownership_decorator(method),
+                )
+
+    def _callSetUp(self):
+        self._asyncioRunner.get_loop()
+        self._asyncioTestContext.run(self.setUp)
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(self.asyncSetUp)
+        )
+
+    async def _close_connection(self):
+        for name in async_connections.settings.keys():
+            await async_connections[name].close()
+
+    def _callTearDown(self):
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(self.asyncTearDown)
+        )
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(
+                self._close_connection
+            )
+        )
+        self._asyncioTestContext.run(self.tearDown)
 
 
 class AsyncioTestCase(AsyncioTransactionTestCase):
@@ -39,10 +84,14 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
         self._asyncioRunner.get_loop()
         self._asyncioTestContext.run(self.setUp)
         self._callAsync(self._init_transaction)
-        self._callAsync(self.asyncSetUp)
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(self.asyncSetUp)
+        )
 
     def _callTearDown(self):
-        self._callAsync(self.asyncTearDown)
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(self.asyncTearDown)
+        )
         self._callAsync(self._close_transaction)
         self._asyncioTestContext.run(self.tearDown)
 

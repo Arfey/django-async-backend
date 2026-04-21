@@ -1,3 +1,5 @@
+import asyncio
+
 from asgiref.sync import iscoroutinefunction
 from django.core.exceptions import ImproperlyConfigured
 from django.db import DEFAULT_DB_ALIAS
@@ -84,4 +86,16 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
                 f"The async connection '{alias}' doesn't exist."
             )
 
-        return backend.AsyncDatabaseWrapper(db, alias)
+        try:
+            task = asyncio.current_task()
+        except RuntimeError:
+            task = None
+
+        if task is None:
+            raise RuntimeError(
+                "Cannot create an async connection without a running "
+                "event loop."
+            )
+        wrapper = backend.AsyncDatabaseWrapper(db, alias)
+        wrapper._task = task
+        return wrapper
