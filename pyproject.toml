@@ -37,7 +37,7 @@ repository = "https://github.com/Arfey/django-async-backend"
 
 [tool.poetry.dependencies]
 python = ">=3.12"
-django = ">=6"
+django = ">=6.1"
 psycopg = {extras = ["binary"], version = "^3"}
 pydantic = "^2.12.5"
 
