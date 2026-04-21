@@ -83,10 +83,10 @@ class AsyncAtomic(AsyncContextDecorator):
 
         if connection._task is not asyncio.current_task():
             raise RuntimeError(
-                "Using a transaction in a nested task is forbidden. "
-                "Use a higher-level transaction that spans all "
-                "nested tasks, or create a new connection for the "
-                "task via _independent_connection."
+                "Transactions cannot be used within nested tasks. "
+                "Consider using a higher-level transaction that "
+                "encompasses all nested tasks, or establish a separate "
+                "connection for the task (e.g., _independent_connection)."
             )
 
         if (

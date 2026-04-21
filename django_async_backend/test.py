@@ -1,4 +1,5 @@
 import asyncio
+from functools import wraps
 from unittest import IsolatedAsyncioTestCase
 
 from django.core.signals import request_started
@@ -9,6 +10,7 @@ from django_async_backend.db.transaction import async_atomic
 
 
 def _refresh_connection_task_ownership_decorator(fn):
+    @wraps(fn)
     async def inner(*args, **kwargs):
         task = asyncio.current_task()
         for name in async_connections.settings.keys():
