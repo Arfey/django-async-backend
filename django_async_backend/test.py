@@ -32,6 +32,28 @@ class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
                     _refresh_connection_task_ownership_decorator(method),
                 )
 
+    def _callSetUp(self):
+        self._asyncioRunner.get_loop()
+        self._asyncioTestContext.run(self.setUp)
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(self.asyncSetUp)
+        )
+
+    async def _close_connection(self):
+        for name in async_connections.settings.keys():
+            await async_connections[name].close()
+
+    def _callTearDown(self):
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(self.asyncTearDown)
+        )
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(
+                self._close_connection
+            )
+        )
+        self._asyncioTestContext.run(self.tearDown)
+
 
 class AsyncioTestCase(AsyncioTransactionTestCase):
 
@@ -60,10 +82,14 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
         self._asyncioRunner.get_loop()
         self._asyncioTestContext.run(self.setUp)
         self._callAsync(self._init_transaction)
-        self._callAsync(self.asyncSetUp)
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(self.asyncSetUp)
+        )
 
     def _callTearDown(self):
-        self._callAsync(self.asyncTearDown)
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(self.asyncTearDown)
+        )
         self._callAsync(self._close_transaction)
         self._asyncioTestContext.run(self.tearDown)
 
