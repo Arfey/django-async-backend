@@ -1,6 +1,13 @@
 """
 Sync-bridged async DatabaseWrapper used by AsyncioRollbackTestCase.
 
+Vendored from django-async-backend PR #20:
+https://github.com/Arfey/django-async-backend/pull/20
+
+Copied verbatim from upstream commit 6e9d8fe (branch
+``feat/asyncio-rollback-testcase``). Remove this file and import from
+``django_async_backend.db.sync_bridge`` once upstream merges.
+
 Routes every operation that would normally hit an async psycopg connection
 through Django's sync connection via ``sync_to_async``. This lets a Django
 ``TestCase`` wrap a single transaction around both sync ORM calls and code
@@ -19,6 +26,7 @@ Trade-offs (intentional):
   branch fires and nests savepoints on top of Django's own per-test
   savepoint. PostgreSQL is the source of truth for the savepoint stack.
 """
+
 import _thread
 import collections
 from contextlib import contextmanager
@@ -53,9 +61,9 @@ class _BridgedAsyncCursor:
         )
 
     async def executemany(self, sql, param_list):
-        return await sync_to_async(
-            self.cursor.executemany, thread_sensitive=True
-        )(sql, param_list)
+        return await sync_to_async(self.cursor.executemany, thread_sensitive=True)(
+            sql, param_list
+        )
 
     async def fetchone(self):
         return await sync_to_async(self.cursor.fetchone, thread_sensitive=True)()
@@ -66,9 +74,7 @@ class _BridgedAsyncCursor:
     async def fetchmany(self, size=None):
         if size is None:
             size = self.cursor.arraysize
-        return await sync_to_async(
-            self.cursor.fetchmany, thread_sensitive=True
-        )(size)
+        return await sync_to_async(self.cursor.fetchmany, thread_sensitive=True)(size)
 
     async def close(self):
         await sync_to_async(self.cursor.close, thread_sensitive=True)()
@@ -100,8 +106,7 @@ class SyncBridgedAsyncWrapper:
         Falling back to a fresh per-thread lookup defeats the bridge."""
         self.alias = alias
         self._sync = (
-            sync_conn if sync_conn is not None
-            else django_sync_connections[alias]
+            sync_conn if sync_conn is not None else django_sync_connections[alias]
         )
 
         # Async-side state machine fields read/written by async_atomic.
@@ -127,6 +132,9 @@ class SyncBridgedAsyncWrapper:
         # Required by code that introspects task ownership.
         self._task = None
 
+        # Lazy ``_BridgedOps`` proxy — see the ``ops`` property below.
+        self._ops_proxy = None
+
     # ----- Attributes that defer to the sync connection -----
 
     @property
@@ -147,7 +155,16 @@ class SyncBridgedAsyncWrapper:
 
     @property
     def ops(self):
-        return self._sync.ops
+        # Real ``AsyncDatabaseOperations`` exposes an async ``compose_sql``;
+        # callers in async-only code paths ``await`` it. The sync ops
+        # only has a sync version that internally opens a cursor — calling
+        # it from inside an async context trips Django's
+        # ``SynchronousOnlyOperation`` guard. Wrap with a thin proxy that
+        # offers the async surface (compose_sql) and falls back to sync
+        # ops for everything else.
+        if self._ops_proxy is None:
+            self._ops_proxy = _BridgedOps(self._sync.ops)
+        return self._ops_proxy
 
     @property
     def Database(self):
@@ -253,10 +270,7 @@ class SyncBridgedAsyncWrapper:
         await self._exec_on_sync(self._sync.ops.savepoint_commit_sql(sid))
 
     async def _savepoint_allowed(self):
-        return (
-            self._sync.features.uses_savepoints
-            and not await self.get_autocommit()
-        )
+        return self._sync.features.uses_savepoints and not await self.get_autocommit()
 
     async def savepoint(self):
         if not await self._savepoint_allowed():
@@ -356,6 +370,30 @@ class SyncBridgedAsyncWrapper:
             raise TypeError("on_commit()'s callback must be a callable.")
         if self.in_atomic_block:
             self.run_on_commit.append((set(self.savepoint_ids), func, robust))
+
+
+class _BridgedOps:
+    """Proxies sync ``DatabaseOperations`` and exposes an async ``compose_sql``.
+
+    Real ``AsyncDatabaseOperations`` from ``django_async_backend.db.backends.postgresql``
+    has ``async def compose_sql`` so callers do
+    ``await conn.ops.compose_sql(sql, params)``. The sync postgres ops
+    only has a sync version that opens a cursor inline; calling it from
+    an async context raises ``SynchronousOnlyOperation``. This proxy
+    wraps the sync method in ``sync_to_async`` so the async-only code
+    paths in user code don't have to special-case the bridge.
+    """
+
+    def __init__(self, sync_ops):
+        self._sync_ops = sync_ops
+
+    async def compose_sql(self, sql, params):
+        return await sync_to_async(
+            self._sync_ops.compose_sql, thread_sensitive=True
+        )(sql, params)
+
+    def __getattr__(self, name):
+        return getattr(self._sync_ops, name)
 
 
 class _NoopErrorWrapper:

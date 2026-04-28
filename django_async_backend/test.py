@@ -105,89 +105,131 @@ class AsyncioRollbackTestCase(DjangoTestCase):
     """Django ``TestCase`` that also rolls back ``async_connections`` writes.
 
     Routes every ``async_connections[alias]`` operation through Django's sync
-    connection for the duration of the test. The single transaction Django
-    opens around the class then covers writes done via either pool, and
-    per-test savepoints roll both back together.
+    connection for the duration of the test class. The single transaction
+    Django opens around the class then covers writes done via either pool,
+    and per-test savepoints roll both back together.
+
+    The proxy is installed at ``setUpClass`` by swapping
+    ``async_connections._connections`` (and Django's
+    ``connections._connections``) to thread-blind ``SimpleNamespace``\\s
+    for the class duration. That means even sync test methods that drive
+    async code through ``async_to_sync(...)`` see the proxy on the worker
+    thread — without that swap, the worker resolves a fresh per-thread
+    async connection that opens its own autocommit transaction.
 
     Async test methods (``async def test_*``) are run via ``async_to_sync``;
     optional ``asyncSetUp`` / ``asyncTearDown`` hooks share the same event
-    loop and task as the test method.
+    loop and task as the test method. Sync test methods run as Django's
+    own ``TestCase`` would.
+
+    Tradeoff: there's no real concurrency between two tasks using the
+    bridged connection during a test — they serialise through Django's
+    sync wrapper. Same shape as Django's regular TestCase semantics
+    (one transaction, no parallelism). Production keeps its real async
+    pool unchanged.
     """
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # Allow the dedicated async_to_sync worker thread to use the sync conn
-        # opened on the main test thread.
-        for alias in cls._databases_names(include_mirrors=False):
-            django_sync_connections[alias].inc_thread_sharing()
+        aliases = list(cls._databases_names(include_mirrors=False))
+        sync_conns = {
+            alias: django_sync_connections[alias] for alias in aliases
+        }
 
-    @classmethod
-    def tearDownClass(cls):
-        for alias in cls._databases_names(include_mirrors=False):
-            django_sync_connections[alias].dec_thread_sharing()
-        super().tearDownClass()
+        # Allow worker threads spawned by ``async_to_sync`` to use the
+        # sync conn opened on the main thread.
+        for conn in sync_conns.values():
+            conn.inc_thread_sharing()
 
-    def _callTestMethod(self, method):
-        # Django's SimpleTestCase.__call__ has already wrapped async test
-        # methods with async_to_sync, so ``method`` here is sync. Look at
-        # the original on the class to decide which path to take.
-        raw = getattr(type(self), self._testMethodName, None)
-        if asyncio.iscoroutinefunction(raw):
-            sync_conns = {
-                alias: django_sync_connections[alias]
-                for alias in type(self)._databases_names(include_mirrors=False)
-            }
-            async_to_sync(self._run_async_test)(
-                raw.__get__(self, type(self)), sync_conns
-            )
-        else:
-            super()._callTestMethod(method)
-
-    async def _run_async_test(self, method, sync_conns):
         proxies = {
             alias: SyncBridgedAsyncWrapper(alias, sync_conn=conn)
             for alias, conn in sync_conns.items()
         }
+        cls._async_rollback_proxies = proxies
 
-        # Make sync_to_async calls inside this test see the same Django
-        # sync wrapper the TestCase opened its transaction on. Django's
-        # default connections._connections is thread-local; swapping in a
-        # plain SimpleNamespace makes it thread-blind for the test's
-        # duration so the asgiref worker thread reuses the main wrapper
-        # instead of opening a new autocommit connection.
-        sync_conn_storage = types.SimpleNamespace(**sync_conns)
-        original_sync_storage = django_sync_connections._connections
-        django_sync_connections._connections = sync_conn_storage
+        # Swap both connection stores for thread-blind SimpleNamespaces.
+        # ``django_sync_connections._connections`` is normally an
+        # asgiref.Local → ContextVar; the SimpleNamespace makes the
+        # asgiref worker thread reuse the same wrapper instead of
+        # opening its own autocommit connection. Same trick for
+        # ``async_connections._connections`` so any task accessing
+        # ``async_connections[alias]`` — main thread or worker — gets
+        # the proxy.
+        cls._async_rollback_orig_sync_storage = (
+            django_sync_connections._connections
+        )
+        django_sync_connections._connections = types.SimpleNamespace(
+            **sync_conns
+        )
 
+        cls._async_rollback_orig_async_storage = (
+            async_connections._connections
+        )
+        async_connections._connections = types.SimpleNamespace(**proxies)
+
+    @classmethod
+    def tearDownClass(cls):
+        async_connections._connections = (
+            cls._async_rollback_orig_async_storage
+        )
+        django_sync_connections._connections = (
+            cls._async_rollback_orig_sync_storage
+        )
+        for alias in cls._databases_names(include_mirrors=False):
+            django_sync_connections[alias].dec_thread_sharing()
+        super().tearDownClass()
+
+    def _reset_proxy_state(self):
+        """Reset per-test mutable state on every proxy.
+
+        The class-scope proxies persist for the whole class; their
+        atomic/savepoint bookkeeping needs to start fresh for each
+        test method (Django's ``TestCase`` opens a per-test savepoint
+        on the sync conn separately).
+        """
+        for proxy in self._async_rollback_proxies.values():
+            proxy.in_atomic_block = False
+            proxy.savepoint_state = 0
+            proxy.savepoint_ids = []
+            proxy.atomic_blocks = []
+            proxy.commit_on_exit = True
+            proxy.needs_rollback = False
+            proxy.rollback_exc = None
+            proxy.run_on_commit = []
+            proxy._task = None
+
+    def _callTestMethod(self, method):
+        self._reset_proxy_state()
+
+        # Django's SimpleTestCase.__call__ has already wrapped async
+        # test methods with async_to_sync, so ``method`` here is sync.
+        # Look at the original on the class to decide which path to take.
+        raw = getattr(type(self), self._testMethodName, None)
+        if asyncio.iscoroutinefunction(raw):
+            async_to_sync(self._run_async_test)(
+                raw.__get__(self, type(self))
+            )
+        else:
+            # Sync test method. Anything inside that calls
+            # ``async_to_sync(some_async)`` will run on the asgiref
+            # worker thread — the SimpleNamespace storage swap means
+            # it still sees the proxies installed in setUpClass.
+            super()._callTestMethod(method)
+
+    async def _run_async_test(self, method):
         current_task = asyncio.current_task()
-        originals = {}
-        for alias, proxy in proxies.items():
+        for proxy in self._async_rollback_proxies.values():
             proxy._task = current_task
-            try:
-                originals[alias] = getattr(
-                    async_connections._connections, alias
-                )
-            except AttributeError:
-                originals[alias] = None
-            setattr(async_connections._connections, alias, proxy)
-        try:
-            async_setup = getattr(self, "asyncSetUp", None)
-            if asyncio.iscoroutinefunction(async_setup):
-                await async_setup()
-            if method is not None:
-                await method()
-            async_teardown = getattr(self, "asyncTearDown", None)
-            if asyncio.iscoroutinefunction(async_teardown):
-                await async_teardown()
-        finally:
-            for alias, original in originals.items():
-                if original is None:
-                    if hasattr(async_connections._connections, alias):
-                        delattr(async_connections._connections, alias)
-                else:
-                    setattr(async_connections._connections, alias, original)
-            django_sync_connections._connections = original_sync_storage
+
+        async_setup = getattr(self, "asyncSetUp", None)
+        if asyncio.iscoroutinefunction(async_setup):
+            await async_setup()
+        if method is not None:
+            await method()
+        async_teardown = getattr(self, "asyncTearDown", None)
+        if asyncio.iscoroutinefunction(async_teardown):
+            await async_teardown()
 
 
 class AsyncCaptureQueriesContext:
