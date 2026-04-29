@@ -199,32 +199,78 @@ class AsyncAtomicSavepointBehavior(AsyncioRollbackTestCase):
 
 
 class CrossPoolAtomicSemanticsDivergence(AsyncioRollbackTestCase):
-    """REGRESSION (currently fails): the bridge gives different
-    cross-pool transaction semantics than production.
+    """REGRESSION (currently fails on purpose).
 
-    In production:
-    - ``async_atomic()`` operates on the async psycopg connection.
-    - ``sync_to_async(transaction.atomic)`` operates on Django's sync
-      psycopg connection.
-    - Two physical connections, two independent transactions. A sync
-      atomic block that commits its savepoint and a surrounding async
-      atomic that rolls back: sync write **persists**.
+    Demonstrates that ``AsyncioRollbackTestCase`` cannot model
+    cross-pool transaction semantics — the answers it gives for tests
+    that mix ``async_atomic`` and ``transaction.atomic`` differ from
+    what a real deployment of django-async-backend would observe.
 
-    Under the bridge:
-    - ``async_connections[alias]`` is a proxy onto the sync conn.
-    - Both atomics write SAVEPOINT/RELEASE/ROLLBACK to the same
-      backend, but each tracks its own savepoint counter.
-    - The inner sync atomic's RELEASE doesn't tell the proxy
-      anything; the outer async atomic rolls back to its own
-      savepoint, which sits *under* the inner one in PG's stack —
-      undoing the inner sync write too.
+    What the bridge actually does
+    -----------------------------
 
-    This is the gap Arfey called out: the bridge asks tests to assert
-    on a behaviour the framework can't actually replicate, because two
-    state machines now share one connection. Document the limitation
-    here as a failing test until the bridge either grows
-    cross-state-machine coordination or the framework explicitly
-    forbids the mix.
+    ``AsyncioRollbackTestCase`` replaces ``async_connections[alias]``
+    with a proxy that owns no real psycopg async connection. Every
+    cursor / savepoint call the proxy receives is dispatched, via
+    ``sync_to_async``, onto the same ``psycopg.Connection`` that
+    Django's ``TestCase`` opened a transaction on. The bridge also
+    swaps Django's ``connections._connections`` storage to a
+    thread-blind container pointing at that same wrapper. End result:
+    code that *thinks* it's on two separate connections is actually
+    sharing one TCP socket, one server-side backend, and one
+    transaction state.
+
+    What a real deployment looks like
+    ---------------------------------
+
+    Outside of a test, ``async_connections[alias]`` opens (or pulls
+    from a pool) its own ``psycopg.AsyncConnection``. ``connections[alias]``
+    opens a separate ``psycopg.Connection``. They are two distinct
+    connections to Postgres with two distinct backends and two
+    independent transaction stacks. A SAVEPOINT issued from
+    ``async_atomic()`` lives on connection A; a SAVEPOINT issued from
+    ``transaction.atomic()`` lives on connection B. Neither sees the
+    other's savepoint stack.
+
+    The shape this test exercises
+    -----------------------------
+
+    Outer ``async with async_atomic():`` wraps an inner
+    ``sync_to_async(_sync_atomic_insert)``, where the inner block
+    runs ``with transaction.atomic(): cursor.execute(INSERT)`` and
+    cleanly exits. The outer block then raises and triggers a
+    rollback.
+
+    In a real deployment, the inner sync atomic opens a savepoint on
+    the **sync** connection, runs the INSERT, and releases the
+    savepoint — which durably commits the row to the sync
+    connection's transaction (autocommit by default for sync code
+    outside an explicit ``transaction.atomic`` chain at the request
+    level). The outer ``async_atomic()``'s rollback then issues
+    ROLLBACK TO SAVEPOINT on the **async** connection, which has zero
+    effect on the sync connection. A subsequent SELECT — from any
+    connection — sees the row. That is the answer this test asserts:
+    ``count == 1``.
+
+    Under the bridge, the two atomics share one connection. The PG
+    savepoint stack mid-test ends up roughly:
+
+        [TestCase_class_savepoint,
+         async_atomic_savepoint,
+         transaction.atomic_savepoint,
+         INSERT,
+         RELEASE transaction.atomic_savepoint]
+
+    Then the outer block raises, the bridge issues
+    ``ROLLBACK TO SAVEPOINT async_atomic_savepoint``, and the INSERT
+    — which sits underneath that savepoint in PG's stack — is
+    reverted along with it. Bridge result: ``count == 0``.
+
+    The test asserts ``1`` (the deployed-app answer) and gets ``0``
+    (the bridge's), so it fails. The failure is not a bug in the
+    bridge implementation; it's a property of collapsing two
+    connections into one. No bookkeeping change inside the proxy can
+    fix it because Postgres still only sees one transaction stack.
     """
 
     async def test_inner_sync_atomic_persists_through_outer_async_rollback(self):
@@ -246,9 +292,6 @@ class CrossPoolAtomicSemanticsDivergence(AsyncioRollbackTestCase):
         except RuntimeError:
             pass
 
-        # Production semantics (separate physical conns): the inner
-        # sync atomic committed its own savepoint on the sync conn, so
-        # the row persists despite the outer async_atomic rollback.
         async with await async_connections[DEFAULT_DB_ALIAS].cursor() as c:
             await c.execute(
                 "SELECT count(*) FROM test_model "
@@ -258,41 +301,62 @@ class CrossPoolAtomicSemanticsDivergence(AsyncioRollbackTestCase):
             self.assertEqual(
                 row[0],
                 1,
-                "Bridge collapses two physical connections into one, so the "
-                "outer async_atomic ROLLBACK undoes a sync atomic block that "
-                "had already RELEASEd its own savepoint. Production has "
-                "separate conns and the sync write persists.",
+                "Bridge collapses two physical connections into one, so "
+                "the outer async_atomic ROLLBACK undoes a sync atomic "
+                "block that had already RELEASEd its own savepoint. A "
+                "real deployment has separate connections, the inner "
+                "sync atomic commits independently, and the row persists.",
             )
 
 
-class BridgeFlattersDoesNotMatchProduction(AsyncioRollbackTestCase):
+class BridgeFlattersDoesNotMatchDeployedApp(AsyncioRollbackTestCase):
     """REGRESSION (currently passes — and that's the problem).
 
-    The inverse of ``CrossPoolAtomicSemanticsDivergence``: a test that
-    asserts the **bridge's** answer (rather than production's) gets a
-    green light, even though shipping the same code to a real
-    deployment would behave differently.
+    The inverse shape of ``CrossPoolAtomicSemanticsDivergence``: a
+    test that asserts the **bridge's** answer (rather than the
+    deployed-app answer) is GREEN under ``AsyncioRollbackTestCase``,
+    even though identical code shipped to a real deployment of
+    django-async-backend would observe the opposite outcome.
 
-    Concretely: outer ``async_atomic`` wraps an inner sync atomic
-    insert via ``sync_to_async``, then the outer block raises.
+    Same scenario as the previous test — outer ``async_atomic``
+    wrapping an inner sync ``transaction.atomic`` insert via
+    ``sync_to_async``, with the outer block raising — but the
+    assertion encodes ``count == 0`` (what the bridge reports)
+    instead of ``count == 1`` (what a real deployment reports).
 
-    - Under the bridge: both atomics share one psycopg conn; the
-      outer ROLLBACK reverts the inner write. ``count == 0``.
-    - In production: async and sync are separate physical
-      connections; the inner sync atomic committed its savepoint
-      before the outer raised. ``count == 1``.
+    A test author who has never read the bridge's implementation
+    notes can reasonably look at this code, run it under
+    ``AsyncioRollbackTestCase``, see ``row[0] == 0``, codify that as
+    the expected behaviour, and watch CI go green. The same code in
+    production, however, has the inner sync atomic on a separate
+    physical connection — committing the row before the outer
+    rollback runs — so the production observation is ``row[0] == 1``.
 
-    A test author who didn't know about the bridge could write
-    ``assertEqual(count, 0)`` here, watch CI go green, and ship a
-    code path that silently leaks rows in production. That's the
-    structural risk Arfey flagged: the bridge isn't just "covers
-    fewer scenarios", it actively models a different semantics.
+    The framework cannot tell apart these two intents:
 
-    The framework doesn't know which answer the test author meant —
-    it can't tell apart "I'm testing rollback covers everything"
-    from "I'm testing cross-pool isolation". So this passing-but-wrong
-    case has to be addressed at the framework contract level, not by
-    individual test authors being careful.
+      * "I'm testing that my application correctly relies on
+        ``async_atomic`` rolling back work that happened underneath
+        it." (bridge gives the right answer if everything underneath
+        was async)
+      * "I'm testing that my application correctly handles cross-pool
+        isolation, where sync writes persist past async rollbacks."
+        (bridge gives the wrong answer; deployed app behaviour is
+        opposite)
+
+    Both are legitimate uses of an integration test. The bridge's
+    implementation silently picks the first interpretation —
+    everything looks rolled-back because everything ran on one
+    connection — and that interpretation can be wrong without any
+    visible signal at test-write time.
+
+    This test is the artifact of that ambiguity: green CI on a code
+    path whose deployed behaviour the framework hasn't actually
+    verified. Worth deciding at the framework-contract level whether
+    to (a) detect mixed-style atomics on a single proxied connection
+    and raise, (b) ship a companion test base that uses real async +
+    sync connections for code paths whose semantics depend on the
+    two-pool distinction, or (c) document the constraint and rely on
+    adopters to never mix the styles.
     """
 
     async def test_bridge_says_inner_sync_write_was_rolled_back(self):
@@ -320,10 +384,11 @@ class BridgeFlattersDoesNotMatchProduction(AsyncioRollbackTestCase):
                 "WHERE name = 'flatter-demo'"
             )
             row = await c.fetchone()
-            # Asserts the **bridge**'s answer. This is GREEN under
-            # AsyncioRollbackTestCase. Same code shipped to prod would
-            # observe ``row[0] == 1`` because the inner sync atomic
-            # commits independently on the sync connection.
+            # Asserts the **bridge**'s answer. Currently green under
+            # AsyncioRollbackTestCase. The same code shipped to a real
+            # deployment of django-async-backend would observe
+            # ``row[0] == 1`` because the inner sync atomic commits
+            # independently on the sync connection.
             self.assertEqual(row[0], 0)
 
 
