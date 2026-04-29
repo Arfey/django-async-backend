@@ -4,7 +4,7 @@ Sync-bridged async DatabaseWrapper used by AsyncioRollbackTestCase.
 Vendored from django-async-backend PR #20:
 https://github.com/Arfey/django-async-backend/pull/20
 
-Copied verbatim from upstream commit 6e9d8fe (branch
+Copied verbatim from upstream commit ea07ec8 (branch
 ``feat/asyncio-rollback-testcase``). Remove this file and import from
 ``django_async_backend.db.sync_bridge`` once upstream merges.
 
@@ -50,6 +50,7 @@ class _BridgedAsyncCursor:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        del exc_type, exc, tb
         try:
             await sync_to_async(self.cursor.close, thread_sensitive=True)()
         except Exception:
@@ -237,6 +238,7 @@ class SyncBridgedAsyncWrapper:
         # only calls this when entering/leaving its outermost block; in our
         # context async_atomic detects autocommit is already off and uses
         # the savepoint code path instead.
+        del autocommit, force_begin_transaction_with_broken_autocommit
         return
 
     async def commit(self):
@@ -388,9 +390,9 @@ class _BridgedOps:
         self._sync_ops = sync_ops
 
     async def compose_sql(self, sql, params):
-        return await sync_to_async(
-            self._sync_ops.compose_sql, thread_sensitive=True
-        )(sql, params)
+        return await sync_to_async(self._sync_ops.compose_sql, thread_sensitive=True)(
+            sql, params
+        )
 
     def __getattr__(self, name):
         return getattr(self._sync_ops, name)
@@ -409,6 +411,7 @@ class _NoopErrorWrapper:
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        del exc_type, exc, tb
         return False
 
     def __call__(self, fn):
