@@ -38,7 +38,7 @@ class RenameFun(BaseModel):
 
 
 class ContextManagers(BaseModel):
-    asname: str
+    asname: str | None = None
     to_async: bool = False
 
 

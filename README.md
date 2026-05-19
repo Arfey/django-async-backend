@@ -230,7 +230,7 @@ async def main():
 | `Model.objects.alast`               | ✅        |          |
 | `Model.objects.ain_bulk`            | ✅        |          |
 | `Model.objects.adelete`             | ❌        |          |
-| `Model.objects.aupdate`             | ❌        |          |
+| `Model.objects.aupdate`             | ✅        |          |
 | `Model.objects.aexists`             | ✅        |          |
 | `Model.objects.acontains`           | ❌        |          |
 | `Model.objects.aexplain`            | ✅        |          |
