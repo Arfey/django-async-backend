@@ -1,3 +1,4 @@
+import asyncio
 import gc
 from unittest import skipIf
 from unittest.mock import (
@@ -114,6 +115,42 @@ class DatabaseWrapperTests(AsyncioTransactionTestCase):
             connection.features, "minimum_database_version", None
         ):
             await connection.check_database_version_supported()
+
+    async def test_ensure_connection_no_race_under_concurrent_tasks(self):
+        """Concurrent tasks sharing one wrapper must not each acquire
+        a separate connection. Without serialization in ensure_connection
+        the gather children all observe `self.connection is None`,
+        all call connect(), and only the last assignment to
+        self.connection survives — the others orphan from the pool."""
+        wrapper = async_connections[DEFAULT_DB_ALIAS]
+        # Force the slow path: connection back to None.
+        await wrapper.close()
+        self.assertIsNone(wrapper.connection)
+
+        call_count = 0
+        original_connect = wrapper.connect
+
+        async def counting_connect():
+            nonlocal call_count
+            call_count += 1
+            # Yield so the other gather children waiting on the lock
+            # would otherwise reach the same `is None` check.
+            await asyncio.sleep(0)
+            await original_connect()
+
+        with patch.object(wrapper, "connect", counting_connect):
+            await asyncio.gather(
+                *[wrapper.ensure_connection() for _ in range(4)]
+            )
+
+        self.assertEqual(
+            call_count,
+            1,
+            "Expected ensure_connection() to call connect() exactly once "
+            "across 4 concurrent tasks; got %d. The double-checked lock "
+            "in ensure_connection() is missing or broken." % call_count,
+        )
+        self.assertIsNotNone(wrapper.connection)
 
     @skipIf(django.VERSION < (6, 0), "Requires Django 6.0 or higher")
     async def test_release_memory_without_garbage_collection(self):

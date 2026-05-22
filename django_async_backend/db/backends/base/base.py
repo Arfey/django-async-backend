@@ -1,4 +1,5 @@
 import _thread
+import asyncio
 import copy
 import datetime
 import logging
@@ -100,6 +101,12 @@ class BaseAsyncDatabaseWrapper:
         self._thread_sharing_lock = threading.Lock()
         self._thread_sharing_count = 0
         self._thread_ident = _thread.get_ident()
+
+        # Serializes ensure_connection() against itself when multiple
+        # asyncio tasks race on the lazy connection acquisition. The
+        # typical trigger is asyncio.gather children that inherit this
+        # wrapper via contextvar copy-on-write.
+        self._async_connection_lock = asyncio.Lock()
 
         # A list of no-argument functions to run when the transaction commits.
         # Each entry is an (sids, func, robust) tuple, where sids is a set of
@@ -273,14 +280,21 @@ class BaseAsyncDatabaseWrapper:
             )
 
     async def ensure_connection(self):
-        """Guarantee that a connection to the database is established."""
+        """Guarantee that a connection to the database is established.
+
+        Uses double-checked locking so concurrent tasks sharing this
+        wrapper (e.g. asyncio.gather children) don't each acquire their
+        own pool connection while losing the assignment race.
+        """
         if self.connection is None:
-            if self.in_atomic_block and self.closed_in_transaction:
-                raise ProgrammingError(
-                    "Cannot open a new connection in an atomic block."
-                )
-            with self.wrap_database_errors:
-                await self.connect()
+            async with self._async_connection_lock:
+                if self.connection is None:
+                    if self.in_atomic_block and self.closed_in_transaction:
+                        raise ProgrammingError(
+                            "Cannot open a new connection in an atomic block."
+                        )
+                    with self.wrap_database_errors:
+                        await self.connect()
 
     # ##### Backend-specific wrappers for PEP-249 connection methods #####
 
