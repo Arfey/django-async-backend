@@ -17,13 +17,11 @@ async def index(request: HttpRequest) -> HttpResponse:
     async with await connection.cursor() as cursor:
         await cursor.execute("select 1")
 
-    print("aget", await Book.async_object.aget(name=1))  # noqa
+    print("aget", await Book.async_object.aget(id=1))  # noqa
     print("afirst", await Book.async_object.afirst())  # noqa
     print("count", await Book.async_object.acount())  # noqa
     async for i in Book.async_object.select_related("author").all():
         print(i, i.author)  # noqa
-
-    await connection.close()
 
     return HttpResponse(
         content=json.dumps(result), content_type="application/json"

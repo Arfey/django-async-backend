@@ -9,6 +9,7 @@ ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
     "books",
+    "django_async_backend",
 ]
 
 
