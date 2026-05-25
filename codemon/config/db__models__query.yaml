@@ -31,7 +31,7 @@ module:
 
         - target:
             name: update
-          remove: true
+          rename: aupdate
 
         - target:
             name: update_or_create
@@ -365,6 +365,9 @@ module:
             - to_async: true
           calls:
             - func:
+                attr: chain
+              replace_raw: 'self.query.chain(async_sql.UpdateQuery)'
+            - func:
                 value: transaction
                 attr: mark_for_rollback_on_error
               replace_raw: 'async_mark_for_rollback_on_error(using=self.db)'
@@ -393,6 +396,9 @@ module:
         _update:
           to_async: true
           calls:
+            - func:
+                attr: chain
+              replace_raw: 'self.query.chain(async_sql.UpdateQuery)'
             - func:
                 attr: execute_sql
               to_await: true

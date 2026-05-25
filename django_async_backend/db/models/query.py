@@ -1,9 +1,7 @@
 # This file was generated automatically. Do not modify it manually. (based on django 6.0)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
-from django_async_backend.db.transaction import (
-    async_mark_for_rollback_on_error,
-)
+from django_async_backend.db.transaction import async_mark_for_rollback_on_error
 
 """
 The main QuerySet implementation. This provides the public API for the ORM.
@@ -807,7 +805,7 @@ class QuerySet(AltersData):
                 "Cannot update a query once a slice has been taken."
             )
         self._for_write = True
-        query = self.query.chain(sql.UpdateQuery)
+        query = self.query.chain(async_sql.UpdateQuery)
         query.add_update_values(kwargs)
 
         # Inline annotations in order_by(), if possible.
@@ -840,6 +838,8 @@ class QuerySet(AltersData):
         self._result_cache = None
         return rows
 
+    aupdate.alters_data = True
+
     async def _update(self, values, returning_fields=None):
         """
         A version of update() that accepts field objects instead of field
@@ -851,7 +851,7 @@ class QuerySet(AltersData):
             raise TypeError(
                 "Cannot update a query once a slice has been taken."
             )
-        query = self.query.chain(sql.UpdateQuery)
+        query = self.query.chain(async_sql.UpdateQuery)
         query.add_update_fields(values)
         # Clear any annotations so that they won't be present in subqueries.
         query.annotations = {}

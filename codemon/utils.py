@@ -79,6 +79,7 @@ class AssignTarget(BaseModel):
 
 class Assign(BaseModel):
     remove: bool = False
+    rename: str | None = None
     target: AssignTarget
 
 

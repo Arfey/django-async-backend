@@ -1,0 +1,23 @@
+pathname: db/models/sql/subqueries.py
+
+module:
+  new_imports:
+    - "from django_async_backend.db import async_connections"
+    - "from django_async_backend.db.models.sql.query import Query"
+
+  import_aliases:
+    - name: Query
+      remove: true
+
+  classes:
+    UpdateQuery:
+      methods:
+        update_batch:
+          to_async: true
+          calls:
+            - func:
+                attr: get_compiler
+              replace_raw: 'self.get_compiler(connection=async_connections[using])'
+            - func:
+                attr: execute_sql
+              to_await: true
