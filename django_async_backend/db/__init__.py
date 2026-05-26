@@ -4,11 +4,9 @@ async_connections = AsyncConnectionHandler()
 
 
 async def close_old_async_connections(**kwargs):
-    # all() — not initialized_only=True — so close() runs for every
-    # configured alias regardless of whether this task touched it yet.
-    # Matches PR #10's signal-handler shape so the same function works
-    # both as middleware cleanup and as a request_started /
-    # request_finished signal handler. close() is a no-op on a wrapper
-    # with no underlying connection, so the extra aliases are free.
+    # Close every configured connection alias. close() is a no-op on a
+    # wrapper with no underlying connection, so walking aliases this
+    # task hasn't touched is free. **kwargs lets the same function be
+    # connected as a request_started / request_finished signal handler.
     for conn in async_connections.all():
         await conn.close()

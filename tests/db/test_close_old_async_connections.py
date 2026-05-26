@@ -9,10 +9,7 @@ from django_async_backend.db import (
 
 
 class CloseOldAsyncConnectionsTest(SimpleTestCase):
-    async def test_iterates_all_aliases_not_initialized_only(self):
-        """Walks every configured alias, not initialized_only=True.
-        Lets the same function serve as middleware cleanup and as a
-        request_started/request_finished signal handler (PR #10)."""
+    async def test_closes_every_configured_alias(self):
         first = AsyncMock()
         first.alias = "first"
         second = AsyncMock()
@@ -24,8 +21,6 @@ class CloseOldAsyncConnectionsTest(SimpleTestCase):
             await close_old_async_connections()
 
         mocked_all.assert_called_once_with()
-        _, kwargs = mocked_all.call_args
-        self.assertNotIn("initialized_only", kwargs)
         first.close.assert_awaited_once_with()
         second.close.assert_awaited_once_with()
 
