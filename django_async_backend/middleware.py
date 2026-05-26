@@ -20,6 +20,7 @@ def close_async_connections(get_response):
     """
 
     async def middleware(request):
+        await close_old_async_connections()
         try:
             return await get_response(request)
         finally:
