@@ -9,11 +9,10 @@ from django_async_backend.db import (
 
 
 class CloseOldAsyncConnectionsTest(SimpleTestCase):
-    async def test_closes_every_configured_alias_even_when_uninitialized(self):
-        """`all()` (not initialized_only=True) is required so wrappers
-        created inside an asyncio.gather child's contextvar copy still get
-        their close() invoked — those wrappers don't appear in the parent
-        task's initialized list."""
+    async def test_iterates_all_aliases_not_initialized_only(self):
+        """Walks every configured alias, not initialized_only=True.
+        Lets the same function serve as middleware cleanup and as a
+        request_started/request_finished signal handler (PR #10)."""
         first = AsyncMock()
         first.alias = "first"
         second = AsyncMock()
