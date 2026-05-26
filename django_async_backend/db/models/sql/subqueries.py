@@ -1,5 +1,4 @@
 # This file was generated automatically. Do not modify it manually. (based on django 6.0)
-from django_async_backend.db import async_connections
 from django_async_backend.db.models.sql.query import Query
 
 """
@@ -79,9 +78,7 @@ class UpdateQuery(Query):
             self.add_filter(
                 "pk__in", pk_list[offset : offset + GET_ITERATOR_CHUNK_SIZE]
             )
-            await self.get_compiler(
-                connection=async_connections[using]
-            ).execute_sql(NO_RESULTS)
+            await self.get_compiler(using).execute_sql(NO_RESULTS)
 
     def add_update_values(self, values):
         """
