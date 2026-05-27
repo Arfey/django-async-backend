@@ -372,9 +372,6 @@ module:
                 attr: mark_for_rollback_on_error
               replace_raw: 'async_mark_for_rollback_on_error(using=self.db)'
             - func:
-                attr: get_compiler
-              replace_raw: 'query.get_compiler(connection=async_connections[self.db])'
-            - func:
                 attr: execute_sql
               to_await: true
 
@@ -405,9 +402,6 @@ module:
             - func:
                 attr: execute_returning_sql
               to_await: true
-            - func:
-                attr: get_compiler
-              replace_raw: 'query.get_compiler(connection=async_connections[self.db])'
 
         _insert:
           to_async: true

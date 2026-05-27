@@ -832,9 +832,7 @@ class QuerySet(AltersData):
         # add_update_values() already.
         query.clear_select_clause()
         async with async_mark_for_rollback_on_error(using=self.db):
-            rows = await query.get_compiler(
-                connection=async_connections[self.db]
-            ).execute_sql(ROW_COUNT)
+            rows = await query.get_compiler(self.db).execute_sql(ROW_COUNT)
         self._result_cache = None
         return rows
 
@@ -857,12 +855,10 @@ class QuerySet(AltersData):
         query.annotations = {}
         self._result_cache = None
         if returning_fields is None:
-            return await query.get_compiler(
-                connection=async_connections[self.db]
-            ).execute_sql(ROW_COUNT)
-        return await query.get_compiler(
-            connection=async_connections[self.db]
-        ).execute_returning_sql(returning_fields)
+            return await query.get_compiler(self.db).execute_sql(ROW_COUNT)
+        return await query.get_compiler(self.db).execute_returning_sql(
+            returning_fields
+        )
 
     _update.alters_data = True
     _update.queryset_only = False
