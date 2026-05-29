@@ -20,6 +20,12 @@ def close_async_connections(get_response):
     """
 
     async def middleware(request):
+        # Per issue #24: walking async_connections.all() (not
+        # initialized_only=True) ensures wrappers created in gather-child
+        # task contexts get a parent-visible close(). close() is a no-op
+        # when there's no underlying connection, so in the healthy case
+        # the pre-request call costs nothing — it exists to mop up state
+        # that survived a prior request on the same worker thread.
         await close_old_async_connections()
         try:
             return await get_response(request)
