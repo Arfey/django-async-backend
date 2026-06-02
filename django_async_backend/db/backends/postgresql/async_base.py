@@ -227,15 +227,18 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
         if self.pool:
             # If nothing else has opened the pool, open it now.
             await self.pool.open()
-            connection = await self.pool.getconn()
+            # Assign self.connection BEFORE any further await so that
+            # if cancellation lands during set_isolation_level the
+            # wrapper owns the conn and close() can putback to pool.
+            self.connection = await self.pool.getconn()
         else:
-            connection = await self.Database.AsyncConnection.connect(
+            self.connection = await self.Database.AsyncConnection.connect(
                 **conn_params
             )
         if set_isolation_level:
-            await connection.set_isolation_level(self.isolation_level)
+            await self.connection.set_isolation_level(self.isolation_level)
 
-        return connection
+        return self.connection
 
     async def ensure_timezone(self):
         # Close the pool so new connections pick up the correct timezone.
