@@ -1,3 +1,4 @@
+import asyncio
 import copy
 from collections import namedtuple
 from unittest import mock
@@ -12,6 +13,7 @@ from django.db.backends.postgresql.psycopg_any import errors
 from django.test import override_settings
 
 from django_async_backend.db import async_connections
+from django_async_backend.db.backends.postgresql import async_base
 from django_async_backend.test import AsyncioTestCase
 
 
@@ -320,6 +322,75 @@ class Tests(AsyncioTestCase):
         )
         with self.assertRaisesRegex(ImproperlyConfigured, msg):
             await new_connection.ensure_connection()
+
+    async def test_cancellation_during_set_isolation_level_returns_conn_to_pool(
+        self,
+    ):
+        from django.db.backends.postgresql.psycopg_any import IsolationLevel
+
+        # The only await between pool.getconn() and the end of
+        # get_new_connection() is set_isolation_level(), and it only
+        # runs when "isolation_level" is set in OPTIONS. We block it,
+        # cancel the connecting task there, then close() the wrapper
+        # like the ASGI middleware would. The fix assigns
+        # self.connection BEFORE that await so close()/_close() can
+        # putconn(); otherwise the conn is stranded in the pool's
+        # in-use accounting and the pool's full capacity becomes
+        # unreachable.
+        AConn = async_base.Database.AsyncConnection
+        orig_set_iso = AConn.set_isolation_level
+
+        barrier_hit = asyncio.Event()
+        release = asyncio.Event()
+        state = {"tripped": False}
+
+        async def patched(self, level):
+            if not state["tripped"]:
+                state["tripped"] = True
+                barrier_hit.set()
+                await release.wait()
+            return await orig_set_iso(self, level)
+
+        new_connection = no_pool_connection(alias="strand_pool")
+        new_connection.settings_dict["OPTIONS"]["pool"] = {
+            "min_size": 0,
+            "max_size": 2,
+            "timeout": 2.0,
+        }
+        new_connection.settings_dict["OPTIONS"][
+            "isolation_level"
+        ] = IsolationLevel.REPEATABLE_READ
+
+        AConn.set_isolation_level = patched
+        try:
+            pool = new_connection.pool
+            await pool.open()
+
+            task = asyncio.create_task(new_connection.connect())
+            await asyncio.wait_for(barrier_hit.wait(), timeout=5)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+            # Model the ASGI middleware: shielded close() of the
+            # wrapper. With the fix, self.connection was set before
+            # the cancellation point, so _close() runs putconn().
+            await new_connection.close()
+            release.set()
+
+            # The pool should be fully usable again. Before the fix
+            # one slot stayed pinned and the second getconn() would
+            # block until the pool's `timeout=2.0` elapsed.
+            c1 = await asyncio.wait_for(pool.getconn(), timeout=3.0)
+            c2 = await asyncio.wait_for(pool.getconn(), timeout=3.0)
+            await pool.putconn(c1)
+            await pool.putconn(c2)
+        finally:
+            AConn.set_isolation_level = orig_set_iso
+            release.set()
+            await new_connection.close_pool()
 
     async def test_connect_role(self):
         """
