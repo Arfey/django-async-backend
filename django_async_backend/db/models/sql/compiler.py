@@ -2277,6 +2277,14 @@ class SQLUpdateCompiler(SQLCompiler):
         non-empty query that is executed. Row counts for any subsequent,
         related queries are not available.
         """
+
+        if self.query.related_updates:
+            raise NotImplementedError(
+                "Async update does not yet support updating fields "
+                "inherited from a parent model (multi-table "
+                "inheritance)."
+            )
+
         row_count = await super().execute_sql(result_type)
         is_empty = row_count is None
         row_count = row_count or 0

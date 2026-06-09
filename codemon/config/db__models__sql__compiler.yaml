@@ -74,12 +74,26 @@ module:
       methods:
         execute_sql:
           to_async: true
+          # pre_sql_setup() (called by as_sql()) is still sync. For a plain
+          # single-table update it returns early without running SQL, so the
+          # async path is safe. But when the query touches a parent model
+          # (multi-table inheritance), pre_sql_setup() runs a pre-select to
+          # collect ids -- and it does so through Django's *sync* connection
+          # registry, outside async_connections and the async transaction.
+          # Reject that case loudly instead of silently using the wrong
+          # connection until pre_sql_setup() is made async.
+          add_raw_top:
+            - |
+                if self.query.related_updates:
+                    raise NotImplementedError(
+                        "Async update does not yet support updating fields "
+                        "inherited from a parent model (multi-table "
+                        "inheritance)."
+                    )
           calls:
             - func:
                 attr: execute_sql
               to_await: true
-              ## todo: fix
-              # - pre_sql_setup
 
         execute_returning_sql:
           to_async: true

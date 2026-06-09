@@ -1,5 +1,5 @@
 from django.db.models import F
-from test_app.models import TestModel
+from test_app.models import ChildModel, TestModel
 
 from django_async_backend.test import AsyncioTestCase
 
@@ -43,3 +43,15 @@ class TestAUpdate(AsyncioTestCase):
         qs = TestModel.async_object.all()[:1]
         with self.assertRaises(TypeError):
             await qs.aupdate(value=1)
+
+
+class TestAUpdateRelated(AsyncioTestCase):
+    async def test_parent_field_update_raises_not_implemented(self):
+        # Updating a field that lives on a parent model (multi-table
+        # inheritance) populates query.related_updates, which would force
+        # SQLUpdateCompiler.pre_sql_setup() to run a pre-select through
+        # Django's sync connection registry -- outside async_connections.
+        # The async SQLUpdateCompiler rejects this instead of silently
+        # using the wrong connection.
+        with self.assertRaises(NotImplementedError):
+            await ChildModel.async_object.all().aupdate(parent_value=5)
