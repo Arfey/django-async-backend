@@ -54,6 +54,24 @@ MIDDLEWARE = [
 
 ---
 
+## Concurrency model
+
+> ⚠️ **Async does not mean parallel here.** Database queries are *not* run in
+> parallel by default.
+
+Within a single async context (such as one request or task), all async ORM and
+cursor calls share **one connection per database alias**. Because they share a
+connection, queries are serialized — running them under `asyncio.gather()` does
+**not** execute them on the database concurrently; they take turns on the shared
+connection.
+
+This is a deliberate design choice that mirrors Django's DEP 0009. To run
+queries truly in parallel, you must opt in explicitly and give each one its own
+connection with `async_connections._independent_connection()`. See the
+[DEP 0009](#dep-0009) section below for details and an example.
+
+---
+
 ## Connection Handler
 
 The connection handler manages database connections for your async backend.
@@ -293,6 +311,31 @@ Not supported ❌
 | `User.objects.acreate_user` | ❌        |          |
 | `...`                       | ❌        |          |
 
+
+## Code generation
+
+Part of the ORM layer is **generated, not hand-written**. The async versions of
+Django's query classes are produced from Django's own source by the `codemon`
+tool (under `codemon/`), which rewrites the sync code into async using libcst.
+
+These files are committed to git (so the package installs without running
+codegen) and track a specific Django version, so they look hand-written but are
+not. Each starts with a `# This file was generated automatically. Do not modify
+it manually.` header.
+
+To change them, edit the codemon config under `codemon/config/*.yaml` — **not**
+the generated files — then regenerate:
+
+```bash
+lets test_generate
+```
+
+This restores the Django-derived files to pristine, runs `python -m codemon`,
+and reformats the result — running `codemon` on its own skips the
+restore/reformat and produces large formatting-only diffs. Regeneration
+downloads Django's source for the pinned version over the network, so it needs
+internet access. Any manual edits to the generated modules will be lost on the
+next regeneration.
 
 ## ⚙️ Development Setup
 
