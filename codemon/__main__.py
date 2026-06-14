@@ -664,12 +664,17 @@ def module_transformer(config: Module) -> cst.CSTTransformer:
 
         def leave_ClassDef(
             self, original_node: cst.ClassDef, updated_node: cst.ClassDef
-        ) -> cst.ClassDef:
+        ) -> cst.ClassDef | cst.RemovalSentinel:
             if config.classes and original_node.name.value in config.classes:
+                class_config = config.classes[original_node.name.value]
+
+                if class_config.remove:
+                    return cst.RemoveFromParent()
+
                 updated_node = updated_node.visit(
                     class_transformer(
                         original_node.name.value,
-                        config.classes[original_node.name.value],
+                        class_config,
                     )
                 )
 

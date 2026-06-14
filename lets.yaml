@@ -28,7 +28,7 @@ commands:
   test_generate:
     description: Generate ORM
     cmd: |
-      git restore django_async_backend/db/models/query.py django_async_backend/db/models/sql/compiler.py django_async_backend/db/models/sql/query.py
+      git restore django_async_backend/db/models/query.py django_async_backend/db/models/sql/compiler.py django_async_backend/db/models/sql/query.py django_async_backend/db/models/sql/subqueries.py
       poetry run python -m codemon
       poetry run pre-commit run darker -v --all-files || true
 
@@ -64,3 +64,4 @@ commands:
       cd tests && poetry run coverage run manage.py test
       poetry run coverage report --omit="*/test*,test_app/*,manage.py"
       poetry run coverage html
+      open htmlcov/index.html

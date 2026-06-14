@@ -1,7 +1,9 @@
 # This file was generated automatically. Do not modify it manually. (based on django 6.0)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
-from django_async_backend.db.transaction import async_mark_for_rollback_on_error
+from django_async_backend.db.transaction import (
+    async_mark_for_rollback_on_error,
+)
 
 """
 The main QuerySet implementation. This provides the public API for the ORM.
@@ -788,9 +790,7 @@ class QuerySet(AltersData):
         """
         query = self.query.clone()
         query.__class__ = sql.DeleteQuery
-        return await query.get_compiler(
-            connection=async_connections[using]
-        ).execute_sql(ROW_COUNT)
+        return await query.get_compiler(using).execute_sql(ROW_COUNT)
 
     _raw_delete.alters_data = True
 
@@ -1289,9 +1289,9 @@ class QuerySet(AltersData):
             unique_fields=unique_fields,
         )
         query.insert_values(fields, objs, raw=raw)
-        return await query.get_compiler(
-            connection=async_connections[using]
-        ).execute_sql(returning_fields)
+        return await query.get_compiler(using=using).execute_sql(
+            returning_fields
+        )
 
     _insert.alters_data = True
     _insert.queryset_only = False
