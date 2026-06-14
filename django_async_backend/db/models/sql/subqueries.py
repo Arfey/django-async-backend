@@ -1,6 +1,5 @@
 # This file was generated automatically. Do not modify it manually. (based on django 6.0)
 from django_async_backend.db.models.sql.query import Query
-
 """
 Query subclasses which provide extra functionality beyond simple data
 retrieval.
@@ -14,38 +13,6 @@ from django.db.models.sql.constants import (
 )
 
 __all__ = ["DeleteQuery", "UpdateQuery", "InsertQuery", "AggregateQuery"]
-
-
-class DeleteQuery(Query):
-    """A DELETE SQL query."""
-
-    compiler = "SQLDeleteCompiler"
-
-    def do_query(self, table, where, using):
-        self.alias_map = {table: self.alias_map[table]}
-        self.where = where
-        return self.get_compiler(using).execute_sql(ROW_COUNT)
-
-    def delete_batch(self, pk_list, using):
-        """
-        Set up and execute delete queries for all the objects in pk_list.
-
-        More than one physical query may be executed if there are a
-        lot of values in pk_list.
-        """
-        # number of objects deleted
-        num_deleted = 0
-        field = self.get_meta().pk
-        for offset in range(0, len(pk_list), GET_ITERATOR_CHUNK_SIZE):
-            self.clear_where()
-            self.add_filter(
-                f"{field.attname}__in",
-                pk_list[offset : offset + GET_ITERATOR_CHUNK_SIZE],
-            )
-            num_deleted += self.do_query(
-                self.get_meta().db_table, self.where, using=using
-            )
-        return num_deleted
 
 
 class UpdateQuery(Query):
@@ -147,40 +114,3 @@ class UpdateQuery(Query):
                 query.add_filter("pk__in", self.related_ids[model])
             result.append(query)
         return result
-
-
-class InsertQuery(Query):
-    compiler = "SQLInsertCompiler"
-
-    def __init__(
-        self,
-        *args,
-        on_conflict=None,
-        update_fields=None,
-        unique_fields=None,
-        **kwargs,
-    ):
-        super().__init__(*args, **kwargs)
-        self.fields = []
-        self.objs = []
-        self.on_conflict = on_conflict
-        self.update_fields = update_fields or []
-        self.unique_fields = unique_fields or []
-
-    def insert_values(self, fields, objs, raw=False):
-        self.fields = fields
-        self.objs = objs
-        self.raw = raw
-
-
-class AggregateQuery(Query):
-    """
-    Take another query as a parameter to the FROM clause and only select the
-    elements in the provided list.
-    """
-
-    compiler = "SQLAggregateCompiler"
-
-    def __init__(self, model, inner_query):
-        self.inner_query = inner_query
-        super().__init__(model)

@@ -355,10 +355,6 @@ module:
           remove: true
 
         update:
-          # In-place transform of Django's update(): the only I/O is one
-          # execute_sql inside `with transaction.mark_for_rollback_on_error`.
-          # Body (order_by inlining etc.) regenerates from Django each
-          # release; no hand-copied function body.
           to_async: true
           rename: aupdate
           context_managers:
@@ -386,9 +382,6 @@ module:
             - func:
                 attr: execute_sql
               to_await: true
-            - func:
-                attr: get_compiler
-              replace_raw: 'query.get_compiler(connection=async_connections[using])'
 
         _update:
           to_async: true
@@ -409,9 +402,6 @@ module:
             - func:
                 attr: execute_sql
               to_await: true
-            - func:
-                attr: get_compiler
-              replace_raw: 'query.get_compiler(connection=async_connections[using])'
 
         __aiter__:
           calls:

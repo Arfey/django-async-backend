@@ -106,8 +106,9 @@ class Method(BaseModel):
 
 
 class Class(BaseModel):
+    remove: bool = False
     rename: str | None = None
-    methods: dict[str, Method]
+    methods: dict[str, Method] = {}
     assigns: list[Assign] | None = None
 
 
