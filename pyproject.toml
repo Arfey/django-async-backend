@@ -39,13 +39,13 @@ repository = "https://github.com/Arfey/django-async-backend"
 python = ">=3.12"
 django = ">=6"
 psycopg = {extras = ["binary"], version = "^3"}
-pydantic = "^2.12.5"
 
 
 [tool.poetry.group.dev.dependencies]
 coverage = "^7.13.4"
 libcst = "^1.8.6"
 psycopg = {extras = ["pool"], version = "^3"}
+pydantic = "^2.12.5"
 pyyaml = "^6.0.3"
 requests = "^2.32.5"
 uvicorn = "^0.38.0"
