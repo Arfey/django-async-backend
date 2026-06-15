@@ -1,6 +1,7 @@
 from django.db import DEFAULT_DB_ALIAS, models
 
 from django_async_backend.db.models.manager import AsyncManager
+from django_async_backend.db.models.base import AsyncSaveModel
 from django_async_backend.db import async_connections
 
 
@@ -90,3 +91,61 @@ class ChildModel(ParentModel):
 
     class Meta:
         db_table = "child_model"
+
+
+# --- Async save-contract prototype models -----------------------------------
+# Each does `self.foo += 1` in whichever method(s) it overrides, so the final
+# `foo` value reveals exactly which code path ran (and how many times).
+
+
+class SaveContractBase(AsyncSaveModel):
+    foo = models.IntegerField(default=0)
+
+    async_object = AsyncManager()
+
+    class Meta:
+        abstract = True
+
+
+class SCNeither(SaveContractBase):
+    """Overrides nothing."""
+
+    class Meta:
+        db_table = "sc_neither"
+
+
+class SCSave(SaveContractBase):
+    """Overrides sync save only."""
+
+    class Meta:
+        db_table = "sc_save"
+
+    def save(self, *args, **kwargs):
+        self.foo += 1
+        super().save(*args, **kwargs)
+
+
+class SCAsave(SaveContractBase):
+    """Overrides async asave only."""
+
+    class Meta:
+        db_table = "sc_asave"
+
+    async def asave(self, *args, **kwargs):
+        self.foo += 1
+        await super().asave(*args, **kwargs)
+
+
+class SCBoth(SaveContractBase):
+    """Overrides both save and asave (the irreducible hard case)."""
+
+    class Meta:
+        db_table = "sc_both"
+
+    def save(self, *args, **kwargs):
+        self.foo += 1
+        super().save(*args, **kwargs)
+
+    async def asave(self, *args, **kwargs):
+        self.foo += 1
+        await super().asave(*args, **kwargs)
