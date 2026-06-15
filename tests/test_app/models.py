@@ -70,3 +70,23 @@ class GetLatestByModel(AbstractBaseModel):
     class Meta:
         db_table = "latest_by"
         get_latest_by = "id"
+
+
+class ParentModel(models.Model):
+    parent_value = models.IntegerField(null=True)
+
+    async_object = AsyncManager()
+
+    class Meta:
+        db_table = "parent_model"
+
+
+class ChildModel(ParentModel):
+    """Multi-table inheritance child used to exercise related updates."""
+
+    child_value = models.IntegerField(null=True)
+
+    async_object = AsyncManager()
+
+    class Meta:
+        db_table = "child_model"

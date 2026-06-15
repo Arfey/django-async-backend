@@ -35,6 +35,24 @@ def assignment_transformer(config: Assign) -> cst.CSTTransformer:
             if config.remove:
                 return cst.RemoveFromParent()
 
+            if config.rename:
+                new_name = cst.Name(config.rename)
+                new_targets = []
+                for target in updated_node.targets:
+                    if isinstance(target.target, cst.Attribute) and isinstance(
+                        target.target.value, cst.Name
+                    ) and target.target.value.value == config.target.name:
+                        new_targets.append(
+                            target.with_changes(
+                                target=target.target.with_changes(
+                                    value=new_name
+                                )
+                            )
+                        )
+                    else:
+                        new_targets.append(target)
+                updated_node = updated_node.with_changes(targets=new_targets)
+
             return updated_node
 
     return AssignmentTransformed()
@@ -646,12 +664,17 @@ def module_transformer(config: Module) -> cst.CSTTransformer:
 
         def leave_ClassDef(
             self, original_node: cst.ClassDef, updated_node: cst.ClassDef
-        ) -> cst.ClassDef:
+        ) -> cst.ClassDef | cst.RemovalSentinel:
             if config.classes and original_node.name.value in config.classes:
+                class_config = config.classes[original_node.name.value]
+
+                if class_config.remove:
+                    return cst.RemoveFromParent()
+
                 updated_node = updated_node.visit(
                     class_transformer(
                         original_node.name.value,
-                        config.classes[original_node.name.value],
+                        class_config,
                     )
                 )
 
@@ -695,14 +718,17 @@ def module_transformer(config: Module) -> cst.CSTTransformer:
 
                     if m.matches(original_node, matcher):
                         if alias_config.remove:
+                            remaining = [
+                                name.with_changes(
+                                    comma=cst.MaybeSentinel.DEFAULT
+                                )
+                                for name in updated_node.names
+                                if name.name.value != alias_config.name
+                            ]
+                            if not remaining:
+                                return cst.RemoveFromParent()
                             updated_node = updated_node.with_changes(
-                                names=[
-                                    name.with_changes(
-                                        comma=cst.MaybeSentinel.DEFAULT
-                                    )
-                                    for name in updated_node.names
-                                    if name.name.value != alias_config.name
-                                ]
+                                names=remaining
                             )
 
                 return updated_node

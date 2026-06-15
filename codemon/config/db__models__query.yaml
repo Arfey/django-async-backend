@@ -2,7 +2,9 @@ pathname: db/models/query.py
 
 module:
   new_imports:
+    - "from django_async_backend.db import async_connections"
     - "from django_async_backend.db.models import sql as async_sql"
+    - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
 
   functions:
     prefetch_related_objects:
@@ -29,7 +31,7 @@ module:
 
         - target:
             name: update
-          remove: true
+          rename: aupdate
 
         - target:
             name: update_or_create
@@ -353,13 +355,21 @@ module:
           remove: true
 
         update:
-          remove: true
-          # to_async: true
-          # rename: aupdate
-          # calls:
-          #   - func:
-          #       attr: execute_sql
-          #     to_await: true
+          to_async: true
+          rename: aupdate
+          context_managers:
+            - to_async: true
+          calls:
+            - func:
+                attr: chain
+              replace_raw: 'self.query.chain(async_sql.UpdateQuery)'
+            - func:
+                value: transaction
+                attr: mark_for_rollback_on_error
+              replace_raw: 'async_mark_for_rollback_on_error(using=self.db)'
+            - func:
+                attr: execute_sql
+              to_await: true
 
         iterator:
           # to_async: true
@@ -377,7 +387,13 @@ module:
           to_async: true
           calls:
             - func:
+                attr: chain
+              replace_raw: 'self.query.chain(async_sql.UpdateQuery)'
+            - func:
                 attr: execute_sql
+              to_await: true
+            - func:
+                attr: execute_returning_sql
               to_await: true
 
         _insert:

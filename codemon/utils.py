@@ -38,7 +38,7 @@ class RenameFun(BaseModel):
 
 
 class ContextManagers(BaseModel):
-    asname: str
+    asname: str | None = None
     to_async: bool = False
 
 
@@ -79,6 +79,7 @@ class AssignTarget(BaseModel):
 
 class Assign(BaseModel):
     remove: bool = False
+    rename: str | None = None
     target: AssignTarget
 
 
@@ -105,8 +106,9 @@ class Method(BaseModel):
 
 
 class Class(BaseModel):
+    remove: bool = False
     rename: str | None = None
-    methods: dict[str, Method]
+    methods: dict[str, Method] = {}
     assigns: list[Assign] | None = None
 
 
