@@ -94,8 +94,12 @@ class ChildModel(ParentModel):
 
 
 # --- Async save-contract prototype models -----------------------------------
-# Each does `self.foo += 1` in whichever method(s) it overrides, so the final
-# `foo` value reveals exactly which code path ran (and how many times).
+# `save` adds 1, `asave` adds 10, so the final `foo` reads like a bitmask that
+# NAMES which method(s) ran -- the key to proving routing, not just counting:
+#   0  -> neither ran     1  -> save ran (only)
+#   10 -> asave ran (only)   11 -> BOTH ran (double-run)
+# This is what lets the tests distinguish "asave ran" from "save ran" on the
+# `both` / `save only` rows, where a same-sized increment would be ambiguous.
 
 
 class SaveContractBase(AsyncSaveModel):
@@ -132,7 +136,7 @@ class SCAsave(SaveContractBase):
         db_table = "sc_asave"
 
     async def asave(self, *args, **kwargs):
-        self.foo += 1
+        self.foo += 10
         await super().asave(*args, **kwargs)
 
 
@@ -147,5 +151,5 @@ class SCBoth(SaveContractBase):
         super().save(*args, **kwargs)
 
     async def asave(self, *args, **kwargs):
-        self.foo += 1
+        self.foo += 10
         await super().asave(*args, **kwargs)

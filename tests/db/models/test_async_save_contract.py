@@ -1,20 +1,32 @@
 """PROTOTYPE: the coherent async save contract vs vanilla Django.
 
-Each model does `self.foo += 1` in whichever method it overrides, so the final
-`foo` reveals which path ran and how many times.
+`save` adds 1, `asave` adds 10, so the resulting `foo` NAMES which method(s)
+ran (this is what makes the proof unambiguous -- a same-sized increment could
+not distinguish "asave ran" from "save ran"):
 
-Vanilla Django 6.0 (proven empirically, starting from foo=0):
+    foo == 0   neither ran
+    foo == 1   save ran (only)
+    foo == 10  asave ran (only)
+    foo == 11  BOTH ran  (i.e. a double-run)
+
+Vanilla Django 6.0 (independently reproduced -- see
+docs/proposals/vanilla_repro.py), starting from foo=0:
 
     overrides    | await obj.asave() | await acreate()
     -------------|-------------------|----------------
     nothing      | 0                 | 0
     save only    | 1                 | 1
-    asave only   | 1                 | 0   <- asave silently dropped
-    both         | 2  <- DOUBLE      | 1   <- disagrees with asave!
+    asave only   | 10                | 0   <- asave silently dropped
+    both         | 11  <- DOUBLE-RUN | 1   <- ran save, not asave
 
-This contract (AsyncSaveModel + AsyncManager.acreate) instead yields a
-coherent 0 / 1 / 1 / 1 for BOTH entry points: no double-run, and acreate
-agrees with asave.
+This contract instead routes both entry points through asave:
+
+    overrides    | await obj.asave() | await acreate()
+    -------------|-------------------|----------------
+    nothing      | 0                 | 0
+    save only    | 1                 | 1
+    asave only   | 10                | 10
+    both         | 10  <- no double  | 10  <- agrees with asave
 """
 from test_app.models import (
     SCAsave,
@@ -25,16 +37,17 @@ from test_app.models import (
 
 from django_async_backend.test import AsyncioTestCase
 
-# model -> expected foo under THIS contract (same for asave and acreate)
+# model -> expected foo under THIS contract. Same for asave and acreate, and
+# the *value itself* identifies the path that ran (see bitmask above).
 CONTRACT = [
-    (SCNeither, 0),
-    (SCSave, 1),
-    (SCAsave, 1),
-    (SCBoth, 1),
+    (SCNeither, 0),   # 00 neither
+    (SCSave, 1),      # 01 save ran (graceful sync_to_async(save))
+    (SCAsave, 10),    # 10 asave ran natively
+    (SCBoth, 10),     # 10 asave ran, save did NOT (would be 11 if double)
 ]
 
-# What vanilla Django produces, for contrast / documenting the breaks.
-VANILLA_ASAVE = {SCNeither: 0, SCSave: 1, SCAsave: 1, SCBoth: 2}
+# What vanilla Django produces, for contrast (reproduced in vanilla_repro.py).
+VANILLA_ASAVE = {SCNeither: 0, SCSave: 1, SCAsave: 10, SCBoth: 11}
 VANILLA_ACREATE = {SCNeither: 0, SCSave: 1, SCAsave: 0, SCBoth: 1}
 
 
@@ -61,19 +74,28 @@ class TestAsaveContract(AsyncioTestCase):
                 via_acreate = await model.async_object.acreate()
                 self.assertEqual(via_asave.foo, via_acreate.foo)
 
-    async def test_both_overridden_no_double_run(self):
-        # Vanilla Django gives foo=2 here (asave -> super().asave() ->
-        # sync_to_async(self.save) -> user save runs too). The contract runs
-        # asave once and never touches save.
+    async def test_both_overridden_runs_asave_not_save(self):
+        # foo == 10 proves asave ran and save did NOT:
+        #   11 would mean both ran (the vanilla double-run);
+        #    1 would mean save ran and asave was skipped.
         obj = SCBoth()
         await obj.asave()
+        self.assertEqual(obj.foo, 10)
+        self.assertNotEqual(obj.foo, 11)  # not a double-run
+        self.assertNotEqual(obj.foo, 1)   # asave was not skipped for save
+        self.assertEqual(VANILLA_ASAVE[SCBoth], 11)  # what we are fixing
+
+    async def test_save_only_runs_save_via_graceful_path(self):
+        # foo == 1 proves the user's sync save ran (graceful degradation),
+        # not the native path (which would leave foo == 0).
+        obj = SCSave()
+        await obj.asave()
         self.assertEqual(obj.foo, 1)
-        self.assertEqual(VANILLA_ASAVE[SCBoth], 2)  # what we are fixing
 
     async def test_asave_only_acreate_now_honoured(self):
-        # Vanilla acreate ignores asave entirely (foo stays 0, #36888).
+        # foo == 10 proves acreate ran asave. Vanilla acreate drops it (0).
         obj = await SCAsave.async_object.acreate()
-        self.assertEqual(obj.foo, 1)
+        self.assertEqual(obj.foo, 10)
         self.assertEqual(VANILLA_ACREATE[SCAsave], 0)  # what we are fixing
 
 
@@ -95,7 +117,7 @@ class TestNativePersistence(AsyncioTestCase):
         self.assertEqual(reloaded.foo, 99)
 
     async def test_asave_override_persists_natively(self):
-        obj = await SCAsave.async_object.acreate(foo=10)  # asave bumps to 11
-        self.assertEqual(obj.foo, 11)
+        obj = await SCAsave.async_object.acreate(foo=10)  # asave bumps to 20
+        self.assertEqual(obj.foo, 20)
         reloaded = await SCAsave.async_object.aget(pk=obj.pk)
-        self.assertEqual(reloaded.foo, 11)
+        self.assertEqual(reloaded.foo, 20)

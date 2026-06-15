@@ -7,34 +7,47 @@ make a design decision concrete, not to merge as-is.
 
 Vanilla Django's async write path is incoherent across `asave` and `acreate`,
 and it can run a user's override **twice**. This is an acknowledged, still-open
-bug — Django ticket **#36888** (`QuerySet.acreate()` ignores `asave()`), and the
-attempted fix **PR #20602** was *closed* with the conclusion that a correct fix
-needs foundational "async model instantiation" infrastructure Django isn't ready
-to build. So upstream has no shipping answer today.
+bug — Django ticket **[#36888](https://code.djangoproject.com/ticket/36888)**
+(`QuerySet.acreate()` ignores `asave()`), and the attempted fix **PR #20602**
+was *closed* with the conclusion that a correct fix needs foundational "async
+model instantiation" infrastructure Django isn't ready to build. So upstream has
+no shipping answer today.
+
+### How to read the tables (the proof encoding)
+
+Each model does `self.foo += 1` in `save` and `self.foo += 10` in `asave`. The
+different increments mean the resulting `foo` **names which method(s) ran** —
+this is what makes the proof unambiguous (a same-sized increment could not tell
+"asave ran" from "save ran"):
+
+| foo | meaning |
+|----:|---------|
+| 0   | neither ran |
+| 1   | `save` ran (only) |
+| 10  | `asave` ran (only) |
+| 11  | **both** ran (a double-run) |
 
 ### Proven vanilla Django behaviour (Django 6.0.6)
 
-Each model does `self.foo += 1` in whichever method it overrides; start at
-`foo == 0`:
+Runnable, committed proof: **`docs/proposals/vanilla_repro.py`** (pure stock
+Django, sqlite, no async-backend). Output, starting from `foo = 0`:
 
 | overrides   | `await obj.asave()` | `await Model.objects.acreate()` |
-|-------------|---------------------|---------------------------------|
+|-------------|:-------------------:|:-------------------------------:|
 | nothing     | 0                   | 0                               |
 | save only   | 1                   | 1                               |
-| asave only  | 1                   | **0** ← `asave` silently dropped |
-| both        | **2** ← DOUBLE-run  | **1** ← disagrees with `asave`  |
+| asave only  | 10                  | **0** ← `asave` silently dropped |
+| both        | **11** ← DOUBLE-run | **1** ← ran `save`, not `asave` |
 
 Why:
 
 - `Model.asave` is `await sync_to_async(self.save)(...)` — it routes through
-  `self.save`. So `asave`+`save` both-overridden + the idiomatic
-  `await super().asave()` runs the `save` body too → **double `+=1`**.
+  `self.save`. So both-overridden + the idiomatic `await super().asave()` runs
+  the `save` body too → `foo == 11` (**double-run**).
 - `acreate` is `sync_to_async(self.create)` → `create()` → `obj.save(...)`. It
   **never mentions `asave`** — so an `asave` override is silently ignored
-  (#36888), and `acreate` is really "run the sync create on a thread."
-
-(Reproducer: pure stock Django, in-memory sqlite — see commit history / the
-`docs/` discussion. No async-backend involved.)
+  (#36888, `foo == 0`), and `acreate` is really "run the sync create on a
+  thread."
 
 ## The proposed contract
 
@@ -50,27 +63,30 @@ On async paths, **`asave` is the single source of truth**, and
 
 ### Resulting behaviour (this prototype)
 
+Proven by `tests/db/models/test_async_save_contract.py`:
+
 | overrides   | `await obj.asave()` | `await async_object.acreate()` |
-|-------------|---------------------|--------------------------------|
+|-------------|:-------------------:|:------------------------------:|
 | nothing     | 0                   | 0                              |
 | save only   | 1                   | 1                              |
-| asave only  | 1                   | **1** (was 0 — #36888 fixed)   |
-| both        | **1** (no double)   | 1                              |
+| asave only  | 10                  | **10** (was 0 — #36888 fixed)  |
+| both        | **10** (not 11)     | 10                             |
 
-Coherent `0 / 1 / 1 / 1` for *both* entry points. `acreate` and `asave` agree,
-and the double-run is gone.
+`asave` and `acreate` produce identical results in every row (vanilla they
+diverge), `both == 10` proves `asave` ran and `save` did **not** (would be `11`
+on a double-run, `1` if `save` had run instead), and there is no double-run.
 
 ## What we propose breaking (vs vanilla Django)
 
-1. **`acreate` honours `asave`** (asave-only: `0 → 1`; both: still `1` but now
-   via `asave`, not `save`). This is the #36888 fix direction.
-2. **No double-run for both-overriders** (`asave`: `2 → 1`). A both-overrider's
+1. **`acreate` honours `asave`** (asave-only: `0 → 10`; both: now runs `asave`,
+   not `save`). This is the #36888 fix direction.
+2. **No double-run for both-overriders** (`asave`: `11 → 10`). A both-overrider's
    `save` body no longer runs on async paths.
 3. **API is unchanged** (`acreate` exists, same signature). Only *semantics*
    change, and only toward coherence.
 4. **`save`-only is NOT broken** — graceful degradation runs it via
-   `sync_to_async`, exactly as vanilla Django does. So there is **no silent
-   drop** of user code in any cell.
+   `sync_to_async` (`foo == 1`), exactly as vanilla Django does. So there is
+   **no silent drop** of user code in any cell.
 
 One-line contract for users:
 
@@ -94,6 +110,9 @@ One-line contract for users:
 - No m2m, Postgres only.
 - Native write is raw SQL via the async cursor; a production version routes
   through the async `SQLInsertCompiler`/`aupdate` and fires async signals.
+- The native-vs-threaded distinction (save-only graceful path) is not directly
+  observable in tests because both connections target the same DB; the routing
+  is verified structurally.
 
 ## Files
 
@@ -101,12 +120,14 @@ One-line contract for users:
 - `django_async_backend/db/models/manager.py` — `AsyncManager.acreate`.
 - `tests/test_app/models.py` — `SCNeither`/`SCSave`/`SCAsave`/`SCBoth`.
 - `tests/db/models/test_async_save_contract.py` — the matrix (asserts the
-  coherent table above, and pins the vanilla numbers for contrast).
+  coherent table above; the foo values name the path that ran).
+- `docs/proposals/vanilla_repro.py` — runnable proof of the vanilla column.
 
 ## Running the tests
 
 ```bash
 docker compose up postgres -d
+python docs/proposals/vanilla_repro.py   # vanilla column (no postgres needed)
 cd tests && DJANGO_SETTINGS_MODULE=settings \
   python manage.py test db.models.test_async_save_contract
 ```
