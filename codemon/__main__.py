@@ -621,6 +621,41 @@ def class_transformer(name: str, config: Class) -> cst.CSTTransformer:
                     rpar=cst.MaybeSentinel.DEFAULT,
                 )
 
+        if config.add_raw_top:
+
+            @m.leave(m.ClassDef())
+            def add_raw_top(
+                self, original_node: cst.ClassDef, updated_node: cst.ClassDef
+            ) -> cst.ClassDef:
+                blocks = [
+                    cst.parse_module(dedent(code)).body[0]
+                    for code in config.add_raw_top
+                ]
+                body = list(updated_node.body.body)
+                # Keep a leading docstring first, if there is one.
+                if m.matches(
+                    updated_node,
+                    m.ClassDef(
+                        body=m.IndentedBlock(
+                            body=[
+                                m.SimpleStatementLine(
+                                    body=[
+                                        m.Expr(value=m.SimpleString()),
+                                        m.ZeroOrMore(),
+                                    ]
+                                ),
+                                m.ZeroOrMore(),
+                            ]
+                        )
+                    ),
+                ):
+                    new_body = [body[0], *blocks, *body[1:]]
+                else:
+                    new_body = [*blocks, *body]
+                return updated_node.with_changes(
+                    body=updated_node.body.with_changes(body=new_body)
+                )
+
         if config.methods:
 
             @m.leave(

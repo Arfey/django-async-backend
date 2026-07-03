@@ -74,8 +74,15 @@ from django.utils.text import (
 )
 from django.utils.translation import gettext_lazy as _
 
+from django_async_backend.db.models.manager import AsyncManager
+from django_async_backend.db.transaction import (
+    async_atomic,
+    async_mark_for_rollback_on_error,
+)
 
-class Model:
+
+class AsyncModelMixin:
+    async_objects = AsyncManager()
 
     async def async_save(
         self,
@@ -144,7 +151,7 @@ class Model:
             if loaded_fields:
                 update_fields = frozenset(loaded_fields)
 
-        self.save_base(
+        await self.async_save_base(
             using=using,
             force_insert=force_insert,
             force_update=force_update,
@@ -153,7 +160,7 @@ class Model:
 
     async_save.alters_data = True
 
-    def async_save_base(
+    async def async_save_base(
         self,
         raw=False,
         force_insert=False,
@@ -179,7 +186,7 @@ class Model:
             cls = cls._meta.concrete_model
         meta = cls._meta
         if not meta.auto_created:
-            pre_save.send(
+            await pre_save.asend(
                 sender=origin,
                 instance=self,
                 raw=raw,
@@ -188,12 +195,10 @@ class Model:
             )
         # A transaction isn't needed if one query is issued.
         if meta.parents:
-            context_manager = transaction.atomic(using=using, savepoint=False)
+            context_manager = async_atomic(using=using, savepoint=False)
         else:
-            context_manager = transaction.mark_for_rollback_on_error(
-                using=using
-            )
-        with context_manager:
+            context_manager = async_mark_for_rollback_on_error(using=using)
+        async with context_manager:
             parent_inserted = False
             if not raw:
                 # Validate force insert only when parents are inserted.
@@ -201,7 +206,7 @@ class Model:
                 parent_inserted = self._save_parents(
                     cls, using, update_fields, force_insert
                 )
-            updated = self._save_table(
+            updated = await self._async_save_table(
                 raw,
                 cls,
                 force_insert or parent_inserted,
@@ -216,7 +221,7 @@ class Model:
 
         # Signal that the save is complete
         if not meta.auto_created:
-            post_save.send(
+            await post_save.asend(
                 sender=origin,
                 instance=self,
                 created=(not updated),
@@ -227,7 +232,7 @@ class Model:
 
     async_save_base.alters_data = True
 
-    def _async_save_table(
+    async def _async_save_table(
         self,
         raw=False,
         cls=None,

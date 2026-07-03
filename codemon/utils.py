@@ -109,6 +109,7 @@ class Class(BaseModel):
     remove: bool = False
     rename: str | None = None
     clear_bases: bool = False
+    add_raw_top: list[str] | None = None
     methods: dict[str, Method] = {}
     assigns: list[Assign] | None = None
 

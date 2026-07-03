@@ -1,6 +1,11 @@
 pathname: db/models/base.py
 
 module:
+  new_imports:
+    - "from django_async_backend.db.models.manager import AsyncManager"
+    - "from django_async_backend.db.transaction import async_atomic"
+    - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
+
   assigns:
     - target:
         name: DEFERRED
@@ -43,7 +48,10 @@ module:
       remove: true
 
     Model:
+      rename: AsyncModelMixin
       clear_bases: true
+      add_raw_top:
+        - "async_objects = AsyncManager()"
 
       assigns:
         - target:
@@ -128,12 +136,56 @@ module:
         save:
           rename: async_save
           to_async: true
+          calls:
+            - func:
+                attr: save_base
+              rename:
+                func:
+                  attr: async_save_base
+              to_await: true
 
         save_base:
           rename: async_save_base
+          to_async: true
+          context_managers:
+            - to_async: true
+          calls:
+            - func:
+                value: transaction
+                attr: atomic
+              rename:
+                func:
+                  name: async_atomic
+            - func:
+                value: transaction
+                attr: mark_for_rollback_on_error
+              rename:
+                func:
+                  name: async_mark_for_rollback_on_error
+            - func:
+                value: pre_save
+                attr: send
+              rename:
+                func:
+                  attr: asend
+              to_await: true
+            - func:
+                value: post_save
+                attr: send
+              rename:
+                func:
+                  attr: asend
+              to_await: true
+            - func:
+                attr: _save_table
+              rename:
+                func:
+                  attr: _async_save_table
+              to_await: true
 
         _save_table:
           rename: _async_save_table
+          to_async: true
 
         _save_parents:
           remove: true
