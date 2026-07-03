@@ -108,6 +108,7 @@ class Method(BaseModel):
 class Class(BaseModel):
     remove: bool = False
     rename: str | None = None
+    clear_bases: bool = False
     methods: dict[str, Method] = {}
     assigns: list[Assign] | None = None
 
@@ -134,6 +135,7 @@ class Module(BaseModel):
     import_aliases: list[ImportAlias] | None = None
     add_raw_bottom: list[str] = None
     functions: dict[str, Function] | None = None
+    assigns: list[Assign] | None = None
 
 
 class Config(BaseModel):

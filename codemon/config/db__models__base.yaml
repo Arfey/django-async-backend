@@ -1,0 +1,268 @@
+pathname: db/models/base.py
+
+module:
+  assigns:
+    - target:
+        name: DEFERRED
+      remove: true
+
+    - target:
+        name: model_unpickle
+      remove: true
+
+  functions:
+    subclass_exception:
+      remove: true
+
+    _has_contribute_to_class:
+      remove: true
+
+    method_set_order:
+      remove: true
+
+    method_get_order:
+      remove: true
+
+    make_foreign_order_accessors:
+      remove: true
+
+    model_unpickle:
+      remove: true
+
+  classes:
+    Deferred:
+      remove: true
+
+    ModelBase:
+      remove: true
+
+    ModelStateFieldsCacheDescriptor:
+      remove: true
+
+    ModelState:
+      remove: true
+
+    Model:
+      clear_bases: true
+
+      assigns:
+        - target:
+            name: pk
+          remove: true
+
+        - target:
+            name: save
+          rename: async_save
+
+        - target:
+            name: save_base
+          rename: async_save_base
+
+        - target:
+            name: asave
+          remove: true
+
+        - target:
+            name: delete
+          remove: true
+
+        - target:
+            name: adelete
+          remove: true
+
+      methods:
+        __init__:
+          remove: true
+
+        from_db:
+          remove: true
+
+        __repr__:
+          remove: true
+
+        __str__:
+          remove: true
+
+        __eq__:
+          remove: true
+
+        __hash__:
+          remove: true
+
+        __reduce__:
+          remove: true
+
+        __getstate__:
+          remove: true
+
+        __setstate__:
+          remove: true
+
+        _get_pk_val:
+          remove: true
+
+        _set_pk_val:
+          remove: true
+
+        _is_pk_set:
+          remove: true
+
+        get_deferred_fields:
+          remove: true
+
+        refresh_from_db:
+          remove: true
+
+        arefresh_from_db:
+          remove: true
+
+        serializable_value:
+          remove: true
+
+        _validate_force_insert:
+          remove: true
+
+        asave:
+          remove: true
+
+        save:
+          rename: async_save
+          to_async: true
+
+        save_base:
+          rename: async_save_base
+
+        _save_table:
+          rename: _async_save_table
+
+        _save_parents:
+          remove: true
+
+        _do_update:
+          remove: true
+
+        _do_insert:
+          remove: true
+
+        _assign_returned_values:
+          remove: true
+
+        _prepare_related_fields_for_save:
+          remove: true
+
+        delete:
+          remove: true
+
+        adelete:
+          remove: true
+
+        _get_FIELD_display:
+          remove: true
+
+        _get_next_or_previous_by_FIELD:
+          remove: true
+
+        _get_next_or_previous_in_order:
+          remove: true
+
+        _get_field_expression_map:
+          remove: true
+
+        prepare_database_save:
+          remove: true
+
+        clean:
+          remove: true
+
+        validate_unique:
+          remove: true
+
+        _get_unique_checks:
+          remove: true
+
+        _perform_unique_checks:
+          remove: true
+
+        _perform_date_checks:
+          remove: true
+
+        date_error_message:
+          remove: true
+
+        unique_error_message:
+          remove: true
+
+        get_constraints:
+          remove: true
+
+        validate_constraints:
+          remove: true
+
+        full_clean:
+          remove: true
+
+        clean_fields:
+          remove: true
+
+        check:
+          remove: true
+
+        _check_composite_pk:
+          remove: true
+
+        _check_db_table_comment:
+          remove: true
+
+        _check_swappable:
+          remove: true
+
+        _check_model:
+          remove: true
+
+        _check_managers:
+          remove: true
+
+        _check_fields:
+          remove: true
+
+        _check_m2m_through_same_relationship:
+          remove: true
+
+        _check_id_field:
+          remove: true
+
+        _check_field_name_clashes:
+          remove: true
+
+        _check_column_name_clashes:
+          remove: true
+
+        _check_model_name_db_lookup_clashes:
+          remove: true
+
+        _check_property_name_related_field_accessor_clashes:
+          remove: true
+
+        _check_single_primary_key:
+          remove: true
+
+        _check_unique_together:
+          remove: true
+
+        _check_indexes:
+          remove: true
+
+        _check_local_fields:
+          remove: true
+
+        _check_ordering:
+          remove: true
+
+        _check_long_column_names:
+          remove: true
+
+        _get_expr_references:
+          remove: true
+
+        _check_constraints:
+          remove: true
