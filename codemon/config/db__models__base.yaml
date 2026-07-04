@@ -2,6 +2,7 @@ pathname: db/models/base.py
 
 module:
   new_imports:
+    - "from django.utils.functional import classproperty"
     - "from django_async_backend.db.models.manager import AsyncManager"
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
@@ -51,7 +52,21 @@ module:
       rename: AsyncModelMixin
       clear_bases: true
       add_raw_top:
-        - "async_objects = AsyncManager()"
+        - |
+          @classproperty
+          def async_objects(cls):
+              manager = AsyncManager()
+              manager.name = "async_objects"
+              manager.model = cls
+              return manager
+        - |
+          @classproperty
+          def _async_base_manager(cls):
+              manager = AsyncManager()
+              manager.name = "_async_base_manager"
+              manager.model = cls
+              manager.auto_created = True
+              return manager
 
       assigns:
         - target:
@@ -186,6 +201,17 @@ module:
         _save_table:
           rename: _async_save_table
           to_async: true
+          calls:
+            - func:
+                attr: _do_insert
+              replace_raw: |
+                await self._async_do_insert(
+                    cls._async_base_manager,
+                    using,
+                    insert_fields,
+                    returning_fields,
+                    raw,
+                )
 
         _save_parents:
           remove: true
@@ -194,7 +220,13 @@ module:
           remove: true
 
         _do_insert:
-          remove: true
+          rename: _async_do_insert
+          to_async: true
+          calls:
+            - func:
+                value: manager
+                attr: _insert
+              to_await: true
 
         _assign_returned_values:
           remove: true

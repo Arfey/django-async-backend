@@ -20,8 +20,5 @@ module:
     DeleteQuery:
       remove: true
 
-    InsertQuery:
-      remove: true
-
     AggregateQuery:
       remove: true

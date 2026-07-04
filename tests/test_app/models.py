@@ -1,7 +1,11 @@
-from django.db import DEFAULT_DB_ALIAS, models
+from django.db import (
+    DEFAULT_DB_ALIAS,
+    models,
+)
 
-from django_async_backend.db.models.manager import AsyncManager
 from django_async_backend.db import async_connections
+from django_async_backend.db.models.base import AsyncModelMixin
+from django_async_backend.db.models.manager import AsyncManager
 
 
 class CustomAsyncManager(AsyncManager):
@@ -50,6 +54,14 @@ class AbstractBaseModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class SaveModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    value = models.IntegerField(null=True)
+
+    class Meta:
+        db_table = "save_model"
 
 
 class TestModel(AbstractBaseModel):

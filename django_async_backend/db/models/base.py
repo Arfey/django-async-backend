@@ -67,6 +67,7 @@ from django.db.models.utils import (
     make_model_tuple,
 )
 from django.utils.encoding import force_str
+from django.utils.functional import classproperty
 from django.utils.hashable import make_hashable
 from django.utils.text import (
     capfirst,
@@ -82,7 +83,20 @@ from django_async_backend.db.transaction import (
 
 
 class AsyncModelMixin:
-    async_objects = AsyncManager()
+    @classproperty
+    def async_objects(cls):
+        manager = AsyncManager()
+        manager.name = "async_objects"
+        manager.model = cls
+        return manager
+
+    @classproperty
+    def _async_base_manager(cls):
+        manager = AsyncManager()
+        manager.name = "_async_base_manager"
+        manager.model = cls
+        manager.auto_created = True
+        return manager
 
     async def async_save(
         self,
@@ -371,9 +385,28 @@ class AsyncModelMixin:
                     and not (pk_set and field is meta.auto_field)
                 ):
                     returning_fields.remove(field)
-            results = self._do_insert(
-                cls._base_manager, using, insert_fields, returning_fields, raw
+            results = await self._async_do_insert(
+                cls._async_base_manager,
+                using,
+                insert_fields,
+                returning_fields,
+                raw,
             )
             if results:
                 self._assign_returned_values(results[0], returning_fields)
         return updated
+
+    async def _async_do_insert(
+        self, manager, using, fields, returning_fields, raw
+    ):
+        """
+        Do an INSERT. If returning_fields is defined then this method should
+        return the newly created data for the model.
+        """
+        return await manager._insert(
+            [self],
+            fields=fields,
+            returning_fields=returning_fields,
+            using=using,
+            raw=raw,
+        )
