@@ -164,6 +164,12 @@ module:
           to_async: true
           calls:
             - func:
+                attr: _prepare_related_fields_for_save
+              rename:
+                func:
+                  attr: _async_prepare_related_fields_for_save
+              to_await: true
+            - func:
                 attr: save_base
               rename:
                 func:
@@ -246,7 +252,8 @@ module:
           remove: true
 
         _prepare_related_fields_for_save:
-          remove: true
+          rename: _async_prepare_related_fields_for_save
+          to_async: true
 
         delete:
           remove: true

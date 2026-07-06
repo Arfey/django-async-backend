@@ -2,6 +2,7 @@ from django.db import (
     DEFAULT_DB_ALIAS,
     models,
 )
+from django.db.models import Value
 
 from django_async_backend.db import async_connections
 from django_async_backend.db.models.base import AsyncModelMixin
@@ -102,3 +103,30 @@ class ChildModel(ParentModel):
 
     class Meta:
         db_table = "child_model"
+
+
+class RelatedSaveModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    fk = models.ForeignKey(
+        SaveModel,
+        on_delete=models.CASCADE,
+        null=True,
+        related_name="+",
+    )
+    o2o = models.OneToOneField(
+        SaveModel,
+        on_delete=models.CASCADE,
+        null=True,
+        related_name="+",
+    )
+
+    class Meta:
+        db_table = "related_save_model"
+
+
+class DbDefaultModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    ts = models.IntegerField(db_default=Value(7))
+
+    class Meta:
+        db_table = "db_default_model"

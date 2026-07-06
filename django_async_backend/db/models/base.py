@@ -83,7 +83,6 @@ from django_async_backend.db.transaction import (
 
 
 class AsyncModelMixin:
-
     @classproperty
     def async_objects(cls):
         manager = cls.__dict__.get("_async_objects_cache")
@@ -93,7 +92,6 @@ class AsyncModelMixin:
             manager.model = cls
             cls._async_objects_cache = manager
         return manager
-
     @classproperty
     def _async_base_manager(cls):
         manager = cls.__dict__.get("_async_base_manager_cache")
@@ -122,7 +120,9 @@ class AsyncModelMixin:
         non-SQL backends), respectively. Normally, they should not be set.
         """
 
-        self._prepare_related_fields_for_save(operation_name="save")
+        await self._async_prepare_related_fields_for_save(
+            operation_name="save"
+        )
 
         using = using or router.db_for_write(self.__class__, instance=self)
         if force_insert and (force_update or update_fields):
@@ -417,3 +417,59 @@ class AsyncModelMixin:
             using=using,
             raw=raw,
         )
+
+    async def _async_prepare_related_fields_for_save(
+        self, operation_name, fields=None
+    ):
+        # Ensure that a model instance without a PK hasn't been assigned to
+        # a ForeignKey, GenericForeignKey or OneToOneField on this model. If
+        # the field is nullable, allowing the save would result in silent data
+        # loss.
+        for field in self._meta.concrete_fields:
+            if fields and field not in fields:
+                continue
+            # If the related field isn't cached, then an instance hasn't been
+            # assigned and there's no need to worry about this check.
+            if field.is_relation and field.is_cached(self):
+                obj = getattr(self, field.name, None)
+                if not obj:
+                    continue
+                # A pk may have been assigned manually to a model instance not
+                # saved to the database (or auto-generated in a case like
+                # UUIDField), but we allow the save to proceed and rely on the
+                # database to raise an IntegrityError if applicable. If
+                # constraints aren't supported by the database, there's the
+                # unavoidable risk of data corruption.
+                if not obj._is_pk_set():
+                    # Remove the object from a related instance cache.
+                    if not field.remote_field.multiple:
+                        field.remote_field.delete_cached_value(obj)
+                    raise ValueError(
+                        "%s() prohibited to prevent data loss due to unsaved "
+                        "related object '%s'." % (operation_name, field.name)
+                    )
+                elif getattr(self, field.attname) in field.empty_values:
+                    # Set related object if it has been saved after an
+                    # assignment.
+                    setattr(self, field.name, obj)
+                # If the relationship's pk/to_field was changed, clear the
+                # cached relationship.
+                if getattr(obj, field.target_field.attname) != getattr(
+                    self, field.attname
+                ):
+                    field.delete_cached_value(self)
+        # GenericForeignKeys are private.
+        for field in self._meta.private_fields:
+            if fields and field not in fields:
+                continue
+            if (
+                field.is_relation
+                and field.is_cached(self)
+                and hasattr(field, "fk_field")
+            ):
+                obj = field.get_cached_value(self, default=None)
+                if obj and not obj._is_pk_set():
+                    raise ValueError(
+                        f"{operation_name}() prohibited to prevent data loss due to "
+                        f"unsaved related object '{field.name}'."
+                    )
