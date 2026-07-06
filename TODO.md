@@ -4,3 +4,4 @@
 - connection_created.asend
 - close_old_connections + signals.request_started | signals.request_finished
 - test AsyncConnectionHandler + thread_critical (.set context var)
+- mark all helper functions / classes as private

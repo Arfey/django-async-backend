@@ -3,9 +3,14 @@ pathname: db/models/base.py
 module:
   new_imports:
     - "from django.utils.functional import classproperty"
+    - "from django_async_backend.db import async_connections"
     - "from django_async_backend.db.models.manager import AsyncManager"
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
+
+  import_aliases:
+    - name: connections
+      remove: true
 
   assigns:
     - target:
@@ -55,17 +60,23 @@ module:
         - |
           @classproperty
           def async_objects(cls):
-              manager = AsyncManager()
-              manager.name = "async_objects"
-              manager.model = cls
+              manager = cls.__dict__.get("_async_objects_cache")
+              if manager is None:
+                  manager = AsyncManager()
+                  manager.name = "async_objects"
+                  manager.model = cls
+                  cls._async_objects_cache = manager
               return manager
         - |
           @classproperty
           def _async_base_manager(cls):
-              manager = AsyncManager()
-              manager.name = "_async_base_manager"
-              manager.model = cls
-              manager.auto_created = True
+              manager = cls.__dict__.get("_async_base_manager_cache")
+              if manager is None:
+                  manager = AsyncManager()
+                  manager.name = "_async_base_manager"
+                  manager.model = cls
+                  manager.auto_created = True
+                  cls._async_base_manager_cache = manager
               return manager
 
       assigns:
@@ -201,6 +212,9 @@ module:
         _save_table:
           rename: _async_save_table
           to_async: true
+          renames:
+            - name: connections
+              rename: async_connections
           calls:
             - func:
                 attr: _do_insert

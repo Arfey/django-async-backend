@@ -37,6 +37,11 @@ class RenameFun(BaseModel):
     func: RenameAttr | None = None
 
 
+class NameRename(BaseModel):
+    name: str
+    rename: str
+
+
 class ContextManagers(BaseModel):
     asname: str | None = None
     to_async: bool = False
@@ -99,6 +104,7 @@ class Method(BaseModel):
     to_async: bool = False
     rename: str | None = None
     calls: list[Call] | None = None
+    renames: list[NameRename] | None = None
     for_statements: list[ForStatement] | None = None
     context_managers: list[ContextManagers] | None = None
     return_blocks: list[ReturnBlock] | None = None

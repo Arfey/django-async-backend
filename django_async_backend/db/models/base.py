@@ -24,7 +24,6 @@ from django.db import (
     DJANGO_VERSION_PICKLE_KEY,
     DatabaseError,
     connection,
-    connections,
     router,
     transaction,
 )
@@ -75,6 +74,7 @@ from django.utils.text import (
 )
 from django.utils.translation import gettext_lazy as _
 
+from django_async_backend.db import async_connections
 from django_async_backend.db.models.manager import AsyncManager
 from django_async_backend.db.transaction import (
     async_atomic,
@@ -83,19 +83,26 @@ from django_async_backend.db.transaction import (
 
 
 class AsyncModelMixin:
+
     @classproperty
     def async_objects(cls):
-        manager = AsyncManager()
-        manager.name = "async_objects"
-        manager.model = cls
+        manager = cls.__dict__.get("_async_objects_cache")
+        if manager is None:
+            manager = AsyncManager()
+            manager.name = "async_objects"
+            manager.model = cls
+            cls._async_objects_cache = manager
         return manager
 
     @classproperty
     def _async_base_manager(cls):
-        manager = AsyncManager()
-        manager.name = "_async_base_manager"
-        manager.model = cls
-        manager.auto_created = True
+        manager = cls.__dict__.get("_async_base_manager_cache")
+        if manager is None:
+            manager = AsyncManager()
+            manager.name = "_async_base_manager"
+            manager.model = cls
+            manager.auto_created = True
+            cls._async_base_manager_cache = manager
         return manager
 
     async def async_save(
@@ -367,7 +374,7 @@ class AsyncModelMixin:
                 if not f.generated and (pk_set or f is not meta.auto_field)
             ]
             returning_fields = list(meta.db_returning_fields)
-            can_return_columns_from_insert = connections[
+            can_return_columns_from_insert = async_connections[
                 using
             ].features.can_return_columns_from_insert
             for field in insert_fields:

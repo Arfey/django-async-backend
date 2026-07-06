@@ -522,6 +522,20 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
                 return updated_node
 
+        if config.renames:
+
+            @m.leave(m.Name())
+            def renames(
+                self, original_node: cst.Name, updated_node: cst.Name
+            ) -> cst.Name:
+                for rename_config in config.renames:
+                    if updated_node.value == rename_config.name:
+                        return updated_node.with_changes(
+                            value=rename_config.rename
+                        )
+
+                return updated_node
+
         if config.context_managers:
 
             @m.leave(m.With())
