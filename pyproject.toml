@@ -109,3 +109,17 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 module = "*.tests.*"
 ignore_errors = true
+
+[tool.coverage.run]
+omit = [
+  "*/test*",
+  "test_app/*",
+  "manage.py",
+]
+
+[tool.coverage.report]
+omit = [
+  "*/test*",
+  "test_app/*",
+  "manage.py",
+]
