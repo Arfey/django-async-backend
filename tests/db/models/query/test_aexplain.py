@@ -13,7 +13,7 @@ class TestMock(TestCase):
 
 class TestAExplain(AsyncioTestCase):
     async def test_aexplain(self):
-        explain_output = await TestModel.async_object.aexplain()
+        explain_output = await TestModel.async_objects.aexplain()
 
         self.assertIn(
             "Seq Scan on test_model  (cost=",
@@ -33,7 +33,7 @@ class TestAExplain(AsyncioTestCase):
 
     async def test_aexplain_with_format(self):
         explain_output = json.loads(
-            await TestModel.async_object.aexplain(format="JSON")
+            await TestModel.async_objects.aexplain(format="JSON")
         )
         self.assertTrue(
             isinstance(explain_output, list),
@@ -48,7 +48,7 @@ class TestAExplain(AsyncioTestCase):
         )
 
     async def test_aexplain_with_options(self):
-        explain_output = await TestModel.async_object.aexplain(
+        explain_output = await TestModel.async_objects.aexplain(
             analyze=True, verbose=True
         )
         self.assertIn(

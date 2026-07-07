@@ -6,12 +6,12 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestUsing(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Test1", value=1)
-        await TestModel.async_object.acreate(name="Test2", value=2)
+        await TestModel(name="Test1", value=1).async_save()
+        await TestModel(name="Test2", value=2).async_save()
 
     async def test_using_default_database(self):
         results = [
-            obj async for obj in TestModel.async_object.using("default")
+            obj async for obj in TestModel.async_objects.using("default")
         ]
 
         self.assertEqual(
@@ -28,12 +28,12 @@ class TestUsing(AsyncioTestCase):
 
     async def test_using_invalid_database(self):
         with self.assertRaises(ConnectionDoesNotExist):
-            [obj async for obj in TestModel.async_object.using("invalid_db")]
+            [obj async for obj in TestModel.async_objects.using("invalid_db")]
 
     async def test_using_with_filter(self):
         results = [
             obj
-            async for obj in TestModel.async_object.using("default").filter(
+            async for obj in TestModel.async_objects.using("default").filter(
                 name="Test1"
             )
         ]

@@ -6,12 +6,12 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestFilter(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Test1", value=1)
-        await TestModel.async_object.acreate(name="Test2", value=2)
+        await TestModel(name="Test1", value=1).async_save()
+        await TestModel(name="Test2", value=2).async_save()
 
     async def test_filter_by_name(self):
         results = [
-            obj async for obj in TestModel.async_object.filter(name="Test1")
+            obj async for obj in TestModel.async_objects.filter(name="Test1")
         ]
 
         self.assertEqual(len(results), 1, "Should return 1 object")
@@ -22,7 +22,7 @@ class TestFilter(AsyncioTestCase):
     async def test_filter_no_results(self):
         results = [
             obj
-            async for obj in TestModel.async_object.filter(name="Nonexistent")
+            async for obj in TestModel.async_objects.filter(name="Nonexistent")
         ]
 
         self.assertEqual(
@@ -33,7 +33,7 @@ class TestFilter(AsyncioTestCase):
         with self.assertRaises(FieldError):
             [
                 obj
-                async for obj in TestModel.async_object.filter(
+                async for obj in TestModel.async_objects.filter(
                     nonexistent_field="value"
                 )
             ]
@@ -41,7 +41,7 @@ class TestFilter(AsyncioTestCase):
     async def test_filter_multiple_conditions(self):
         results = [
             obj
-            async for obj in TestModel.async_object.filter(
+            async for obj in TestModel.async_objects.filter(
                 name="Test1", value=1
             )
         ]

@@ -10,19 +10,16 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestUpdateBatch(AsyncioTestCase):
     async def asyncSetUp(self):
-        self.item1 = await TestModel.async_object.acreate(
-            name="Item1", value=1
-        )
-        self.item2 = await TestModel.async_object.acreate(
-            name="Item2", value=2
-        )
-        self.item3 = await TestModel.async_object.acreate(
-            name="Item3", value=3
-        )
+        self.item1 = TestModel(name="Item1", value=1)
+        await self.item1.async_save()
+        self.item2 = TestModel(name="Item2", value=2)
+        await self.item2.async_save()
+        self.item3 = TestModel(name="Item3", value=3)
+        await self.item3.async_save()
 
     async def _values_by_name(self):
         return {
-            obj.name: obj.value async for obj in TestModel.async_object.all()
+            obj.name: obj.value async for obj in TestModel.async_objects.all()
         }
 
     async def test_updates_only_listed_pks(self):

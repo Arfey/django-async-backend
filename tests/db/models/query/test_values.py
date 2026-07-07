@@ -7,12 +7,13 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestValues(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Test1", value=1)
-        await TestModel.async_object.acreate(name="Test2", value=2)
+        await TestModel(name="Test1", value=1).async_save()
+        await TestModel(name="Test2", value=2).async_save()
 
     async def test_values(self):
         results = [
-            obj async for obj in TestModel.async_object.values("name", "value")
+            obj
+            async for obj in TestModel.async_objects.values("name", "value")
         ]
 
         self.assertEqual(len(results), 2, "Should return 2 value dictionaries")
@@ -32,7 +33,7 @@ class TestValues(AsyncioTestCase):
     async def test_values_no_objects(self):
         results = [
             obj
-            async for obj in TestModel.async_object.filter(id=10).values(
+            async for obj in TestModel.async_objects.filter(id=10).values(
                 "name", "value"
             )
         ]
@@ -45,7 +46,7 @@ class TestValues(AsyncioTestCase):
     async def test_values_with_filter(self):
         results = [
             obj
-            async for obj in TestModel.async_object.filter(
+            async for obj in TestModel.async_objects.filter(
                 name="Test1"
             ).values("name", "value")
         ]
@@ -62,7 +63,7 @@ class TestValues(AsyncioTestCase):
         with self.assertRaises(FieldError):
             [
                 obj
-                async for obj in TestModel.async_object.values(
+                async for obj in TestModel.async_objects.values(
                     "nonexistent_field"
                 )
             ]
@@ -70,7 +71,7 @@ class TestValues(AsyncioTestCase):
     async def test_values_annotate(self):
         results = [
             obj
-            async for obj in TestModel.async_object.annotate(
+            async for obj in TestModel.async_objects.annotate(
                 count=Count("name")
             )
             .order_by("name")
@@ -84,7 +85,7 @@ class TestValues(AsyncioTestCase):
         )
 
     async def test_values_no_fields(self):
-        results = [obj async for obj in TestModel.async_object.values()]
+        results = [obj async for obj in TestModel.async_objects.values()]
 
         self.assertEqual(len(results), 2, "Should return 2 value dictionaries")
         self.assertIn(

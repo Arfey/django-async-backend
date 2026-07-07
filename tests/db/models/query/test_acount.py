@@ -10,18 +10,18 @@ class TestMock(TestCase):
 
 class TestACount(AsyncioTestCase):
     async def test_acount(self):
-        await TestModel.async_object.acreate(1)
-        await TestModel.async_object.acreate(2)
+        await TestModel(name=1).async_save()
+        await TestModel(name=2).async_save()
 
         self.assertEqual(
-            await TestModel.async_object.acount(),
+            await TestModel.async_objects.acount(),
             2,
             "Count should be 2",
         )
 
     async def test_acount_no_objects(self):
         self.assertEqual(
-            await TestModel.async_object.acount(),
+            await TestModel.async_objects.acount(),
             0,
             "Count should be 0 when no objects exist",
         )

@@ -17,13 +17,13 @@ class TestMock(TestCase):
 class TestGetItem(AsyncioTestCase):
 
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Item1")
-        await TestModel.async_object.acreate(name="Item2")
-        await TestModel.async_object.acreate(name="Item3")
-        await TestModel.async_object.acreate(name="Item4")
+        await TestModel(name="Item1").async_save()
+        await TestModel(name="Item2").async_save()
+        await TestModel(name="Item3").async_save()
+        await TestModel(name="Item4").async_save()
 
     async def test_get_single_item(self):
-        qs = TestModel.async_object.all()
+        qs = TestModel.async_objects.all()
 
         async with AsyncCaptureQueriesContext(
             async_connections[DEFAULT_DB_ALIAS]
@@ -54,7 +54,7 @@ class TestGetItem(AsyncioTestCase):
             self.assertEqual(len(qs._result_cache), await qs.acount())
 
     async def test_get_slice(self):
-        qs = TestModel.async_object.all()
+        qs = TestModel.async_objects.all()
 
         async with AsyncCaptureQueriesContext(
             async_connections[DEFAULT_DB_ALIAS]
@@ -92,7 +92,7 @@ class TestGetItem(AsyncioTestCase):
             )
 
     async def test_get_slice_with_step(self):
-        qs = TestModel.async_object.all()
+        qs = TestModel.async_objects.all()
         async with AsyncCaptureQueriesContext(
             async_connections[DEFAULT_DB_ALIAS]
         ) as ctx:
@@ -120,12 +120,12 @@ class TestGetItem(AsyncioTestCase):
 
     async def test_invalid_index(self):
         with self.assertRaises(TypeError):
-            await TestModel.async_object.all()["invalid"]
+            await TestModel.async_objects.all()["invalid"]
 
     async def test_negative_index(self):
         with self.assertRaises(ValueError):
-            await TestModel.async_object.all()[-1]
+            await TestModel.async_objects.all()[-1]
 
     async def test_out_of_range(self):
         with self.assertRaises(IndexError):
-            await TestModel.async_object.all()[100]
+            await TestModel.async_objects.all()[100]

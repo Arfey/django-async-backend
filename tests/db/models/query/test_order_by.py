@@ -6,13 +6,13 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestOrderBy(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Test1", value=3)
-        await TestModel.async_object.acreate(name="Test2", value=1)
-        await TestModel.async_object.acreate(name="Test3", value=2)
+        await TestModel(name="Test1", value=3).async_save()
+        await TestModel(name="Test2", value=1).async_save()
+        await TestModel(name="Test3", value=2).async_save()
 
     async def test_order_by_single_field(self):
         results = [
-            obj async for obj in TestModel.async_object.order_by("value")
+            obj async for obj in TestModel.async_objects.order_by("value")
         ]
 
         self.assertEqual(
@@ -26,7 +26,7 @@ class TestOrderBy(AsyncioTestCase):
 
     async def test_order_by_descending(self):
         results = [
-            obj async for obj in TestModel.async_object.order_by("-value")
+            obj async for obj in TestModel.async_objects.order_by("-value")
         ]
 
         self.assertEqual(
@@ -43,7 +43,7 @@ class TestOrderBy(AsyncioTestCase):
     async def test_order_by_multiple_fields(self):
         results = [
             obj
-            async for obj in TestModel.async_object.order_by("value", "name")
+            async for obj in TestModel.async_objects.order_by("value", "name")
         ]
 
         self.assertEqual(
@@ -61,11 +61,14 @@ class TestOrderBy(AsyncioTestCase):
         with self.assertRaises(FieldError):
             [
                 obj
-                async for obj in TestModel.async_object.order_by(
+                async for obj in TestModel.async_objects.order_by(
                     "nonexistent_field"
                 )
             ]
 
     async def test_order_by_is_sliced_error(self):
         with self.assertRaises(TypeError):
-            [obj async for obj in TestModel.async_object[:1].order_by("value")]
+            [
+                obj
+                async for obj in TestModel.async_objects[:1].order_by("value")
+            ]
