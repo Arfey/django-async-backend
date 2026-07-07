@@ -105,6 +105,21 @@ class ChildModel(ParentModel):
         db_table = "child_model"
 
 
+class SaveParentModel(AsyncModelMixin, models.Model):
+    parent_value = models.IntegerField(null=True)
+
+    class Meta:
+        db_table = "save_parent_model"
+
+
+class SaveChildModel(SaveParentModel):
+
+    child_value = models.IntegerField(null=True)
+
+    class Meta:
+        db_table = "save_child_model"
+
+
 class RelatedSaveModel(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=255, unique=True)
     fk = models.ForeignKey(

@@ -2,7 +2,7 @@ from unittest import mock
 
 from django.db.models import Value
 from django.test import override_settings
-from test_app.models import (
+from test_app.models import (  # SaveChildModel,
     DbDefaultModel,
     RelatedSaveModel,
     SaveModel,
@@ -115,6 +115,30 @@ class TestAsyncSave(AsyncioTestCase):
         await instance.async_save(using="default")
 
         self.assertEqual(instance._state.db, "default")
+
+    async def test_multi_table_inheritance_save_is_not_supported_yet(self):
+        # instance = SaveChildModel(parent_value=1, child_value=2)
+
+        # todo: fix
+        # await instance.async_save()
+        pass
+
+    async def test_error_during_save_marks_transaction_for_rollback(self):
+        connection = async_connections["default"]
+        instance = SaveModel(name="RollbackItem", value=1)
+        boom = mock.AsyncMock(side_effect=RuntimeError("boom"))
+
+        self.assertTrue(connection.in_atomic_block)
+        self.assertFalse(connection.needs_rollback)
+
+        with mock.patch.object(SaveModel, "_async_save_table", boom):
+            with self.assertRaises(RuntimeError):
+                await instance.async_save()
+
+        self.assertTrue(connection.needs_rollback)
+        self.assertIsInstance(connection.rollback_exc, RuntimeError)
+
+        connection.needs_rollback = False
 
     async def test_insert_drops_db_returning_field_when_backend_cannot_return(
         self,
