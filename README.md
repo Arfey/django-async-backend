@@ -295,12 +295,12 @@ Not supported ❌
 
 ### Model:
 
-| methods         | supported | comments |
-| --------------- | --------- | -------- |
-| `Model.asave`   | ❌        |          |
-| `Model.aupdate` | ❌        |          |
-| `Model.adelete` | ❌        |          |
-| `...`           | ❌        |          |
+| methods         | supported | comments   |
+| --------------- | --------- | ---------- |
+| `Model.asave`   | ✅        | async_save |
+| `Model.aupdate` | ❌        |            |
+| `Model.adelete` | ❌        |            |
+| `...`           | ❌        |            |
 
 ### User Model / Manager
 
