@@ -2,6 +2,7 @@ pathname: db/models/base.py
 
 module:
   new_imports:
+    - "from django.db.models.base import ModelBase"
     - "from django.utils.functional import classproperty"
     - "from django_async_backend.db import async_connections"
     - "from django_async_backend.db.models.manager import AsyncManager"
@@ -133,13 +134,19 @@ module:
           remove: true
 
         _get_pk_val:
-          remove: true
+          rename: _async_get_pk_val
 
         _set_pk_val:
           remove: true
 
         _is_pk_set:
-          remove: true
+          rename: _async_is_pk_set
+          calls:
+            - func:
+                attr: _get_pk_val
+              rename:
+                func:
+                  attr: _async_get_pk_val
 
         get_deferred_fields:
           remove: true
@@ -154,7 +161,7 @@ module:
           remove: true
 
         _validate_force_insert:
-          remove: true
+          rename: _async_validate_force_insert
 
         asave:
           remove: true
@@ -170,6 +177,11 @@ module:
                   attr: _async_prepare_related_fields_for_save
               to_await: true
             - func:
+                attr: _is_pk_set
+              rename:
+                func:
+                  attr: _async_is_pk_set
+            - func:
                 attr: save_base
               rename:
                 func:
@@ -182,6 +194,17 @@ module:
           context_managers:
             - to_async: true
           calls:
+            - func:
+                attr: _validate_force_insert
+              rename:
+                func:
+                  attr: _async_validate_force_insert
+            - func:
+                attr: _save_parents
+              rename:
+                func:
+                  attr: _async_save_parents
+              to_await: true
             - func:
                 value: transaction
                 attr: atomic
@@ -221,7 +244,46 @@ module:
           renames:
             - name: connections
               rename: async_connections
+            - name: _base_manager
+              rename: _async_base_manager
           calls:
+            - func:
+                attr: aggregate
+              replace_raw: |
+                (
+                    await cls._async_base_manager.using(using)
+                    .filter(**filter_args)
+                    .aaggregate(
+                        _order__max=Coalesce(
+                            ExpressionWrapper(
+                                Max("_order") + Value(1),
+                                output_field=IntegerField(),
+                            ),
+                            Value(0),
+                        ),
+                    )
+                )
+            - func:
+                attr: _do_update
+              rename:
+                func:
+                  attr: _async_do_update
+              to_await: true
+            - func:
+                attr: _assign_returned_values
+              rename:
+                func:
+                  attr: _async_assign_returned_values
+            - func:
+                attr: _is_pk_set
+              rename:
+                func:
+                  attr: _async_is_pk_set
+            - func:
+                attr: _get_pk_val
+              rename:
+                func:
+                  attr: _async_get_pk_val
             - func:
                 attr: _do_insert
               replace_raw: |
@@ -234,10 +296,42 @@ module:
                 )
 
         _save_parents:
-          remove: true
+          rename: _async_save_parents
+          to_async: true
+          calls:
+            - func:
+                attr: _save_parents
+              rename:
+                func:
+                  attr: _async_save_parents
+              to_await: true
+            - func:
+                attr: _save_table
+              rename:
+                func:
+                  attr: _async_save_table
+              to_await: true
+            - func:
+                attr: _get_pk_val
+              rename:
+                func:
+                  attr: _async_get_pk_val
 
         _do_update:
-          remove: true
+          rename: _async_do_update
+          to_async: true
+          calls:
+            - func:
+                value: filtered
+                attr: exists
+              rename:
+                func:
+                  attr: aexists
+              to_await: true
+            - func:
+                value: filtered
+                attr: _update
+              to_await: true
 
         _do_insert:
           rename: _async_do_insert
@@ -249,11 +343,17 @@ module:
               to_await: true
 
         _assign_returned_values:
-          remove: true
+          rename: _async_assign_returned_values
 
         _prepare_related_fields_for_save:
           rename: _async_prepare_related_fields_for_save
           to_async: true
+          calls:
+            - func:
+                attr: _is_pk_set
+              rename:
+                func:
+                  attr: _async_is_pk_set
 
         delete:
           remove: true
@@ -371,3 +471,13 @@ module:
 
         _check_constraints:
           remove: true
+
+# Code review notes
+#
+# - The mixin shouldn't call external methods. Copy every private method it needs
+# into the mixin and add an _async prefix. We want 100% coverage so we can be
+# sure we haven't missed any sync operation (except _meta, _state, NotUpdated).
+# - 100% coverage.
+# - All methods should be private except async_save and async_objects.
+# - Don't use mocks in tests (if not accepted in test comment).
+# - Don't test private methods.

@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import (
     DEFAULT_DB_ALIAS,
     models,
@@ -118,6 +120,54 @@ class SaveChildModel(SaveParentModel):
 
     class Meta:
         db_table = "save_child_model"
+
+
+class SaveProxyModel(SaveModel):
+
+    class Meta:
+        proxy = True
+
+
+class UuidPkModel(AsyncModelMixin, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "uuid_pk_model"
+
+
+class OrderParentModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "order_parent_model"
+
+
+class OrderItemModel(AsyncModelMixin, models.Model):
+    parent = models.ForeignKey(
+        OrderParentModel,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+
+    class Meta:
+        db_table = "order_item_model"
+        order_with_respect_to = "parent"
+
+
+class PkOnlyModel(AsyncModelMixin, models.Model):
+
+    class Meta:
+        db_table = "pk_only_model"
+
+
+class SelectOnSaveModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    value = models.IntegerField(null=True)
+
+    class Meta:
+        db_table = "select_on_save_model"
+        select_on_save = True
 
 
 class RelatedSaveModel(AsyncModelMixin, models.Model):

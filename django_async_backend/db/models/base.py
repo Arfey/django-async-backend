@@ -34,6 +34,7 @@ from django.db.models import (
     Max,
     Value,
 )
+from django.db.models.base import ModelBase
 from django.db.models.constants import LOOKUP_SEP
 from django.db.models.deletion import (
     CASCADE,
@@ -103,6 +104,17 @@ class AsyncModelMixin:
             cls._async_base_manager_cache = manager
         return manager
 
+    def _async_get_pk_val(self, meta=None):
+        meta = meta or self._meta
+        return getattr(self, meta.pk.attname)
+
+    def _async_is_pk_set(self, meta=None):
+        pk_val = self._async_get_pk_val(meta)
+        return not (
+            pk_val is None
+            or (isinstance(pk_val, tuple) and any(f is None for f in pk_val))
+        )
+
     async def async_save(
         self,
         *,
@@ -159,7 +171,7 @@ class AsyncModelMixin:
             not force_insert
             and deferred_non_generated_fields
             and using == self._state.db
-            and self._is_pk_set()
+            and self._async_is_pk_set()
         ):
             field_names = set()
             pk_fields = self._meta.pk_fields
@@ -180,6 +192,26 @@ class AsyncModelMixin:
         )
 
     async_save.alters_data = True
+
+    @classmethod
+    def _async_validate_force_insert(cls, force_insert):
+        if force_insert is False:
+            return ()
+        if force_insert is True:
+            return (cls,)
+        if not isinstance(force_insert, tuple):
+            raise TypeError("force_insert must be a bool or tuple.")
+        for member in force_insert:
+            if not isinstance(member, ModelBase):
+                raise TypeError(
+                    f"Invalid force_insert member. {member!r} must be a model subclass."
+                )
+            if not issubclass(cls, member):
+                raise TypeError(
+                    f"Invalid force_insert member. {member.__qualname__} must be a "
+                    f"base of {cls.__qualname__}."
+                )
+        return force_insert
 
     async def _async_save_base(
         self,
@@ -223,8 +255,8 @@ class AsyncModelMixin:
             parent_inserted = False
             if not raw:
                 # Validate force insert only when parents are inserted.
-                force_insert = self._validate_force_insert(force_insert)
-                parent_inserted = self._save_parents(
+                force_insert = self._async_validate_force_insert(force_insert)
+                parent_inserted = await self._async_save_parents(
                     cls, using, update_fields, force_insert
                 )
             updated = await self._async_save_table(
@@ -252,6 +284,58 @@ class AsyncModelMixin:
             )
 
     _async_save_base.alters_data = True
+
+    async def _async_save_parents(
+        self, cls, using, update_fields, force_insert, updated_parents=None
+    ):
+        """Save all the parents of cls using values from self."""
+        meta = cls._meta
+        inserted = False
+        if updated_parents is None:
+            updated_parents = {}
+        for parent, field in meta.parents.items():
+            # Make sure the link fields are synced between parent and self.
+            if (
+                field
+                and getattr(self, parent._meta.pk.attname) is None
+                and getattr(self, field.attname) is not None
+            ):
+                setattr(
+                    self, parent._meta.pk.attname, getattr(self, field.attname)
+                )
+            if (parent_updated := updated_parents.get(parent)) is None:
+                parent_inserted = await self._async_save_parents(
+                    cls=parent,
+                    using=using,
+                    update_fields=update_fields,
+                    force_insert=force_insert,
+                    updated_parents=updated_parents,
+                )
+                updated = await self._async_save_table(
+                    cls=parent,
+                    using=using,
+                    update_fields=update_fields,
+                    force_insert=parent_inserted
+                    or issubclass(parent, force_insert),
+                )
+                if not updated:
+                    inserted = True
+                updated_parents[parent] = updated
+            elif not parent_updated:
+                inserted = True
+            # Set the parent's PK value to self.
+            if field:
+                setattr(
+                    self, field.attname, self._async_get_pk_val(parent._meta)
+                )
+                # Since we didn't have an instance of the parent handy set
+                # attname directly, bypassing the descriptor. Invalidate
+                # the related object cache, in case it's been accidentally
+                # populated. A fresh instance will be re-built from the
+                # database if necessary.
+                if field.is_cached(self):
+                    field.delete_cached_value(self)
+        return inserted
 
     async def _async_save_table(
         self,
@@ -281,10 +365,10 @@ class AsyncModelMixin:
                 if f.name in update_fields or f.attname in update_fields
             ]
 
-        if not self._is_pk_set(meta):
+        if not self._async_is_pk_set(meta):
             pk_val = meta.pk.get_pk_value_on_save(self)
             setattr(self, meta.pk.attname, pk_val)
-        pk_set = self._is_pk_set(meta)
+        pk_set = self._async_is_pk_set(meta)
         if not pk_set and (force_update or update_fields):
             raise ValueError(
                 "Cannot force an update in save() with no primary key."
@@ -304,7 +388,7 @@ class AsyncModelMixin:
         # If possible, try an UPDATE. If that doesn't update anything, do an
         # INSERT.
         if pk_set and not force_insert:
-            base_qs = cls._base_manager.using(using)
+            base_qs = cls._async_base_manager.using(using)
             values = [
                 (
                     f,
@@ -318,7 +402,7 @@ class AsyncModelMixin:
                 for f in non_pks_non_generated
             ]
             forced_update = update_fields or force_update
-            pk_val = self._get_pk_val(meta)
+            pk_val = self._async_get_pk_val(meta)
             returning_fields = [
                 f
                 for f in meta.local_concrete_fields
@@ -332,7 +416,7 @@ class AsyncModelMixin:
                     update_fields is None or field.name in update_fields
                 ) and hasattr(value, "resolve_expression"):
                     returning_fields.append(field)
-            results = self._do_update(
+            results = await self._async_do_update(
                 base_qs,
                 using,
                 pk_val,
@@ -342,7 +426,9 @@ class AsyncModelMixin:
                 returning_fields,
             )
             if updated := bool(results):
-                self._assign_returned_values(results[0], returning_fields)
+                self._async_assign_returned_values(
+                    results[0], returning_fields
+                )
             elif force_update:
                 raise self.NotUpdated("Forced update did not affect any rows.")
             elif update_fields:
@@ -356,9 +442,9 @@ class AsyncModelMixin:
                 field = meta.order_with_respect_to
                 filter_args = field.get_filter_kwargs_for_object(self)
                 self._order = (
-                    cls._base_manager.using(using)
+                    await cls._async_base_manager.using(using)
                     .filter(**filter_args)
-                    .aggregate(
+                    .aaggregate(
                         _order__max=Coalesce(
                             ExpressionWrapper(
                                 Max("_order") + Value(1),
@@ -366,8 +452,8 @@ class AsyncModelMixin:
                             ),
                             Value(0),
                         ),
-                    )["_order__max"]
-                )
+                    )
+                )["_order__max"]
             insert_fields = [
                 f
                 for f in meta.local_concrete_fields
@@ -400,8 +486,49 @@ class AsyncModelMixin:
                 raw,
             )
             if results:
-                self._assign_returned_values(results[0], returning_fields)
+                self._async_assign_returned_values(
+                    results[0], returning_fields
+                )
         return updated
+
+    async def _async_do_update(
+        self,
+        base_qs,
+        using,
+        pk_val,
+        values,
+        update_fields,
+        forced_update,
+        returning_fields,
+    ):
+        """
+        Try to update the model. Return True if the model was updated (if an
+        update query was done and a matching row was found in the DB).
+        """
+        filtered = base_qs.filter(pk=pk_val)
+        if not values:
+            # We can end up here when saving a model in inheritance chain where
+            # update_fields doesn't target any field in current model. In that
+            # case we just say the update succeeded. Another case ending up
+            # here is a model with just PK - in that case check that the PK
+            # still exists.
+            if update_fields is not None or await filtered.aexists():
+                return [()]
+            return []
+        if self._meta.select_on_save and not forced_update:
+            # It may happen that the object is deleted from the DB right after
+            # this check, causing the subsequent UPDATE to return zero matching
+            # rows. The same result can occur in some rare cases when the
+            # database returns zero despite the UPDATE being executed
+            # successfully (a row is matched and updated). In order to
+            # distinguish these two cases, the object's existence in the
+            # database is again checked for if the UPDATE query returns 0.
+            if not await filtered.aexists():
+                return []
+            if results := await filtered._update(values, returning_fields):
+                return results
+            return [()] if await filtered.aexists() else []
+        return await filtered._update(values, returning_fields)
 
     async def _async_do_insert(
         self, manager, using, fields, returning_fields, raw
@@ -417,6 +544,15 @@ class AsyncModelMixin:
             using=using,
             raw=raw,
         )
+
+    def _async_assign_returned_values(self, returned_values, returning_fields):
+        returning_fields_iter = iter(returning_fields)
+        for value, field in zip(returned_values, returning_fields_iter):
+            setattr(self, field.attname, value)
+        # Defer all fields that were meant to be updated with their database
+        # resolved values but couldn't as they are effectively stale.
+        for field in returning_fields_iter:
+            self.__dict__.pop(field.attname, None)
 
     async def _async_prepare_related_fields_for_save(
         self, operation_name, fields=None
@@ -440,7 +576,7 @@ class AsyncModelMixin:
                 # database to raise an IntegrityError if applicable. If
                 # constraints aren't supported by the database, there's the
                 # unavoidable risk of data corruption.
-                if not obj._is_pk_set():
+                if not obj._async_is_pk_set():
                     # Remove the object from a related instance cache.
                     if not field.remote_field.multiple:
                         field.remote_field.delete_cached_value(obj)
@@ -468,7 +604,7 @@ class AsyncModelMixin:
                 and hasattr(field, "fk_field")
             ):
                 obj = field.get_cached_value(self, default=None)
-                if obj and not obj._is_pk_set():
+                if obj and not obj._async_is_pk_set():
                     raise ValueError(
                         f"{operation_name}() prohibited to prevent data loss due to "
                         f"unsaved related object '{field.name}'."
