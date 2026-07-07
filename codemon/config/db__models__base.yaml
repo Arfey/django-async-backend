@@ -90,7 +90,7 @@ module:
 
         - target:
             name: save_base
-          rename: async_save_base
+          rename: _async_save_base
 
         - target:
             name: asave
@@ -173,11 +173,11 @@ module:
                 attr: save_base
               rename:
                 func:
-                  attr: async_save_base
+                  attr: _async_save_base
               to_await: true
 
         save_base:
-          rename: async_save_base
+          rename: _async_save_base
           to_async: true
           context_managers:
             - to_async: true

@@ -1,7 +1,7 @@
 from unittest import mock
 
-from django.db import router
 from django.db.models import Value
+from django.test import override_settings
 from test_app.models import (
     DbDefaultModel,
     RelatedSaveModel,
@@ -10,6 +10,23 @@ from test_app.models import (
 
 from django_async_backend.db import async_connections
 from django_async_backend.test import AsyncioTestCase
+
+
+class SaveModelToOtherRouter:
+
+    def db_for_write(self, model, **hints):
+        if model is SaveModel:
+            return "other"
+        return None
+
+    def db_for_read(self, model, **hints):
+        return None
+
+    def allow_relation(self, *args, **hints):
+        return True
+
+    def allow_migrate(self, *args, **hints):
+        return True
 
 
 class TestAsyncSave(AsyncioTestCase):
@@ -83,23 +100,21 @@ class TestAsyncSave(AsyncioTestCase):
         stored = await SaveModel.async_objects.aget(pk=instance.pk)
         self.assertEqual(stored.value, 42)
 
+    @override_settings(DATABASE_ROUTERS=[SaveModelToOtherRouter()])
     async def test_uses_router_db_for_write_when_using_omitted(self):
         instance = SaveModel(name="ItemRouter", value=1)
 
-        with mock.patch.object(
-            router, "db_for_write", wraps=router.db_for_write
-        ) as db_for_write_mock:
-            await instance.async_save()
+        await instance.async_save()
 
-        db_for_write_mock.assert_called_once_with(SaveModel, instance=instance)
+        self.assertEqual(instance._state.db, "other")
 
+    @override_settings(DATABASE_ROUTERS=[SaveModelToOtherRouter()])
     async def test_explicit_using_skips_router_db_for_write(self):
         instance = SaveModel(name="ItemRouter2", value=1)
 
-        with mock.patch.object(router, "db_for_write") as db_for_write_mock:
-            await instance.async_save(using="default")
+        await instance.async_save(using="default")
 
-        db_for_write_mock.assert_not_called()
+        self.assertEqual(instance._state.db, "default")
 
     async def test_insert_drops_db_returning_field_when_backend_cannot_return(
         self,

@@ -172,7 +172,7 @@ class AsyncModelMixin:
             if loaded_fields:
                 update_fields = frozenset(loaded_fields)
 
-        await self.async_save_base(
+        await self._async_save_base(
             using=using,
             force_insert=force_insert,
             force_update=force_update,
@@ -181,7 +181,7 @@ class AsyncModelMixin:
 
     async_save.alters_data = True
 
-    async def async_save_base(
+    async def _async_save_base(
         self,
         raw=False,
         force_insert=False,
@@ -251,7 +251,7 @@ class AsyncModelMixin:
                 using=using,
             )
 
-    async_save_base.alters_data = True
+    _async_save_base.alters_data = True
 
     async def _async_save_table(
         self,
