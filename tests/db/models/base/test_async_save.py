@@ -1,5 +1,6 @@
 from unittest import mock
 
+from django.db import router
 from django.db.models import Value
 from test_app.models import (
     DbDefaultModel,
@@ -81,6 +82,24 @@ class TestAsyncSave(AsyncioTestCase):
         self.assertEqual(instance.value, 42)
         stored = await SaveModel.async_objects.aget(pk=instance.pk)
         self.assertEqual(stored.value, 42)
+
+    async def test_uses_router_db_for_write_when_using_omitted(self):
+        instance = SaveModel(name="ItemRouter", value=1)
+
+        with mock.patch.object(
+            router, "db_for_write", wraps=router.db_for_write
+        ) as db_for_write_mock:
+            await instance.async_save()
+
+        db_for_write_mock.assert_called_once_with(SaveModel, instance=instance)
+
+    async def test_explicit_using_skips_router_db_for_write(self):
+        instance = SaveModel(name="ItemRouter2", value=1)
+
+        with mock.patch.object(router, "db_for_write") as db_for_write_mock:
+            await instance.async_save(using="default")
+
+        db_for_write_mock.assert_not_called()
 
     async def test_insert_drops_db_returning_field_when_backend_cannot_return(
         self,

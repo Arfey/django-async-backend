@@ -104,6 +104,16 @@ module:
             - func:
                 attr: execute_sql
               to_await: true
+            - func:
+                attr: cursor
+              to_await: true
+            - func:
+                value: cursor
+                attr: execute
+              to_await: true
+            - func:
+                attr: fetch_returned_rows
+              replace_raw: await cursor.fetchall()
 
     SQLInsertCompiler:
       methods:
