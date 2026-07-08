@@ -114,3 +114,27 @@ class UpdateQuery(Query):
                 query.add_filter("pk__in", self.related_ids[model])
             result.append(query)
         return result
+
+
+class InsertQuery(Query):
+    compiler = "SQLInsertCompiler"
+
+    def __init__(
+        self,
+        *args,
+        on_conflict=None,
+        update_fields=None,
+        unique_fields=None,
+        **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self.fields = []
+        self.objs = []
+        self.on_conflict = on_conflict
+        self.update_fields = update_fields or []
+        self.unique_fields = unique_fields or []
+
+    def insert_values(self, fields, objs, raw=False):
+        self.fields = fields
+        self.objs = objs
+        self.raw = raw

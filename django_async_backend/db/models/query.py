@@ -1282,7 +1282,7 @@ class QuerySet(AltersData):
         self._for_write = True
         if using is None:
             using = self.db
-        query = sql.InsertQuery(
+        query = async_sql.InsertQuery(
             self.model,
             on_conflict=on_conflict,
             update_fields=update_fields,

@@ -6,14 +6,14 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestAnnotate(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Test1", value=1)
-        await TestModel.async_object.acreate(name="Test2", value=2)
-        await TestModel.async_object.acreate(name="Test3", value=3)
+        await TestModel(name="Test1", value=1).async_save()
+        await TestModel(name="Test2", value=2).async_save()
+        await TestModel(name="Test3", value=3).async_save()
 
     async def test_annotate_count(self):
         results = [
             obj
-            async for obj in TestModel.async_object.values("value")
+            async for obj in TestModel.async_objects.values("value")
             .annotate(count=Count("value"))
             .order_by("value")
         ]
@@ -43,7 +43,7 @@ class TestAnnotate(AsyncioTestCase):
     async def test_annotate_with_filter(self):
         results = [
             obj
-            async for obj in TestModel.async_object.filter(value=1)
+            async for obj in TestModel.async_objects.filter(value=1)
             .values("value")
             .annotate(count=Count("value"))
         ]
@@ -57,7 +57,7 @@ class TestAnnotate(AsyncioTestCase):
     async def test_annotate_no_results(self):
         results = [
             obj
-            async for obj in TestModel.async_object.filter(value=99)
+            async for obj in TestModel.async_objects.filter(value=99)
             .values("value")
             .annotate(count=Count("value"))
         ]

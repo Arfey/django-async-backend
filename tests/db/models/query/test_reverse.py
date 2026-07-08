@@ -6,14 +6,16 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestReverse(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Test1", value=1)
-        await TestModel.async_object.acreate(name="Test2", value=2)
-        await TestModel.async_object.acreate(name="Test3", value=3)
+        await TestModel(name="Test1", value=1).async_save()
+        await TestModel(name="Test2", value=2).async_save()
+        await TestModel(name="Test3", value=3).async_save()
 
     async def test_reverse_order(self):
         results = [
             obj
-            async for obj in TestModel.async_object.order_by("value").reverse()
+            async for obj in TestModel.async_objects.order_by(
+                "value"
+            ).reverse()
         ]
 
         self.assertEqual(
@@ -28,7 +30,7 @@ class TestReverse(AsyncioTestCase):
     async def test_reverse_with_filter(self):
         results = [
             obj
-            async for obj in TestModel.async_object.filter(value__gte=2)
+            async for obj in TestModel.async_objects.filter(value__gte=2)
             .order_by("value")
             .reverse()
         ]
@@ -45,11 +47,11 @@ class TestReverse(AsyncioTestCase):
         with self.assertRaises(FieldError):
             [
                 obj
-                async for obj in TestModel.async_object.order_by(
+                async for obj in TestModel.async_objects.order_by(
                     "nonexistent_field"
                 ).reverse()
             ]
 
     async def test_reverse_with_slice_error(self):
         with self.assertRaises(TypeError):
-            [obj async for obj in TestModel.async_object[:1].reverse()]
+            [obj async for obj in TestModel.async_objects[:1].reverse()]

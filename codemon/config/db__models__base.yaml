@@ -1,0 +1,483 @@
+pathname: db/models/base.py
+
+module:
+  new_imports:
+    - "from django.db.models.base import ModelBase"
+    - "from django.utils.functional import classproperty"
+    - "from django_async_backend.db import async_connections"
+    - "from django_async_backend.db.models.manager import AsyncManager"
+    - "from django_async_backend.db.transaction import async_atomic"
+    - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
+
+  import_aliases:
+    - name: connections
+      remove: true
+
+  assigns:
+    - target:
+        name: DEFERRED
+      remove: true
+
+    - target:
+        name: model_unpickle
+      remove: true
+
+  functions:
+    subclass_exception:
+      remove: true
+
+    _has_contribute_to_class:
+      remove: true
+
+    method_set_order:
+      remove: true
+
+    method_get_order:
+      remove: true
+
+    make_foreign_order_accessors:
+      remove: true
+
+    model_unpickle:
+      remove: true
+
+  classes:
+    Deferred:
+      remove: true
+
+    ModelBase:
+      remove: true
+
+    ModelStateFieldsCacheDescriptor:
+      remove: true
+
+    ModelState:
+      remove: true
+
+    Model:
+      rename: AsyncModelMixin
+      clear_bases: true
+      add_raw_top:
+        - |
+          @classproperty
+          def async_objects(cls):
+              manager = cls.__dict__.get("_async_objects_cache")
+              if manager is None:
+                  manager = AsyncManager()
+                  manager.name = "async_objects"
+                  manager.model = cls
+                  cls._async_objects_cache = manager
+              return manager
+        - |
+          @classproperty
+          def _async_base_manager(cls):
+              manager = cls.__dict__.get("_async_base_manager_cache")
+              if manager is None:
+                  manager = AsyncManager()
+                  manager.name = "_async_base_manager"
+                  manager.model = cls
+                  manager.auto_created = True
+                  cls._async_base_manager_cache = manager
+              return manager
+
+      assigns:
+        - target:
+            name: pk
+          remove: true
+
+        - target:
+            name: save
+          rename: async_save
+
+        - target:
+            name: save_base
+          rename: _async_save_base
+
+        - target:
+            name: asave
+          remove: true
+
+        - target:
+            name: delete
+          remove: true
+
+        - target:
+            name: adelete
+          remove: true
+
+      methods:
+        __init__:
+          remove: true
+
+        from_db:
+          remove: true
+
+        __repr__:
+          remove: true
+
+        __str__:
+          remove: true
+
+        __eq__:
+          remove: true
+
+        __hash__:
+          remove: true
+
+        __reduce__:
+          remove: true
+
+        __getstate__:
+          remove: true
+
+        __setstate__:
+          remove: true
+
+        _get_pk_val:
+          rename: _async_get_pk_val
+
+        _set_pk_val:
+          remove: true
+
+        _is_pk_set:
+          rename: _async_is_pk_set
+          calls:
+            - func:
+                attr: _get_pk_val
+              rename:
+                func:
+                  attr: _async_get_pk_val
+
+        get_deferred_fields:
+          remove: true
+
+        refresh_from_db:
+          remove: true
+
+        arefresh_from_db:
+          remove: true
+
+        serializable_value:
+          remove: true
+
+        _validate_force_insert:
+          rename: _async_validate_force_insert
+
+        asave:
+          remove: true
+
+        save:
+          rename: async_save
+          to_async: true
+          calls:
+            - func:
+                attr: _prepare_related_fields_for_save
+              rename:
+                func:
+                  attr: _async_prepare_related_fields_for_save
+              to_await: true
+            - func:
+                attr: _is_pk_set
+              rename:
+                func:
+                  attr: _async_is_pk_set
+            - func:
+                attr: save_base
+              rename:
+                func:
+                  attr: _async_save_base
+              to_await: true
+
+        save_base:
+          rename: _async_save_base
+          to_async: true
+          context_managers:
+            - to_async: true
+          calls:
+            - func:
+                attr: _validate_force_insert
+              rename:
+                func:
+                  attr: _async_validate_force_insert
+            - func:
+                attr: _save_parents
+              rename:
+                func:
+                  attr: _async_save_parents
+              to_await: true
+            - func:
+                value: transaction
+                attr: atomic
+              rename:
+                func:
+                  name: async_atomic
+            - func:
+                value: transaction
+                attr: mark_for_rollback_on_error
+              rename:
+                func:
+                  name: async_mark_for_rollback_on_error
+            - func:
+                value: pre_save
+                attr: send
+              rename:
+                func:
+                  attr: asend
+              to_await: true
+            - func:
+                value: post_save
+                attr: send
+              rename:
+                func:
+                  attr: asend
+              to_await: true
+            - func:
+                attr: _save_table
+              rename:
+                func:
+                  attr: _async_save_table
+              to_await: true
+
+        _save_table:
+          rename: _async_save_table
+          to_async: true
+          renames:
+            - name: connections
+              rename: async_connections
+            - name: _base_manager
+              rename: _async_base_manager
+          calls:
+            - func:
+                attr: aggregate
+              replace_raw: |
+                (
+                    await cls._async_base_manager.using(using)
+                    .filter(**filter_args)
+                    .aaggregate(
+                        _order__max=Coalesce(
+                            ExpressionWrapper(
+                                Max("_order") + Value(1),
+                                output_field=IntegerField(),
+                            ),
+                            Value(0),
+                        ),
+                    )
+                )
+            - func:
+                attr: _do_update
+              rename:
+                func:
+                  attr: _async_do_update
+              to_await: true
+            - func:
+                attr: _assign_returned_values
+              rename:
+                func:
+                  attr: _async_assign_returned_values
+            - func:
+                attr: _is_pk_set
+              rename:
+                func:
+                  attr: _async_is_pk_set
+            - func:
+                attr: _get_pk_val
+              rename:
+                func:
+                  attr: _async_get_pk_val
+            - func:
+                attr: _do_insert
+              replace_raw: |
+                await self._async_do_insert(
+                    cls._async_base_manager,
+                    using,
+                    insert_fields,
+                    returning_fields,
+                    raw,
+                )
+
+        _save_parents:
+          rename: _async_save_parents
+          to_async: true
+          calls:
+            - func:
+                attr: _save_parents
+              rename:
+                func:
+                  attr: _async_save_parents
+              to_await: true
+            - func:
+                attr: _save_table
+              rename:
+                func:
+                  attr: _async_save_table
+              to_await: true
+            - func:
+                attr: _get_pk_val
+              rename:
+                func:
+                  attr: _async_get_pk_val
+
+        _do_update:
+          rename: _async_do_update
+          to_async: true
+          calls:
+            - func:
+                value: filtered
+                attr: exists
+              rename:
+                func:
+                  attr: aexists
+              to_await: true
+            - func:
+                value: filtered
+                attr: _update
+              to_await: true
+
+        _do_insert:
+          rename: _async_do_insert
+          to_async: true
+          calls:
+            - func:
+                value: manager
+                attr: _insert
+              to_await: true
+
+        _assign_returned_values:
+          rename: _async_assign_returned_values
+
+        _prepare_related_fields_for_save:
+          rename: _async_prepare_related_fields_for_save
+          to_async: true
+          calls:
+            - func:
+                attr: _is_pk_set
+              rename:
+                func:
+                  attr: _async_is_pk_set
+
+        delete:
+          remove: true
+
+        adelete:
+          remove: true
+
+        _get_FIELD_display:
+          remove: true
+
+        _get_next_or_previous_by_FIELD:
+          remove: true
+
+        _get_next_or_previous_in_order:
+          remove: true
+
+        _get_field_expression_map:
+          remove: true
+
+        prepare_database_save:
+          remove: true
+
+        clean:
+          remove: true
+
+        validate_unique:
+          remove: true
+
+        _get_unique_checks:
+          remove: true
+
+        _perform_unique_checks:
+          remove: true
+
+        _perform_date_checks:
+          remove: true
+
+        date_error_message:
+          remove: true
+
+        unique_error_message:
+          remove: true
+
+        get_constraints:
+          remove: true
+
+        validate_constraints:
+          remove: true
+
+        full_clean:
+          remove: true
+
+        clean_fields:
+          remove: true
+
+        check:
+          remove: true
+
+        _check_composite_pk:
+          remove: true
+
+        _check_db_table_comment:
+          remove: true
+
+        _check_swappable:
+          remove: true
+
+        _check_model:
+          remove: true
+
+        _check_managers:
+          remove: true
+
+        _check_fields:
+          remove: true
+
+        _check_m2m_through_same_relationship:
+          remove: true
+
+        _check_id_field:
+          remove: true
+
+        _check_field_name_clashes:
+          remove: true
+
+        _check_column_name_clashes:
+          remove: true
+
+        _check_model_name_db_lookup_clashes:
+          remove: true
+
+        _check_property_name_related_field_accessor_clashes:
+          remove: true
+
+        _check_single_primary_key:
+          remove: true
+
+        _check_unique_together:
+          remove: true
+
+        _check_indexes:
+          remove: true
+
+        _check_local_fields:
+          remove: true
+
+        _check_ordering:
+          remove: true
+
+        _check_long_column_names:
+          remove: true
+
+        _get_expr_references:
+          remove: true
+
+        _check_constraints:
+          remove: true
+
+# Code review notes
+#
+# - The mixin shouldn't call external methods. Copy every private method it needs
+# into the mixin and add an _async prefix. We want 100% coverage so we can be
+# sure we haven't missed any sync operation (except _meta, _state, NotUpdated).
+# - 100% coverage.
+# - All methods should be private except async_save and async_objects.
+# - Don't use mocks in tests (if not accepted in test comment).
+# - Don't test private methods.

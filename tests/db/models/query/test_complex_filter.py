@@ -6,14 +6,14 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestComplexFilter(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Test1", value=1)
-        await TestModel.async_object.acreate(name="Test2", value=2)
-        await TestModel.async_object.acreate(name="Test3", value=3)
+        await TestModel(name="Test1", value=1).async_save()
+        await TestModel(name="Test2", value=2).async_save()
+        await TestModel(name="Test3", value=3).async_save()
 
     async def test_complex_filter_by_range(self):
         results = [
             obj
-            async for obj in TestModel.async_object.complex_filter(
+            async for obj in TestModel.async_objects.complex_filter(
                 {"value__gte": 2, "value__lte": 3}
             )
         ]
@@ -29,7 +29,7 @@ class TestComplexFilter(AsyncioTestCase):
     async def test_complex_filter_with_exclusion(self):
         results = [
             obj
-            async for obj in TestModel.async_object.complex_filter(
+            async for obj in TestModel.async_objects.complex_filter(
                 {"value__gte": 1}
             ).exclude(name="Test1")
         ]
@@ -48,7 +48,7 @@ class TestComplexFilter(AsyncioTestCase):
         with self.assertRaises(FieldError):
             [
                 obj
-                async for obj in TestModel.async_object.complex_filter(
+                async for obj in TestModel.async_objects.complex_filter(
                     {"nonexistent_field__gte": 1}
                 )
             ]
@@ -56,7 +56,7 @@ class TestComplexFilter(AsyncioTestCase):
     async def test_complex_filter_multiple_conditions(self):
         results = [
             obj
-            async for obj in TestModel.async_object.complex_filter(
+            async for obj in TestModel.async_objects.complex_filter(
                 {"name__startswith": "Test", "value__in": [1, 3]}
             )
         ]

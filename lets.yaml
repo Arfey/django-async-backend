@@ -61,7 +61,7 @@ commands:
 
   coverage:
     cmd: |
-      cd tests && poetry run coverage run manage.py test
-      poetry run coverage report --omit="*/test*,test_app/*,manage.py"
-      poetry run coverage html
+      cd tests && poetry run coverage run --rcfile=../pyproject.toml manage.py test
+      poetry run coverage report --rcfile=../pyproject.toml
+      poetry run coverage html --rcfile=../pyproject.toml
       open htmlcov/index.html

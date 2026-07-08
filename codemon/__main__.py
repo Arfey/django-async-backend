@@ -522,6 +522,20 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
                 return updated_node
 
+        if config.renames:
+
+            @m.leave(m.Name())
+            def renames(
+                self, original_node: cst.Name, updated_node: cst.Name
+            ) -> cst.Name:
+                for rename_config in config.renames:
+                    if updated_node.value == rename_config.name:
+                        return updated_node.with_changes(
+                            value=rename_config.rename
+                        )
+
+                return updated_node
+
         if config.context_managers:
 
             @m.leave(m.With())
@@ -608,6 +622,54 @@ def class_transformer(name: str, config: Class) -> cst.CSTTransformer:
             ) -> cst.ClassDef:
                 return updated_node.with_changes(name=cst.Name(config.rename))
 
+        if config.clear_bases:
+
+            @m.leave(m.ClassDef())
+            def clear_bases(
+                self, original_node: cst.ClassDef, updated_node: cst.ClassDef
+            ) -> cst.ClassDef:
+                return updated_node.with_changes(
+                    bases=[],
+                    keywords=[],
+                    lpar=cst.MaybeSentinel.DEFAULT,
+                    rpar=cst.MaybeSentinel.DEFAULT,
+                )
+
+        if config.add_raw_top:
+
+            @m.leave(m.ClassDef())
+            def add_raw_top(
+                self, original_node: cst.ClassDef, updated_node: cst.ClassDef
+            ) -> cst.ClassDef:
+                blocks = [
+                    cst.parse_module(dedent(code)).body[0]
+                    for code in config.add_raw_top
+                ]
+                body = list(updated_node.body.body)
+                # Keep a leading docstring first, if there is one.
+                if m.matches(
+                    updated_node,
+                    m.ClassDef(
+                        body=m.IndentedBlock(
+                            body=[
+                                m.SimpleStatementLine(
+                                    body=[
+                                        m.Expr(value=m.SimpleString()),
+                                        m.ZeroOrMore(),
+                                    ]
+                                ),
+                                m.ZeroOrMore(),
+                            ]
+                        )
+                    ),
+                ):
+                    new_body = [body[0], *blocks, *body[1:]]
+                else:
+                    new_body = [*blocks, *body]
+                return updated_node.with_changes(
+                    body=updated_node.body.with_changes(body=new_body)
+                )
+
         if config.methods:
 
             @m.leave(
@@ -639,8 +701,11 @@ def class_transformer(name: str, config: Class) -> cst.CSTTransformer:
                             targets=[
                                 m.ZeroOrMore(),
                                 m.AssignTarget(
-                                    m.Attribute(
-                                        m.Name(assign_config.target.name)
+                                    m.OneOf(
+                                        m.Attribute(
+                                            m.Name(assign_config.target.name)
+                                        ),
+                                        m.Name(assign_config.target.name),
                                     )
                                 ),
                                 m.ZeroOrMore(),
@@ -653,6 +718,13 @@ def class_transformer(name: str, config: Class) -> cst.CSTTransformer:
                         updated_node = updated_node.visit(
                             assignment_transformer(assign_config)
                         )
+                        # Once an assign is removed there is nothing left to
+                        # transform, so stop applying further configs to it.
+                        if isinstance(
+                            updated_node,
+                            (cst.RemovalSentinel, cst.FlattenSentinel),
+                        ):
+                            break
 
                 return updated_node
 
@@ -757,6 +829,52 @@ def module_transformer(config: Module) -> cst.CSTTransformer:
                     ]
                 )
 
+        if config.assigns:
+
+            @m.leave(m.Module())
+            def global_assigns(
+                self, original_node: cst.Module, updated_node: cst.Module
+            ) -> cst.Module:
+                body = []
+                for item in updated_node.body:
+                    remove_item = False
+                    if isinstance(item, cst.SimpleStatementLine):
+                        for assign_config in config.assigns:
+                            if not assign_config.remove:
+                                continue
+                            if assign_config.target.name:
+                                matcher = m.Assign(
+                                    targets=[
+                                        m.ZeroOrMore(),
+                                        m.AssignTarget(
+                                            m.OneOf(
+                                                m.Attribute(
+                                                    m.Name(
+                                                        assign_config.target.name
+                                                    )
+                                                ),
+                                                m.Name(
+                                                    assign_config.target.name
+                                                ),
+                                            )
+                                        ),
+                                        m.ZeroOrMore(),
+                                    ]
+                                )
+                            else:
+                                matcher = m.Assign()
+
+                            if any(
+                                m.matches(stmt, matcher) for stmt in item.body
+                            ):
+                                remove_item = True
+                                break
+
+                    if not remove_item:
+                        body.append(item)
+
+                return updated_node.with_changes(body=body)
+
         if config.functions:
 
             @m.leave(m.Module())
@@ -775,6 +893,11 @@ def module_transformer(config: Module) -> cst.CSTTransformer:
                         item = item.visit(
                             function_transformer(name, config.functions[name])
                         )
+
+                    if isinstance(
+                        item, (cst.RemovalSentinel, cst.FlattenSentinel)
+                    ):
+                        continue
 
                     body.append(item)
 

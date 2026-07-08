@@ -6,13 +6,13 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestValuesList(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Test1", value=1)
-        await TestModel.async_object.acreate(name="Test2", value=2)
+        await TestModel(name="Test1", value=1).async_save()
+        await TestModel(name="Test2", value=2).async_save()
 
     async def test_values_list(self):
         results = [
             obj
-            async for obj in TestModel.async_object.values_list(
+            async for obj in TestModel.async_objects.values_list(
                 "name", "value"
             )
         ]
@@ -28,7 +28,7 @@ class TestValuesList(AsyncioTestCase):
     async def test_values_list_no_objects(self):
         results = [
             obj
-            async for obj in TestModel.async_object.filter(id=10).values_list(
+            async for obj in TestModel.async_objects.filter(id=10).values_list(
                 "name", "value"
             )
         ]
@@ -39,7 +39,7 @@ class TestValuesList(AsyncioTestCase):
     async def test_values_list_with_filter(self):
         results = [
             obj
-            async for obj in TestModel.async_object.filter(
+            async for obj in TestModel.async_objects.filter(
                 name="Test1"
             ).values_list("name", "value")
         ]
@@ -53,7 +53,7 @@ class TestValuesList(AsyncioTestCase):
         with self.assertRaises(FieldError):
             [
                 obj
-                async for obj in TestModel.async_object.values_list(
+                async for obj in TestModel.async_objects.values_list(
                     "nonexistent_field"
                 )
             ]
@@ -61,7 +61,7 @@ class TestValuesList(AsyncioTestCase):
     async def test_values_list_flat(self):
         results = [
             obj
-            async for obj in TestModel.async_object.values_list(
+            async for obj in TestModel.async_objects.values_list(
                 "name", flat=True
             )
         ]
@@ -74,7 +74,7 @@ class TestValuesList(AsyncioTestCase):
 
     async def test_values_list_flat_all_fields(self):
         results = [
-            obj async for obj in TestModel.async_object.values_list(flat=True)
+            obj async for obj in TestModel.async_objects.values_list(flat=True)
         ]
 
         self.assertEqual(
@@ -85,7 +85,7 @@ class TestValuesList(AsyncioTestCase):
         with self.assertRaises(TypeError):
             [
                 obj
-                async for obj in TestModel.async_object.values_list(
+                async for obj in TestModel.async_objects.values_list(
                     "name", "value", flat=True
                 )
             ]
@@ -93,7 +93,7 @@ class TestValuesList(AsyncioTestCase):
     async def test_values_list_named(self):
         results = [
             obj
-            async for obj in TestModel.async_object.values_list(
+            async for obj in TestModel.async_objects.values_list(
                 "name", "value", named=True
             )
         ]
@@ -118,7 +118,8 @@ class TestValuesList(AsyncioTestCase):
 
     async def test_values_list_named_all_fields(self):
         results = [
-            obj async for obj in TestModel.async_object.values_list(named=True)
+            obj
+            async for obj in TestModel.async_objects.values_list(named=True)
         ]
 
         self.assertEqual(len(results), 2, "Should return 2 named tuples")
@@ -143,7 +144,7 @@ class TestValuesList(AsyncioTestCase):
         with self.assertRaises(TypeError):
             [
                 obj
-                async for obj in TestModel.async_object.values_list(
+                async for obj in TestModel.async_objects.values_list(
                     "name", "value", flat=True, named=True
                 )
             ]

@@ -400,6 +400,11 @@ module:
           to_async: true
           calls:
             - func:
+                attr: InsertQuery
+              rename:
+                func:
+                  value: async_sql
+            - func:
                 attr: execute_sql
               to_await: true
 

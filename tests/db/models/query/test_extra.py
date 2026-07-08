@@ -5,14 +5,14 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestExtra(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Test1", value=3)
-        await TestModel.async_object.acreate(name="Test2", value=1)
-        await TestModel.async_object.acreate(name="Test3", value=2)
+        await TestModel(name="Test1", value=3).async_save()
+        await TestModel(name="Test2", value=1).async_save()
+        await TestModel(name="Test3", value=2).async_save()
 
     async def test_extra_select(self):
         results = [
             obj
-            async for obj in TestModel.async_object.extra(
+            async for obj in TestModel.async_objects.extra(
                 select={"value_plus_one": "value + 1"}
             )
         ]
@@ -39,7 +39,7 @@ class TestExtra(AsyncioTestCase):
     async def test_extra_where(self):
         results = [
             obj
-            async for obj in TestModel.async_object.extra(where=["value > 1"])
+            async for obj in TestModel.async_objects.extra(where=["value > 1"])
         ]
 
         self.assertEqual(
@@ -55,7 +55,7 @@ class TestExtra(AsyncioTestCase):
     async def test_extra_order_by(self):
         results = [
             obj
-            async for obj in TestModel.async_object.extra(order_by=["-value"])
+            async for obj in TestModel.async_objects.extra(order_by=["-value"])
         ]
 
         self.assertEqual(
@@ -73,7 +73,7 @@ class TestExtra(AsyncioTestCase):
         with self.assertRaises(TypeError):
             [
                 obj
-                async for obj in TestModel.async_object[:1].extra(
+                async for obj in TestModel.async_objects[:1].extra(
                     select={"value_plus_one": "value + 1"}
                 )
             ]

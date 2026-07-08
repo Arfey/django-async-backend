@@ -6,13 +6,13 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestDistinct(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Test1", value=1)
-        await TestModel.async_object.acreate(name="Test2", value=2)
-        await TestModel.async_object.acreate(name="Test3", value=1)
+        await TestModel(name="Test1", value=1).async_save()
+        await TestModel(name="Test2", value=2).async_save()
+        await TestModel(name="Test3", value=1).async_save()
 
     async def test_distinct_single_field(self):
         results = [
-            obj async for obj in TestModel.async_object.distinct("value")
+            obj async for obj in TestModel.async_objects.distinct("value")
         ]
 
         self.assertEqual(
@@ -28,7 +28,7 @@ class TestDistinct(AsyncioTestCase):
     async def test_distinct_multiple_fields(self):
         results = [
             obj
-            async for obj in TestModel.async_object.distinct(
+            async for obj in TestModel.async_objects.distinct(
                 "value", "name"
             ).order_by("name")
         ]
@@ -58,11 +58,14 @@ class TestDistinct(AsyncioTestCase):
         with self.assertRaises(FieldError):
             [
                 obj
-                async for obj in TestModel.async_object.distinct(
+                async for obj in TestModel.async_objects.distinct(
                     "nonexistent_field"
                 )
             ]
 
     async def test_distinct_with_slice_error(self):
         with self.assertRaises(TypeError):
-            [obj async for obj in TestModel.async_object[:1].distinct("value")]
+            [
+                obj
+                async for obj in TestModel.async_objects[:1].distinct("value")
+            ]

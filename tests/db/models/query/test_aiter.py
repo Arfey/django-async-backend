@@ -11,12 +11,12 @@ class TestMock(TestCase):
 
 class TestAIter(AsyncioTestCase):
     async def test_aiter(self):
-        await TestModel.async_object.acreate(
+        await TestModel(
             name="Test1",
-        )
-        await TestModel.async_object.acreate(name="Test2")
+        ).async_save()
+        await TestModel(name="Test2").async_save()
 
-        results = [obj async for obj in TestModel.async_object.all()]
+        results = [obj async for obj in TestModel.async_objects.all()]
 
         self.assertEqual(len(results), 2, "Should iterate over 2 objects")
         self.assertEqual(
@@ -29,7 +29,7 @@ class TestAIter(AsyncioTestCase):
         )
 
     async def test_aiter_no_objects(self):
-        results = [obj async for obj in TestModel.async_object.all()]
+        results = [obj async for obj in TestModel.async_objects.all()]
         self.assertEqual(
             len(results),
             0,
@@ -37,12 +37,12 @@ class TestAIter(AsyncioTestCase):
         )
 
     async def test_aiter_with_filter(self):
-        await TestModel.async_object.acreate(
+        await TestModel(
             name="Test1",
-        )
+        ).async_save()
 
         results = [
-            obj async for obj in TestModel.async_object.filter(name="Test1")
+            obj async for obj in TestModel.async_objects.filter(name="Test1")
         ]
 
         self.assertEqual(len(results), 1, "Should iterate over 1 object")

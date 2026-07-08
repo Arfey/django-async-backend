@@ -22,7 +22,8 @@ def _refresh_connection_task_ownership_decorator(fn):
 
 
 class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
-    # todo: fix problem with creating models
+    databases = "__all__"
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
 

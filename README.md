@@ -207,8 +207,52 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 
 
 # ORM support:
+
+### AsyncModelMixin
+
+The recommended way to add async ORM support to a model is to inherit from
+`AsyncModelMixin`. The mixin gives every model two things without any extra
+boilerplate:
+
+- an `async_objects` manager (an `AsyncManager`), so you don't have to declare
+  one by hand;
+- an `async_save()` method for saving instances asynchronously.
+
+```python
+from django.db import models, DEFAULT_DB_ALIAS
+from django_async_backend.db import async_connections
+from django_async_backend.db.models.base import AsyncModelMixin
+
+
+class Book(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=100)
+
+
+async def main():
+    # create / save an instance
+    book = Book(name="Django")
+    await book.async_save()
+
+    # update via update_fields
+    book.name = "Django Async"
+    await book.async_save(update_fields=["name"])
+
+    # query through the async_objects manager
+    async for i in Book.async_objects.all():
+        print(i.id, i.name)
+
+    await async_connections[DEFAULT_DB_ALIAS].close()
+```
+
+`async_save()` accepts the same keyword arguments as Django's `save()`
+(`force_insert`, `force_update`, `using`, `update_fields`) and honors model
+`Meta` options such as `select_on_save` and `order_with_respect_to`, as well as
+multi-table inheritance.
+
 ### Manager:
 
+If you prefer, you can attach an `AsyncManager` to a model explicitly instead of
+using `AsyncModelMixin`:
 
 ```python
 from django.db import models, DEFAULT_DB_ALIAS
@@ -219,14 +263,11 @@ class Book(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
 
-    async_object = AsyncManager()
-
-    class Meta:
-        db_table = "books"
+    async_objects = AsyncManager()
 
 
 async def main():
-    async for i in Book.async_object.all():
+    async for i in Book.async_objects.all():
         print(i.id)
 
     await async_connections[DEFAULT_DB_ALIAS].close()
@@ -295,12 +336,12 @@ Not supported ❌
 
 ### Model:
 
-| methods         | supported | comments |
-| --------------- | --------- | -------- |
-| `Model.asave`   | ❌        |          |
-| `Model.aupdate` | ❌        |          |
-| `Model.adelete` | ❌        |          |
-| `...`           | ❌        |          |
+| methods         | supported | comments   |
+| --------------- | --------- | ---------- |
+| `Model.asave`   | ✅        | async_save |
+| `Model.aupdate` | ❌        |            |
+| `Model.adelete` | ❌        |            |
+| `...`           | ❌        |            |
 
 ### User Model / Manager
 

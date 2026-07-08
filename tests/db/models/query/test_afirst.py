@@ -6,12 +6,12 @@ from django_async_backend.test import AsyncioTestCase
 
 class TestAFirst(AsyncioTestCase):
     async def asyncSetUp(self):
-        await TestModel.async_object.acreate(name="Item1")
-        await TestModel.async_object.acreate(name="Item2")
-        await TestModel.async_object.acreate(name="Item3")
+        await TestModel(name="Item1").async_save()
+        await TestModel(name="Item2").async_save()
+        await TestModel(name="Item3").async_save()
 
     async def test_afirst_with_results(self):
-        first_item = await TestModel.async_object.afirst()
+        first_item = await TestModel.async_objects.afirst()
         self.assertIsNotNone(
             first_item, "afirst should return the first object"
         )
@@ -20,13 +20,15 @@ class TestAFirst(AsyncioTestCase):
         )
 
     async def test_afirst_no_results(self):
-        first_item = await TestModel.async_object.filter(name="Item4").afirst()
+        first_item = await TestModel.async_objects.filter(
+            name="Item4"
+        ).afirst()
         self.assertIsNone(
             first_item, "afirst should return None when no objects exist"
         )
 
     async def test_afirst_with_ordering(self):
-        first_item = await TestModel.async_object.order_by("-name").afirst()
+        first_item = await TestModel.async_objects.order_by("-name").afirst()
         self.assertIsNotNone(
             first_item, "afirst should return the first object"
         )
@@ -38,6 +40,6 @@ class TestAFirst(AsyncioTestCase):
 
     async def test_afirst_check_ordering_error(self):
         with self.assertRaises(TypeError):
-            await TestModel.async_object.values("name").annotate(
+            await TestModel.async_objects.values("name").annotate(
                 count=Count("name")
             ).afirst()
