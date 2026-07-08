@@ -336,22 +336,11 @@ Not supported ❌
 
 ### Model:
 
-| methods         | supported | comments   |
-| --------------- | --------- | ---------- |
-| `Model.asave`   | ✅        | async_save |
-| `Model.aupdate` | ❌        |            |
-| `Model.adelete` | ❌        |            |
-| `...`           | ❌        |            |
-
-### User Model / Manager
-
-| methods                     | supported | comments |
-| --------------------------- | --------- | -------- |
-| `User.is_authenticated`     | ❌        |          |
-| `User.is_super_user`        | ❌        |          |
-| `User.objects.acreate_user` | ❌        |          |
-| `...`                       | ❌        |          |
-
+| methods                  | supported | comments   |
+| ------------------------ | --------- | ---------- |
+| `Model.asave`            | ✅        | async_save |
+| `Model.adelete`          | ❌        |            |
+| `Model.arefresh_from_db` | ❌        |            |
 
 ## Code generation
 
