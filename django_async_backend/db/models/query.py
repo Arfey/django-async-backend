@@ -2,6 +2,7 @@
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
+    async_atomic,
     async_mark_for_rollback_on_error,
 )
 
@@ -662,6 +663,33 @@ class QuerySet(AltersData):
                     group_next_order = group_next_orders[group_key]
                     obj._order = group_next_order
                     group_next_orders[group_key] += 1
+
+    async def aget_or_create(self, defaults=None, **kwargs):
+        """
+        Look up an object with the given kwargs, creating one if necessary.
+        Return a tuple of (object, created), where created is a boolean
+        specifying whether an object was created.
+        """
+        # The get() needs to be targeted at the write database in order
+        # to avoid potential transaction consistency problems.
+        self._for_write = True
+        try:
+            return await self.aget(**kwargs), False
+        except self.model.DoesNotExist:
+            params = self._extract_model_params(defaults, **kwargs)
+            # Try to create an object using passed params.
+            try:
+                async with async_atomic(using=self.db):
+                    params = dict(resolve_callables(params))
+                    return await self.acreate(**params), True
+            except IntegrityError:
+                try:
+                    return await self.aget(**kwargs), False
+                except self.model.DoesNotExist:
+                    pass
+                raise
+
+    aget_or_create.alters_data = True
 
     def _extract_model_params(self, defaults, **kwargs):
         """
