@@ -278,7 +278,7 @@ async def main():
 | methods                             | supported | comments |
 | ----------------------------------- | --------- | -------- |
 | `Model.objects.aget`                | ✅        |          |
-| `Model.objects.acreate`             | ❌        |          |
+| `Model.objects.acreate`             | ✅        |          |
 | `Model.objects.acount`              | ✅        |          |
 | `Model.objects.none`                | ✅        |          |
 | `Model.objects.abulk_create`        | ❌        |          |
