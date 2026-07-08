@@ -19,7 +19,7 @@ module:
       assigns:
         - target:
             name: create
-          remove: true
+          rename: acreate
 
         - target:
             name: bulk_update
@@ -252,9 +252,15 @@ module:
               replace_raw: 'len([i async for i in clone])'
 
         create:
-          # to_async: true
-          # rename: acreate
-          remove: true
+          to_async: true
+          rename: acreate
+          calls:
+            - func:
+                attr: save
+              rename:
+                func:
+                  attr: async_save
+              to_await: true
 
         bulk_create:
           # to_async: true
