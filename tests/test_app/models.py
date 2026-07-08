@@ -150,6 +150,14 @@ class DbDefaultModel(AsyncModelMixin, models.Model):
         db_table = "db_default_model"
 
 
+class GetOrCreateModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    code = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "get_or_create_model"
+
+
 class GenericFkModel(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=255)
     content_type = models.ForeignKey(

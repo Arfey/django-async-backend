@@ -4,6 +4,7 @@ module:
   new_imports:
     - "from django_async_backend.db import async_connections"
     - "from django_async_backend.db.models import sql as async_sql"
+    - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
 
   functions:
@@ -27,7 +28,7 @@ module:
 
         - target:
             name: get_or_create
-          remove: true
+          rename: aget_or_create
 
         - target:
             name: update
@@ -273,9 +274,29 @@ module:
           remove: true
 
         get_or_create:
-          # to_async: true
-          # rename: aget_or_create
-          remove: true
+          to_async: true
+          rename: aget_or_create
+          context_managers:
+            - to_async: true
+          calls:
+            - func:
+                attr: get
+              rename:
+                func:
+                  attr: aget
+              to_await: true
+            - func:
+                value: transaction
+                attr: atomic
+              rename:
+                func:
+                  name: async_atomic
+            - func:
+                attr: create
+              rename:
+                func:
+                  attr: acreate
+              to_await: true
 
         update_or_create:
           # to_async: true
