@@ -150,6 +150,14 @@ class DbDefaultModel(AsyncModelMixin, models.Model):
         db_table = "db_default_model"
 
 
+class DbDefaultPkModel(AsyncModelMixin, models.Model):
+    id = models.IntegerField(primary_key=True, db_default=Value(1))
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "db_default_pk_model"
+
+
 class GetOrCreateModel(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=255, unique=True)
     code = models.CharField(max_length=255, unique=True)

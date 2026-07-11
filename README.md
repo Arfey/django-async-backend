@@ -281,7 +281,7 @@ async def main():
 | `Model.objects.acreate`             | ✅        |          |
 | `Model.objects.acount`              | ✅        |          |
 | `Model.objects.none`                | ✅        |          |
-| `Model.objects.abulk_create`        | ❌        |          |
+| `Model.objects.abulk_create`        | ✅        |          |
 | `Model.objects.abulk_update`        | ❌        |          |
 | `Model.objects.aget_or_create`      | ✅        |          |
 | `Model.objects.aupdate_or_create`   | ❌        |          |
@@ -306,6 +306,7 @@ async def main():
 | `Model.objects.select_related`      | ❌        |          |
 | `Model.objects.select_for_update`   | ❌        |          |
 | `Model.objects.prefetch_related`    | ❌        |          |
+| `Model.objects.aaggregate`          | ❌        |          |
 | `Model.objects.annotate`            | ✅        |          |
 | `Model.objects.order_by`            | ✅        |          |
 | `Model.objects.distinct`            | ✅        |          |

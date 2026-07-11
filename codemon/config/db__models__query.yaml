@@ -40,7 +40,7 @@ module:
 
         - target:
             name: bulk_create
-          remove: true
+          rename: abulk_create
 
         - target:
             name: delete
@@ -264,9 +264,45 @@ module:
               to_await: true
 
         bulk_create:
-          # to_async: true
-          # rename: abulk_create
-          remove: true
+          to_async: true
+          rename: abulk_create
+          renames:
+            - name: connections
+              rename: async_connections
+          context_managers:
+            - to_async: true
+          calls:
+            - func:
+                attr: _handle_order_with_respect_to
+              to_await: true
+            - func:
+                value: transaction
+                attr: atomic
+              rename:
+                func:
+                  name: async_atomic
+            - func:
+                attr: _batched_insert
+              to_await: true
+
+        _handle_order_with_respect_to:
+          to_async: true
+          # _base_manager runs a sync query; _async_base_manager is its async
+          # twin, and the values_list result is consumed with `async for`.
+          renames:
+            - name: _base_manager
+              rename: _async_base_manager
+          calls:
+            - func:
+                value: group_next_orders
+                attr: update
+              replace_raw: |
+                group_next_orders.update(
+                    [
+                        (tuple(group_key), next_order)
+                        async for *group_key, next_order in next_orders
+                    ]
+                )
 
         bulk_update:
           # to_async: true
@@ -433,6 +469,21 @@ module:
                   value: async_sql
             - func:
                 attr: execute_sql
+              to_await: true
+
+        _batched_insert:
+          to_async: true
+          context_managers:
+            - to_async: true
+          calls:
+            - func:
+                value: transaction
+                attr: atomic
+              rename:
+                func:
+                  name: async_atomic
+            - func:
+                attr: _insert
               to_await: true
 
         __aiter__:
