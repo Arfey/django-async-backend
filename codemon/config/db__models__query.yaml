@@ -266,6 +266,9 @@ module:
         bulk_create:
           to_async: true
           rename: abulk_create
+          renames:
+            - name: connections
+              rename: async_connections
           context_managers:
             - to_async: true
           calls:

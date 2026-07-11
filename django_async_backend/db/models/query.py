@@ -734,7 +734,7 @@ class QuerySet(AltersData):
                     update_fields=update_fields,
                     unique_fields=unique_fields,
                 )
-                connection = connections[self.db]
+                connection = async_connections[self.db]
                 if (
                     connection.features.can_return_rows_from_bulk_insert
                     and on_conflict is None

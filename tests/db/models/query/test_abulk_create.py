@@ -1,9 +1,19 @@
-from django.db import DEFAULT_DB_ALIAS, IntegrityError
+from unittest import mock
+
+from django.db import (
+    DEFAULT_DB_ALIAS,
+    IntegrityError,
+    NotSupportedError,
+    connections,
+)
 from test_app.models import (
     ChildModel,
+    DbDefaultModel,
+    DbDefaultPkModel,
     OrderItemModel,
     OrderParentModel,
     TestModel,
+    UuidPkModel,
 )
 
 from django_async_backend.db import async_connections
@@ -112,6 +122,21 @@ class TestABulkCreate(AsyncioTestCase):
             if obj.name.startswith("NoPk"):
                 self.assertIsNotNone(obj.pk)
 
+    async def test_with_pk_populates_non_pk_db_returning_field(self):
+        objs = await DbDefaultModel.async_objects.abulk_create(
+            [
+                DbDefaultModel(id=1_000_101, name="Default1"),
+                DbDefaultModel(id=1_000_102, name="Default2"),
+            ]
+        )
+        # The db_default (7) is copied onto each object from the RETURNING
+        # row, not fetched again from the database.
+        for obj in objs:
+            self.assertEqual(obj.ts, 7)
+
+        stored = await DbDefaultModel.async_objects.aget(pk=1_000_101)
+        self.assertEqual(stored.ts, 7)
+
     async def test_invalid_batch_size_raises(self):
         with self.assertRaises(ValueError):
             await TestModel.async_objects.abulk_create(
@@ -181,6 +206,154 @@ class TestABulkCreate(AsyncioTestCase):
         self.assertEqual(item1.value, 123)
         count = await TestModel.async_objects.acount()
         self.assertEqual(count, 1)
+
+
+class TestABulkCreateOptionValidation(AsyncioTestCase):
+
+    async def test_ignore_and_update_conflicts_mutually_exclusive(self):
+        with self.assertRaises(ValueError) as cm:
+            await TestModel.async_objects.abulk_create(
+                [TestModel(name="Item1", value=1)],
+                ignore_conflicts=True,
+                update_conflicts=True,
+            )
+        self.assertIn("mutually exclusive", str(cm.exception))
+
+    async def test_update_conflicts_requires_update_fields(self):
+        with self.assertRaises(ValueError) as cm:
+            await TestModel.async_objects.abulk_create(
+                [TestModel(name="Item1", value=1)],
+                update_conflicts=True,
+            )
+        self.assertIn("Fields that will be updated", str(cm.exception))
+
+    async def test_update_conflicts_requires_unique_fields(self):
+        with self.assertRaises(ValueError) as cm:
+            await TestModel.async_objects.abulk_create(
+                [TestModel(name="Item1", value=1)],
+                update_conflicts=True,
+                update_fields=["value"],
+            )
+        self.assertIn(
+            "Unique fields that can trigger the upsert", str(cm.exception)
+        )
+
+    async def test_update_fields_cannot_contain_pk(self):
+        with self.assertRaises(ValueError) as cm:
+            await TestModel.async_objects.abulk_create(
+                [TestModel(name="Item1", value=1)],
+                update_conflicts=True,
+                update_fields=["id"],
+                unique_fields=["name"],
+            )
+        self.assertIn("primary keys in update_fields", str(cm.exception))
+
+    async def test_update_fields_must_be_concrete(self):
+        with self.assertRaises(ValueError) as cm:
+            await OrderParentModel.async_objects.abulk_create(
+                [OrderParentModel(name="P1")],
+                update_conflicts=True,
+                update_fields=["items"],
+                unique_fields=["name"],
+            )
+        self.assertIn("concrete fields in update_fields", str(cm.exception))
+
+    async def test_unique_fields_must_be_concrete(self):
+        with self.assertRaises(ValueError) as cm:
+            await OrderParentModel.async_objects.abulk_create(
+                [OrderParentModel(name="P1")],
+                update_conflicts=True,
+                update_fields=["name"],
+                unique_fields=["items"],
+            )
+        self.assertIn("concrete fields in unique_fields", str(cm.exception))
+
+    async def test_ignore_conflicts_unsupported_backend(self):
+        # _check_bulk_create_options reads Django's sync `connections`
+        # registry, so the feature flag must be patched there (not on
+        # async_connections) for abulk_create to observe it.
+        connection = connections[DEFAULT_DB_ALIAS]
+        with mock.patch.object(
+            connection.features, "supports_ignore_conflicts", False
+        ):
+            with self.assertRaises(NotSupportedError) as cm:
+                await TestModel.async_objects.abulk_create(
+                    [TestModel(name="Item1", value=1)],
+                    ignore_conflicts=True,
+                )
+        self.assertIn("does not support ignoring conflicts", str(cm.exception))
+
+    async def test_update_conflicts_unsupported_backend(self):
+        # _check_bulk_create_options reads Django's sync `connections`
+        # registry, so the feature flag must be patched there (not on
+        # async_connections) for abulk_create to observe it.
+        connection = connections[DEFAULT_DB_ALIAS]
+        with mock.patch.object(
+            connection.features, "supports_update_conflicts", False
+        ):
+            with self.assertRaises(NotSupportedError) as cm:
+                await TestModel.async_objects.abulk_create(
+                    [TestModel(name="Item1", value=1)],
+                    update_conflicts=True,
+                    update_fields=["value"],
+                    unique_fields=["name"],
+                )
+        self.assertIn("does not support updating conflicts", str(cm.exception))
+
+    async def test_unique_fields_unsupported_with_target(self):
+        # _check_bulk_create_options reads Django's sync `connections`
+        # registry, so the feature flag must be patched there (not on
+        # async_connections) for abulk_create to observe it.
+        connection = connections[DEFAULT_DB_ALIAS]
+        with mock.patch.object(
+            connection.features,
+            "supports_update_conflicts_with_target",
+            False,
+        ):
+            with self.assertRaises(NotSupportedError) as cm:
+                await TestModel.async_objects.abulk_create(
+                    [TestModel(name="Item1", value=1)],
+                    update_conflicts=True,
+                    update_fields=["value"],
+                    unique_fields=["name"],
+                )
+        self.assertIn(
+            "specifying unique fields that can trigger the upsert",
+            str(cm.exception),
+        )
+
+
+class TestABulkCreatePartition(AsyncioTestCase):
+
+    async def test_objs_without_pk_receive_db_generated_pk(self):
+        obj = TestModel(name="NoPk", value=1)
+        self.assertIsNone(obj.pk)
+        created = await TestModel.async_objects.abulk_create([obj])
+        self.assertIsNotNone(created[0].pk)
+        stored = await TestModel.async_objects.aget(name="NoPk")
+        self.assertEqual(created[0].pk, stored.pk)
+
+    async def test_objs_with_explicit_pk_keep_their_pk(self):
+        obj = TestModel(id=1_000_201, name="WithPk", value=1)
+        created = await TestModel.async_objects.abulk_create([obj])
+        self.assertEqual(created[0].pk, 1_000_201)
+        stored = await TestModel.async_objects.aget(name="WithPk")
+        self.assertEqual(stored.pk, 1_000_201)
+
+    async def test_db_default_pk_partitions_as_objs_without_pk(self):
+        obj = DbDefaultPkModel(name="D1")
+        created = await DbDefaultPkModel.async_objects.abulk_create([obj])
+        self.assertEqual(created[0].pk, 1)
+        stored = await DbDefaultPkModel.async_objects.aget(name="D1")
+        self.assertEqual(stored.pk, 1)
+
+    async def test_client_generated_pk_partitions_as_objs_with_pk(self):
+        obj = UuidPkModel(id=None, name="U1")
+        self.assertIsNone(obj.pk)
+        created = await UuidPkModel.async_objects.abulk_create([obj])
+        self.assertIsNotNone(created[0].pk)
+        stored = await UuidPkModel.async_objects.aget(name="U1")
+        self.assertEqual(created[0].pk, stored.pk)
 
 
 class TestABulkCreateOrderWithRespectTo(AsyncioTestCase):
