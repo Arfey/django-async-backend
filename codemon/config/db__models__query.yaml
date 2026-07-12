@@ -24,7 +24,7 @@ module:
 
         - target:
             name: bulk_update
-          remove: true
+          rename: abulk_update
 
         - target:
             name: get_or_create
@@ -305,9 +305,30 @@ module:
                 )
 
         bulk_update:
-          # to_async: true
-          # rename: abulk_update
-          remove: true
+          to_async: true
+          rename: abulk_update
+          renames:
+            - name: connections
+              rename: async_connections
+          context_managers:
+            - to_async: true
+          calls:
+            # guard: keeps the set's `all_pk_fields.update()` untouched
+            - func:
+                value: all_pk_fields
+                attr: update
+            - func:
+                attr: update
+              rename:
+                func:
+                  attr: aupdate
+              to_await: true
+            - func:
+                value: transaction
+                attr: atomic
+              rename:
+                func:
+                  name: async_atomic
 
         get_or_create:
           to_async: true
