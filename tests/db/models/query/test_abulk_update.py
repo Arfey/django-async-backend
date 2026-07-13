@@ -1,6 +1,12 @@
-from django.db import DEFAULT_DB_ALIAS, IntegrityError
+from django.db import (
+    DEFAULT_DB_ALIAS,
+    IntegrityError,
+)
 from django.db.models import F
-from test_app.models import TestModel
+from test_app.models import (
+    ChildModel,
+    TestModel,
+)
 
 from django_async_backend.db import async_connections
 from django_async_backend.test import (
@@ -188,6 +194,17 @@ class TestABulkUpdateValidation(AsyncioTestCase):
             await TestModel.async_objects.all().abulk_update(
                 [self.item1], ["id"]
             )
+
+    async def test_non_concrete_field_raises(self):
+        with self.assertRaises(ValueError):
+            await TestModel.async_objects.all().abulk_update(
+                [self.item1], ["relatives"]
+            )
+
+    async def test_parent_pk_field_raises(self):
+        child = await ChildModel.async_objects.acreate(child_value=1)
+        with self.assertRaises(ValueError):
+            await ChildModel.async_objects.all().abulk_update([child], ["id"])
 
 
 class TestABulkUpdateRollback(AsyncioTransactionTestCase):
