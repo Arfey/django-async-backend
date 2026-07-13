@@ -263,6 +263,23 @@ module:
                   attr: async_save
               to_await: true
 
+        _prepare_for_bulk_create:
+          to_async: true
+          calls:
+            - func:
+                value: obj
+                attr: _is_pk_set
+              rename:
+                func:
+                  attr: _async_is_pk_set
+            - func:
+                value: obj
+                attr: _prepare_related_fields_for_save
+              rename:
+                func:
+                  attr: _async_prepare_related_fields_for_save
+              to_await: true
+
         bulk_create:
           to_async: true
           rename: abulk_create
@@ -272,6 +289,9 @@ module:
           context_managers:
             - to_async: true
           calls:
+            - func:
+                attr: _prepare_for_bulk_create
+              to_await: true
             - func:
                 attr: _handle_order_with_respect_to
               to_await: true
@@ -313,6 +333,19 @@ module:
           context_managers:
             - to_async: true
           calls:
+            - func:
+                value: obj
+                attr: _is_pk_set
+              rename:
+                func:
+                  attr: _async_is_pk_set
+            - func:
+                value: obj
+                attr: _prepare_related_fields_for_save
+              rename:
+                func:
+                  attr: _async_prepare_related_fields_for_save
+              to_await: true
             # guard: keeps the set's `all_pk_fields.update()` untouched
             - func:
                 value: all_pk_fields

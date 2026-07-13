@@ -553,20 +553,22 @@ class QuerySet(AltersData):
 
     acreate.alters_data = True
 
-    def _prepare_for_bulk_create(self, objs):
+    async def _prepare_for_bulk_create(self, objs):
         objs_with_pk, objs_without_pk = [], []
         for obj in objs:
             if isinstance(obj.pk, DatabaseDefault):
                 objs_without_pk.append(obj)
-            elif obj._is_pk_set():
+            elif obj._async_is_pk_set():
                 objs_with_pk.append(obj)
             else:
                 obj.pk = obj._meta.pk.get_pk_value_on_save(obj)
-                if obj._is_pk_set():
+                if obj._async_is_pk_set():
                     objs_with_pk.append(obj)
                 else:
                     objs_without_pk.append(obj)
-            obj._prepare_related_fields_for_save(operation_name="bulk_create")
+            await obj._async_prepare_related_fields_for_save(
+                operation_name="bulk_create"
+            )
         return objs_with_pk, objs_without_pk
 
     def _check_bulk_create_options(
@@ -697,7 +699,9 @@ class QuerySet(AltersData):
         self._for_write = True
         fields = [f for f in opts.concrete_fields if not f.generated]
         objs = list(objs)
-        objs_with_pk, objs_without_pk = self._prepare_for_bulk_create(objs)
+        objs_with_pk, objs_without_pk = await self._prepare_for_bulk_create(
+            objs
+        )
         if objs_with_pk and objs_without_pk:
             context = async_atomic(using=self.db, savepoint=False)
         else:
@@ -800,7 +804,7 @@ class QuerySet(AltersData):
         if not fields:
             raise ValueError("Field names must be given to bulk_update().")
         objs = tuple(objs)
-        if not all(obj._is_pk_set() for obj in objs):
+        if not all(obj._async_is_pk_set() for obj in objs):
             raise ValueError(
                 "All bulk_update() objects must have a primary key set."
             )
@@ -820,7 +824,7 @@ class QuerySet(AltersData):
         if not objs:
             return 0
         for obj in objs:
-            obj._prepare_related_fields_for_save(
+            await obj._async_prepare_related_fields_for_save(
                 operation_name="bulk_update", fields=fields
             )
         # PK is used twice in the resulting update query, once in the filter
