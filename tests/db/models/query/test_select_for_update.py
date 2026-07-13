@@ -58,6 +58,20 @@ class TestSelectForUpdate(AsyncioTestCase):
     async def test_sql_contains_for_no_key_update(self):
         self.assertIn("FOR NO KEY UPDATE", await self._last_sql(no_key=True))
 
+    async def test_subquery_works_inside_transaction(self):
+        inner = SaveModel.async_objects.select_for_update().values("pk")
+
+        async with AsyncCaptureQueriesContext(
+            async_connections[DEFAULT_DB_ALIAS]
+        ) as ctx:
+            items = [
+                i
+                async for i in SaveModel.async_objects.filter(pk__in=inner)
+            ]
+
+        self.assertEqual(len(items), 1)
+        self.assertIn("FOR UPDATE", ctx.captured_queries[-1]["sql"])
+
 
 class TestSelectForUpdateOutsideTransaction(AsyncioTransactionTestCase):
     async def test_raises_outside_of_transaction(self):
