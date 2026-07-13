@@ -361,12 +361,21 @@ the generated files — then regenerate:
 lets test_generate
 ```
 
-This restores the Django-derived files to pristine, runs `python -m codemon`,
-and reformats the result — running `codemon` on its own skips the
-restore/reformat and produces large formatting-only diffs. Regeneration
-downloads Django's source for the pinned version over the network, so it needs
-internet access. Any manual edits to the generated modules will be lost on the
-next regeneration.
+This runs `python -m codemon` and reformats the result with black and isort —
+running `codemon` on its own skips the reformat and produces large
+formatting-only diffs. Regeneration is deterministic: the same config and
+Django version always produce the same bytes, so the committed files can be
+verified against the generator:
+
+```bash
+lets test_generate_check
+```
+
+This regenerates and fails if the result differs from the committed files —
+catching hand-edits to generated modules and config changes committed without
+regeneration. Regeneration downloads Django's source for the pinned version
+over the network, so it needs internet access. Any manual edits to the
+generated modules will be lost on the next regeneration.
 
 ## ⚙️ Development Setup
 

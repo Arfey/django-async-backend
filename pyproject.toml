@@ -42,7 +42,9 @@ psycopg = {extras = ["binary"], version = "^3"}
 
 
 [tool.poetry.group.dev.dependencies]
+black = "~24.2.0"
 coverage = "^7.13.4"
+isort = "~5.13.0"
 libcst = "^1.8.6"
 psycopg = {extras = ["pool"], version = "^3"}
 pydantic = "^2.12.5"
