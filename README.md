@@ -284,7 +284,7 @@ async def main():
 | `Model.objects.abulk_create`        | ✅        |          |
 | `Model.objects.abulk_update`        | ✅        |          |
 | `Model.objects.aget_or_create`      | ✅        |          |
-| `Model.objects.aupdate_or_create`   | ❌        |          |
+| `Model.objects.aupdate_or_create`   | ✅        |          |
 | `Model.objects.aearliest`           | ✅        |          |
 | `Model.objects.alatest`             | ✅        |          |
 | `Model.objects.afirst`              | ✅        |          |
@@ -304,7 +304,7 @@ async def main():
 | `Model.objects.intersection`        | ✅        |          |
 | `Model.objects.difference`          | ✅        |          |
 | `Model.objects.select_related`      | ❌        |          |
-| `Model.objects.select_for_update`   | ❌        |          |
+| `Model.objects.select_for_update`   | ✅        | requires `async_atomic` |
 | `Model.objects.prefetch_related`    | ❌        |          |
 | `Model.objects.aaggregate`          | ❌        |          |
 | `Model.objects.annotate`            | ✅        |          |
