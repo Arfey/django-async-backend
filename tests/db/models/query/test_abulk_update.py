@@ -170,10 +170,11 @@ class TestABulkUpdateValidation(AsyncioTestCase):
             await TestModel.async_objects.all().abulk_update([self.item1], [])
 
     async def test_non_positive_batch_size_raises(self):
-        with self.assertRaises(ValueError):
-            await TestModel.async_objects.all().abulk_update(
-                [self.item1], ["value"], batch_size=0
-            )
+        for batch_size in (0, -1):
+            with self.assertRaises(ValueError):
+                await TestModel.async_objects.all().abulk_update(
+                    [self.item1], ["value"], batch_size=batch_size
+                )
 
     async def test_object_without_pk_raises(self):
         unsaved = TestModel(name="Unsaved", value=1)
