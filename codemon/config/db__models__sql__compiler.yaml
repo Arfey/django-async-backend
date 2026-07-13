@@ -24,6 +24,19 @@ module:
   classes:
     SQLCompiler:
       methods:
+        # as_sql() stays sync; read the autocommit attribute, falling back
+        # to settings when not yet connected (what connect() would set).
+        as_sql:
+          calls:
+            - func:
+                attr: get_autocommit
+              replace_raw: |
+                (
+                    self.connection.autocommit
+                    if self.connection.connection is not None
+                    else self.connection.settings_dict["AUTOCOMMIT"]
+                )
+
         execute_sql:
           to_async: true
           return_blocks:
