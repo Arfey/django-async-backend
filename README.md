@@ -282,7 +282,7 @@ async def main():
 | `Model.objects.acount`              | ✅        |          |
 | `Model.objects.none`                | ✅        |          |
 | `Model.objects.abulk_create`        | ✅        |          |
-| `Model.objects.abulk_update`        | ❌        |          |
+| `Model.objects.abulk_update`        | ✅        |          |
 | `Model.objects.aget_or_create`      | ✅        |          |
 | `Model.objects.aupdate_or_create`   | ❌        |          |
 | `Model.objects.aearliest`           | ✅        |          |
