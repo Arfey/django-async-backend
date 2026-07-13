@@ -93,6 +93,7 @@ class AsyncModelMixin:
             manager.model = cls
             cls._async_objects_cache = manager
         return manager
+
     @classproperty
     def _async_base_manager(cls):
         manager = cls.__dict__.get("_async_base_manager_cache")
