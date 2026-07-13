@@ -61,6 +61,16 @@ class TestAUpdateOrCreate(AsyncioTestCase):
         self.assertFalse(created)
         self.assertEqual(obj.value, 10)
 
+    async def test_create_defaults_callable_is_resolved(self):
+        obj, created = await SaveModel.async_objects.aupdate_or_create(
+            name="Callable", create_defaults={"value": lambda: 5}
+        )
+
+        self.assertTrue(created)
+        self.assertEqual(obj.value, 5)
+        obj = await SaveModel.async_objects.aget(pk=obj.pk)
+        self.assertEqual(obj.value, 5)
+
     async def test_defaults_callable_is_resolved(self):
         await SaveModel.async_objects.acreate(name="Callable", value=1)
 
