@@ -1,6 +1,9 @@
 import uuid
 
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import (
+    GenericForeignKey,
+    GenericRelation,
+)
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.db.models import Value
@@ -178,3 +181,114 @@ class GenericFkModel(AsyncModelMixin, models.Model):
 
     class Meta:
         db_table = "generic_fk_model"
+
+
+class DeleteAuthorModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "delete_author_model"
+
+
+class DeleteBookModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    author = models.ForeignKey(
+        DeleteAuthorModel,
+        on_delete=models.CASCADE,
+        related_name="books",
+    )
+
+    class Meta:
+        db_table = "delete_book_model"
+
+
+class DeleteReviewModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    book = models.ForeignKey(
+        DeleteBookModel,
+        on_delete=models.CASCADE,
+        related_name="reviews",
+    )
+
+    class Meta:
+        db_table = "delete_review_model"
+
+
+class DeleteProtectedModel(AsyncModelMixin, models.Model):
+    author = models.ForeignKey(
+        DeleteAuthorModel,
+        on_delete=models.PROTECT,
+        null=True,
+        related_name="protected_refs",
+    )
+
+    class Meta:
+        db_table = "delete_protected_model"
+
+
+class DeleteRestrictedModel(AsyncModelMixin, models.Model):
+    author = models.ForeignKey(
+        DeleteAuthorModel,
+        on_delete=models.RESTRICT,
+        null=True,
+        related_name="restricted_refs",
+    )
+
+    class Meta:
+        db_table = "delete_restricted_model"
+
+
+class DeleteSetNullModel(AsyncModelMixin, models.Model):
+    author = models.ForeignKey(
+        DeleteAuthorModel,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="setnull_refs",
+    )
+
+    class Meta:
+        db_table = "delete_setnull_model"
+
+
+class DeleteSetDefaultModel(AsyncModelMixin, models.Model):
+    author = models.ForeignKey(
+        DeleteAuthorModel,
+        on_delete=models.SET_DEFAULT,
+        default=None,
+        null=True,
+        related_name="setdefault_refs",
+    )
+
+    class Meta:
+        db_table = "delete_setdefault_model"
+
+
+class DeleteCascadeRestrictModel(AsyncModelMixin, models.Model):
+    # RESTRICT is waived when the restricted row is itself collected
+    # through a CASCADE from the same delete.
+    cascade_author = models.ForeignKey(
+        DeleteAuthorModel,
+        on_delete=models.CASCADE,
+        related_name="cascade_restrict_refs",
+    )
+    restrict_author = models.ForeignKey(
+        DeleteAuthorModel,
+        on_delete=models.RESTRICT,
+        null=True,
+        related_name="restricted_via_cascade_refs",
+    )
+
+    class Meta:
+        db_table = "delete_cascade_restrict_model"
+
+
+class DeleteTaggedModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    tags = GenericRelation(
+        GenericFkModel,
+        content_type_field="content_type",
+        object_id_field="object_id",
+    )
+
+    class Meta:
+        db_table = "delete_tagged_model"
