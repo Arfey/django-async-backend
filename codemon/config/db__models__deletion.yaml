@@ -1,0 +1,200 @@
+pathname: db/models/deletion.py
+
+module:
+  new_imports:
+    - "from inspect import iscoroutinefunction"
+    # Reuse Django's handlers/exceptions: user models reference them
+    # (on_delete=models.CASCADE), so identity checks must see the same objects.
+    - "from django.db.models.deletion import CASCADE, DO_NOTHING, PROTECT, RESTRICT, SET, SET_DEFAULT, SET_NULL, ProtectedError, RestrictedError, get_candidate_relations_to_delete"
+    - "from django_async_backend.db import async_connections as connections"
+    - "from django_async_backend.db.models import sql"
+    - "from django_async_backend.db.transaction import async_atomic, async_mark_for_rollback_on_error"
+
+  import_aliases:
+    - name: connections
+      remove: true
+    - name: models
+      remove: true
+    - name: transaction
+      remove: true
+    - name: IntegrityError
+      remove: true
+    - name: sql
+      remove: true
+
+  assigns:
+    - target:
+        name: SET_NULL
+      remove: true
+
+  add_raw_bottom:
+    - |
+        def _async_queryset_for(model, using):
+            # Cascades reach models that don't opt into AsyncModelMixin
+            # (e.g. auto-created M2M through models); build a queryset
+            # directly. Imported lazily to avoid a circular import.
+            from django_async_backend.db.models.query import QuerySet
+
+            return QuerySet(model=model, using=using)
+
+  functions:
+    # CASCADE recurses into collect(); it needs an async twin. The other
+    # handlers only schedule work and are imported from Django unchanged.
+    CASCADE:
+      rename: ASYNC_CASCADE
+      to_async: true
+      calls:
+        - func:
+            attr: collect
+          to_await: true
+
+    PROTECT:
+      remove: true
+
+    RESTRICT:
+      remove: true
+
+    SET:
+      remove: true
+
+    SET_NULL:
+      remove: true
+
+    SET_DEFAULT:
+      remove: true
+
+    DO_NOTHING:
+      remove: true
+
+    get_candidate_relations_to_delete:
+      remove: true
+
+  classes:
+    ProtectedError:
+      remove: true
+
+    RestrictedError:
+      remove: true
+
+    Collector:
+      add_raw_top:
+        - |
+            async def _async_on_delete(self, on_delete, field, sub_objs):
+                # Dispatch an on_delete handler. The sync collector passes a
+                # lazy queryset that handlers evaluate implicitly; fetch it up
+                # front instead, and route CASCADE to its async twin.
+                if getattr(on_delete, "lazy_sub_objs", False):
+                    # SET_NULL / SET(value): stays lazy for one bulk UPDATE.
+                    on_delete(self, field, sub_objs, self.using)
+                    return
+                sub_objs = [obj async for obj in sub_objs]
+                if not sub_objs:
+                    return
+                if on_delete is CASCADE:
+                    await ASYNC_CASCADE(self, field, sub_objs, self.using)
+                elif iscoroutinefunction(on_delete):
+                    await on_delete(self, field, sub_objs, self.using)
+                else:
+                    on_delete(self, field, sub_objs, self.using)
+        - |
+            def _gfk_not_supported(self):
+                raise NotImplementedError(
+                    "Async delete does not yet support cascading through "
+                    "GenericRelation."
+                )
+
+      methods:
+        collect:
+          to_async: true
+          add_raw_top:
+            - |
+                if hasattr(objs, "__aiter__") and not self.can_fast_delete(objs):
+                    # The sync collector evaluates querysets lazily via
+                    # __bool__/__iter__; fetch up front instead.
+                    objs = [obj async for obj in objs]
+            - |
+                if (
+                    not keep_parents
+                    and not hasattr(objs, "__aiter__")
+                    and objs
+                    and objs[0].__class__._meta.concrete_model._meta.parents
+                ):
+                    # Collecting parents runs one sync descriptor fetch per
+                    # instance; reject loudly instead of silently using the
+                    # sync connection.
+                    raise NotImplementedError(
+                        "Async delete does not yet support multi-table inheritance."
+                    )
+          calls:
+            - func:
+                attr: collect
+              to_await: true
+            - name: on_delete
+              replace_raw: "await self._async_on_delete(on_delete, field, sub_objs)"
+            - func:
+                attr: bulk_related_objects
+              replace_raw: "self._gfk_not_supported()"
+            - func:
+                attr: clear_restricted_objects_from_queryset
+              to_await: true
+
+        related_objects:
+          return_blocks:
+            - replace_raw: "_async_queryset_for(related_model, self.using).filter(predicate)"
+
+        clear_restricted_objects_from_queryset:
+          to_async: true
+          calls:
+            - name: set
+              replace_raw: |
+                {
+                    obj
+                    async for obj in qs.filter(
+                        pk__in=[
+                            obj.pk
+                            for objs in self.restricted_objects[model].values()
+                            for obj in objs
+                        ]
+                    )
+                }
+
+        delete:
+          to_async: true
+          context_managers:
+            - to_async: true
+          calls:
+            - func:
+                value: transaction
+                attr: mark_for_rollback_on_error
+              replace_raw: "async_mark_for_rollback_on_error(using=self.using)"
+            - func:
+                value: transaction
+                attr: atomic
+              rename:
+                func:
+                  name: async_atomic
+            - func:
+                attr: send
+              rename:
+                func:
+                  attr: asend
+              to_await: true
+            - func:
+                attr: _raw_delete
+              to_await: true
+            - func:
+                value: combined_updates
+                attr: update
+              rename:
+                func:
+                  attr: aupdate
+              to_await: true
+            - func:
+                attr: update_batch
+              to_await: true
+            - func:
+                attr: delete_batch
+              to_await: true
+            # The async QuerySet doesn't subclass models.QuerySet; duck-type.
+            - name: isinstance
+              replace_raw: 'hasattr(instances, "_result_cache")'

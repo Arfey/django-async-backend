@@ -6,6 +6,11 @@ module:
     - "from django_async_backend.db.models import sql as async_sql"
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
+    - "from django_async_backend.db.models.deletion import Collector"
+
+  import_aliases:
+    - name: Collector
+      remove: true
 
   functions:
     prefetch_related_objects:
@@ -44,7 +49,7 @@ module:
 
         - target:
             name: delete
-          remove: true
+          rename: adelete
 
         - target:
             name: acreate
@@ -216,12 +221,12 @@ module:
           remove: true
 
         __or__:
-          remove: true
+          # The sliced-queryset path runs a sync query via _base_manager.
+          renames:
+            - name: _base_manager
+              rename: _async_base_manager
 
         __and__:
-          remove: true
-
-        only:
           remove: true
 
         defer:
@@ -467,9 +472,16 @@ module:
               replace_raw: 'tuple([i async for i in self.filter(**{filter_key: batch})])'
 
         delete:
-          # to_async: true
-          # rename: adelete
-          remove: true
+          to_async: true
+          rename: adelete
+          calls:
+            - func:
+                attr: collect
+              to_await: true
+            - func:
+                value: collector
+                attr: delete
+              to_await: true
 
         update:
           to_async: true
@@ -495,6 +507,10 @@ module:
 
         _raw_delete:
           to_async: true
+          # sql.DeleteQuery is Django's sync class; route to the async one.
+          renames:
+            - name: sql
+              rename: async_sql
           calls:
             - func:
                 attr: execute_sql

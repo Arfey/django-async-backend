@@ -290,7 +290,7 @@ async def main():
 | `Model.objects.afirst`              | ✅        |          |
 | `Model.objects.alast`               | ✅        |          |
 | `Model.objects.ain_bulk`            | ✅        |          |
-| `Model.objects.adelete`             | ❌        |          |
+| `Model.objects.adelete`             | ✅        | no multi-table inheritance (child side) or `GenericRelation` cascades yet; cascades don't consult custom base managers |
 | `Model.objects.aupdate`             | ✅        |          |
 | `Model.objects.aexists`             | ✅        |          |
 | `Model.objects.acontains`           | ❌        |          |
