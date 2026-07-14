@@ -18,7 +18,19 @@ module:
                 attr: execute_sql
               to_await: true
     DeleteQuery:
-      remove: true
+      methods:
+        do_query:
+          to_async: true
+          calls:
+            - func:
+                attr: execute_sql
+              to_await: true
+        delete_batch:
+          to_async: true
+          calls:
+            - func:
+                attr: do_query
+              to_await: true
 
     AggregateQuery:
       remove: true
