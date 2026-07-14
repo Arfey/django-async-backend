@@ -60,6 +60,14 @@ class TestADelete(AsyncioTestCase):
         with self.assertRaises(TypeError):
             await DeleteAuthorModel.async_objects.all()[:1].adelete()
 
+    async def test_values_queryset_raises(self):
+        with self.assertRaises(TypeError):
+            await DeleteAuthorModel.async_objects.values("name").adelete()
+
+    async def test_distinct_fields_queryset_raises(self):
+        with self.assertRaises(TypeError):
+            await DeleteAuthorModel.async_objects.distinct("name").adelete()
+
     async def test_alters_data(self):
         self.assertIs(
             DeleteAuthorModel.async_objects.all().adelete.alters_data, True
@@ -126,6 +134,23 @@ class TestADelete(AsyncioTestCase):
                 pk=author.pk
             ).adelete()
 
+    async def test_protect_aggregates_protected_objects(self):
+        author = await DeleteAuthorModel.async_objects.acreate(name="A")
+        ref1 = await DeleteProtectedModel.async_objects.acreate(author=author)
+        ref2 = await DeleteProtectedModel.async_objects.acreate(author=author)
+
+        with self.assertRaises(ProtectedError) as cm:
+            await DeleteAuthorModel.async_objects.filter(
+                pk=author.pk
+            ).adelete()
+
+        # The aggregated error (plural message), not PROTECT's raw one.
+        self.assertIn("protected foreign keys", str(cm.exception))
+        self.assertEqual(
+            {obj.pk for obj in cm.exception.protected_objects},
+            {ref1.pk, ref2.pk},
+        )
+
     async def test_restrict_raises(self):
         author = await DeleteAuthorModel.async_objects.acreate(name="A")
         await DeleteRestrictedModel.async_objects.acreate(author=author)
@@ -150,19 +175,40 @@ class TestADelete(AsyncioTestCase):
 
     async def test_set_null(self):
         author = await DeleteAuthorModel.async_objects.acreate(name="A")
-        ref = await DeleteSetNullModel.async_objects.acreate(author=author)
+        ref1 = await DeleteSetNullModel.async_objects.acreate(author=author)
+        ref2 = await DeleteSetNullModel.async_objects.acreate(author=author)
 
-        await DeleteAuthorModel.async_objects.filter(pk=author.pk).adelete()
+        async with AsyncCaptureQueriesContext(
+            async_connections[DEFAULT_DB_ALIAS]
+        ) as ctx:
+            total, per_model = await DeleteAuthorModel.async_objects.filter(
+                pk=author.pk
+            ).adelete()
 
-        ref = await DeleteSetNullModel.async_objects.aget(pk=ref.pk)
-        self.assertIsNone(ref.author_id)
+        # Updated rows don't count as deleted.
+        self.assertEqual(total, 1)
+        self.assertEqual(per_model, {"test_app.DeleteAuthorModel": 1})
+        # The lazy SET_NULL queryset becomes one bulk UPDATE.
+        updates = [
+            query["sql"]
+            for query in ctx.captured_queries
+            if query["sql"].startswith("UPDATE")
+        ]
+        self.assertEqual(len(updates), 1)
+        for ref in (ref1, ref2):
+            ref = await DeleteSetNullModel.async_objects.aget(pk=ref.pk)
+            self.assertIsNone(ref.author_id)
 
     async def test_set_default(self):
         author = await DeleteAuthorModel.async_objects.acreate(name="A")
         ref = await DeleteSetDefaultModel.async_objects.acreate(author=author)
 
-        await DeleteAuthorModel.async_objects.filter(pk=author.pk).adelete()
+        total, per_model = await DeleteAuthorModel.async_objects.filter(
+            pk=author.pk
+        ).adelete()
 
+        self.assertEqual(total, 1)
+        self.assertEqual(per_model, {"test_app.DeleteAuthorModel": 1})
         ref = await DeleteSetDefaultModel.async_objects.aget(pk=ref.pk)
         self.assertIsNone(ref.author_id)
 
@@ -182,7 +228,10 @@ class TestADelete(AsyncioTestCase):
         self.assertTrue(ctx.captured_queries[0]["sql"].startswith("DELETE"))
 
     async def test_pre_and_post_delete_signals(self):
-        author = await DeleteAuthorModel.async_objects.acreate(name="A")
+        pks = [
+            (await DeleteAuthorModel.async_objects.acreate(name=name)).pk
+            for name in ("A", "B", "C")
+        ]
         seen = []
 
         def pre_receiver(sender, instance, origin, **kwargs):
@@ -200,15 +249,38 @@ class TestADelete(AsyncioTestCase):
             post_delete.disconnect, post_receiver, sender=DeleteAuthorModel
         )
 
-        queryset = DeleteAuthorModel.async_objects.filter(pk=author.pk)
+        queryset = DeleteAuthorModel.async_objects.all()
         await queryset.adelete()
 
+        # pre_delete fires in ascending pk order, post_delete descending.
         self.assertEqual(
             [(kind, pk) for kind, pk, _ in seen],
-            [("pre", author.pk), ("post", author.pk)],
+            [("pre", pk) for pk in pks]
+            + [("post", pk) for pk in reversed(pks)],
         )
         for _, _, origin in seen:
             self.assertIs(origin, queryset)
+
+    async def test_delete_batches_large_querysets(self):
+        # More rows than GET_ITERATOR_CHUNK_SIZE (100); the receiver
+        # disables fast delete so delete_batch has to loop.
+        await GetOrCreateModel.async_objects.abulk_create(
+            [GetOrCreateModel(name=f"n{i}", code=f"c{i}") for i in range(150)]
+        )
+        seen = []
+
+        def receiver(sender, instance, **kwargs):
+            seen.append(instance.pk)
+
+        post_delete.connect(receiver, sender=GetOrCreateModel)
+        self.addCleanup(
+            post_delete.disconnect, receiver, sender=GetOrCreateModel
+        )
+
+        total, _ = await GetOrCreateModel.async_objects.all().adelete()
+
+        self.assertEqual(total, 150)
+        self.assertEqual(len(seen), 150)
 
     async def test_signal_receivers_disable_fast_delete(self):
         # With a receiver connected, GetOrCreateModel can't be
@@ -286,3 +358,26 @@ class TestADeleteOutsideTransaction(AsyncioTransactionTestCase):
 
         self.assertEqual(total, 1)
         self.assertFalse(await GetOrCreateModel.async_objects.aexists())
+
+    async def test_cascade_is_atomic(self):
+        # Books are deleted before the author's post_delete fires; if
+        # adelete ran without a transaction the book DELETE would stay
+        # committed when the receiver raises.
+        author = await DeleteAuthorModel.async_objects.acreate(name="A")
+        await DeleteBookModel.async_objects.acreate(name="B", author=author)
+
+        def receiver(sender, instance, **kwargs):
+            raise RuntimeError("abort delete")
+
+        post_delete.connect(receiver, sender=DeleteAuthorModel)
+        self.addCleanup(
+            post_delete.disconnect, receiver, sender=DeleteAuthorModel
+        )
+
+        with self.assertRaises(RuntimeError):
+            await DeleteAuthorModel.async_objects.filter(
+                pk=author.pk
+            ).adelete()
+
+        self.assertTrue(await DeleteAuthorModel.async_objects.aexists())
+        self.assertTrue(await DeleteBookModel.async_objects.aexists())
