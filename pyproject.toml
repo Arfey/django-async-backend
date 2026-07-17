@@ -39,6 +39,12 @@ repository = "https://github.com/Arfey/django-async-backend"
 python = ">=3.12"
 django = ">=6"
 psycopg = "^3"
+psycopg-binary = {version = "^3", optional = true}
+psycopg-pool = {version = "^3", optional = true}
+
+[tool.poetry.extras]
+binary = ["psycopg-binary"]
+pool = ["psycopg-pool"]
 
 
 [tool.poetry.group.dev.dependencies]
