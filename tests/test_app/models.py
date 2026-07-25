@@ -178,3 +178,18 @@ class GenericFkModel(AsyncModelMixin, models.Model):
 
     class Meta:
         db_table = "generic_fk_model"
+
+
+class M2MTagModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "m2m_tag_model"
+
+
+class M2MOwnerModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    tags = models.ManyToManyField(M2MTagModel, related_name="owners")
+
+    class Meta:
+        db_table = "m2m_owner_model"
