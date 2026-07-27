@@ -441,6 +441,9 @@ module:
 
         _raw_delete:
           to_async: true
+          renames:
+            - name: sql
+              rename: async_sql
           calls:
             - func:
                 attr: execute_sql

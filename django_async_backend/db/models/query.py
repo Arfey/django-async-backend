@@ -965,7 +965,7 @@ class QuerySet(AltersData):
         query. No signals are sent and there is no protection for cascades.
         """
         query = self.query.clone()
-        query.__class__ = sql.DeleteQuery
+        query.__class__ = async_sql.DeleteQuery
         return await query.get_compiler(using).execute_sql(ROW_COUNT)
 
     _raw_delete.alters_data = True
