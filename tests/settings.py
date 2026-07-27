@@ -19,6 +19,7 @@ DATABASES = {
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
+    "django_async_backend",
     "test_app",
 ]
 
