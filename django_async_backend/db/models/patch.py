@@ -23,7 +23,7 @@ _patched = False
 
 def _patch_model():
     global _patched
-    if _patched:
+    if _patched:  # pragma: no cover
         return
     for name, value in _ASYNC_MIXIN_MEMBERS.items():
         setattr(Model, name, value)
