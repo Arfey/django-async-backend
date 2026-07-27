@@ -358,7 +358,7 @@ To change them, edit the codemon config under `codemon/config/*.yaml` — **not*
 the generated files — then regenerate:
 
 ```bash
-lets test_generate
+lets generate
 ```
 
 This restores the Django-derived files to pristine, runs `python -m codemon`,

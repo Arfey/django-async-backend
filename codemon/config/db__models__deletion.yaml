@@ -1,0 +1,181 @@
+pathname: db/models/deletion.py
+
+module:
+  new_imports:
+    - "from inspect import iscoroutinefunction"
+    - "from django.db.models import deletion as django_deletion"
+    - "from django.db.models.deletion import ProtectedError"
+    - "from django.db.models.deletion import RestrictedError"
+    - "from django_async_backend.db import async_connections"
+    - "from django_async_backend.db.transaction import async_atomic"
+    - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
+    - "from django_async_backend.db.models import sql"
+    - "from django_async_backend.db.models.query import QuerySet"
+
+  add_raw_bottom:
+    - |
+      _SYNC_TO_ASYNC_ON_DELETE = {
+          django_deletion.CASCADE: CASCADE,
+          django_deletion.PROTECT: PROTECT,
+          django_deletion.RESTRICT: RESTRICT,
+          django_deletion.SET_NULL: SET_NULL,
+          django_deletion.SET_DEFAULT: SET_DEFAULT,
+          django_deletion.DO_NOTHING: DO_NOTHING,
+      }
+    - |
+      def _resolve_async_on_delete(on_delete):
+          handler = _SYNC_TO_ASYNC_ON_DELETE.get(on_delete)
+
+          if handler is not None:
+              return handler
+
+          deconstruct = getattr(on_delete, "deconstruct", None)
+
+          if deconstruct is not None:
+              path, args, kwargs = deconstruct()
+              if path == "django.db.models.SET":
+                  return SET(*args, **kwargs)
+          if iscoroutinefunction(on_delete):
+              return on_delete
+          raise TypeError(
+              "async delete does not support the synchronous on_delete handler "
+              f"{on_delete!r}. Use a standard Django on_delete or an async "
+              "callable."
+          )
+
+  import_aliases:
+    - name: IntegrityError
+      remove: true
+    - name: connections
+      remove: true
+    - name: transaction
+      remove: true
+    - name: models
+      remove: true
+    - name: sql
+      remove: true
+
+  functions:
+    CASCADE:
+      to_async: true
+      attrs:
+        - name: connections
+          rename:
+            name: async_connections
+      calls:
+        - func:
+            attr: collect
+          to_await: true
+
+    PROTECT:
+      to_async: true
+
+    RESTRICT:
+      to_async: true
+
+    SET:
+      functions:
+        set_on_delete:
+          to_async: true
+
+    SET_NULL:
+      to_async: true
+
+    SET_DEFAULT:
+      to_async: true
+
+    DO_NOTHING:
+      to_async: true
+
+  classes:
+    ProtectedError:
+      remove: true
+
+    RestrictedError:
+      remove: true
+
+    Collector:
+      methods:
+        get_del_batches:
+          attrs:
+            - name: connections
+              rename:
+                name: async_connections
+
+        related_objects:
+          attrs:
+            - name: _base_manager
+              rename:
+                name: _async_base_manager
+
+        clear_restricted_objects_from_queryset:
+          to_async: true
+          calls:
+            - func:
+                name: set
+              to_set_comp:
+                target:
+                  name: obj
+                to_async: true
+
+        collect:
+          to_async: true
+          attrs:
+            - attr: on_delete
+              parent_attr: remote_field
+              wrap: _resolve_async_on_delete
+          boolean_operations:
+            - operands:
+                - name: sub_objs
+                  call: aexists
+                  to_await: true
+          calls:
+            - func:
+                attr: collect
+              to_await: true
+            - func:
+                attr: clear_restricted_objects_from_queryset
+              to_await: true
+            - func:
+                name: on_delete
+              to_await: true
+
+        delete:
+          to_async: true
+          context_managers:
+            - to_async: true
+          attrs:
+            - value: models
+              attr: QuerySet
+              rename:
+                name: QuerySet
+          calls:
+            - func:
+                value: transaction
+                attr: mark_for_rollback_on_error
+                rename:
+                  name: async_mark_for_rollback_on_error
+            - func:
+                value: transaction
+                attr: atomic
+                rename:
+                  name: async_atomic
+            - func:
+                attr: send
+                rename:
+                  attr: asend
+              to_await: true
+            - func:
+                attr: _raw_delete
+              to_await: true
+            - func:
+                attr: update
+                rename:
+                  attr: aupdate
+              to_await: true
+            - func:
+                attr: update_batch
+              to_await: true
+            - func:
+                attr: delete_batch
+              to_await: true

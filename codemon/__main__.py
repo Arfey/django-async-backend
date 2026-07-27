@@ -7,6 +7,7 @@ from libcst import matchers as m
 
 from .utils import (
     Assign,
+    Attr,
     Call,
     Class,
     CompForBlock,
@@ -26,6 +27,91 @@ from .utils import (
 DJANGO_VERSION = "6.0"
 
 
+def attr_matcher(config: Attr) -> m.BaseMatcherNode:
+    """Matcher for a reference expression: a bare Name or an Attribute."""
+    if config.name:
+        return m.Name(config.name)
+
+    if config.value:
+        value = m.Name(config.value)
+    elif config.parent_attr:
+        value = m.Attribute(attr=m.Name(config.parent_attr))
+    else:
+        value = m.DoNotCare()
+
+    return m.Attribute(
+        value=value,
+        attr=m.Name(config.attr) if config.attr else m.DoNotCare(),
+    )
+
+
+def attr_has_changes(config: Attr) -> bool:
+    return bool(config.rename or config.call or config.wrap or config.to_await)
+
+
+def apply_attr(config: Attr, updated_node: cst.BaseExpression):
+    if config.rename:
+        if config.rename.attr:
+            updated_node = updated_node.with_changes(
+                attr=cst.Name(config.rename.attr)
+            )
+
+        if config.rename.value:
+            updated_node = updated_node.with_changes(
+                value=cst.Name(config.rename.value)
+            )
+
+        if config.rename.name:
+            updated_node = cst.Name(
+                config.rename.name,
+                lpar=updated_node.lpar,
+                rpar=updated_node.rpar,
+            )
+
+    if config.call:
+        updated_node = cst.Call(
+            func=cst.Attribute(value=updated_node, attr=cst.Name(config.call))
+        )
+
+    if config.wrap:
+        updated_node = cst.Call(
+            func=cst.Name(config.wrap), args=[cst.Arg(updated_node)]
+        )
+
+    if config.to_await:
+        updated_node = cst.Await(updated_node)
+
+    return updated_node
+
+
+def apply_attrs(original_node, updated_node, attrs):
+    for attr_config in attrs:
+        if m.matches(original_node, attr_matcher(attr_config)):
+            return apply_attr(attr_config, updated_node)
+
+    return updated_node
+
+
+def apply_boolean_operations(
+    original_node, updated_node, boolean_operations
+) -> cst.BooleanOperation:
+    for config in boolean_operations:
+        for operand in config.operands or []:
+            matcher = attr_matcher(operand)
+            changes = {}
+
+            if m.matches(updated_node.left, matcher):
+                changes["left"] = apply_attr(operand, updated_node.left)
+
+            if m.matches(updated_node.right, matcher):
+                changes["right"] = apply_attr(operand, updated_node.right)
+
+            if changes:
+                updated_node = updated_node.with_changes(**changes)
+
+    return updated_node
+
+
 def assignment_transformer(config: Assign) -> cst.CSTTransformer:
     class AssignmentTransformed(m.MatcherDecoratableTransformer):
         @m.leave(m.Assign())
@@ -35,25 +121,20 @@ def assignment_transformer(config: Assign) -> cst.CSTTransformer:
             if config.remove:
                 return cst.RemoveFromParent()
 
-            if config.rename:
-                new_name = cst.Name(config.rename)
-                new_targets = []
-                for target in updated_node.targets:
-                    if isinstance(target.target, cst.Attribute) and isinstance(
-                        target.target.value, cst.Name
-                    ) and target.target.value.value == config.target.name:
-                        new_targets.append(
-                            target.with_changes(
-                                target=target.target.with_changes(
-                                    value=new_name
-                                )
-                            )
-                        )
-                    else:
-                        new_targets.append(target)
-                updated_node = updated_node.with_changes(targets=new_targets)
+            matcher = attr_matcher(config.target)
 
-            return updated_node
+            return updated_node.with_changes(
+                targets=[
+                    (
+                        target.with_changes(
+                            target=apply_attr(config.target, target.target)
+                        )
+                        if m.matches(target.target, matcher)
+                        else target
+                    )
+                    for target in updated_node.targets
+                ]
+            )
 
     return AssignmentTransformed()
 
@@ -96,7 +177,7 @@ def call_transformer(config: Call) -> cst.CSTTransformer:
         @m.leave(m.Call())
         def leave_call(
             self, original_node: cst.Call, updated_node: cst.Call
-        ) -> cst.Await:
+        ) -> cst.BaseExpression:
             if config.replace_raw:
                 updated_node = (
                     cst.parse_module(dedent(config.replace_raw))
@@ -105,25 +186,23 @@ def call_transformer(config: Call) -> cst.CSTTransformer:
                     .value
                 )
 
-            if config.rename:
-                if config.rename.func and config.rename.func.attr:
-                    updated_node = updated_node.with_changes(
-                        func=updated_node.func.with_changes(
-                            attr=cst.Name(config.rename.func.attr)
-                        )
-                    )
+            if config.func and attr_has_changes(config.func):
+                updated_node = updated_node.with_changes(
+                    func=apply_attr(config.func, updated_node.func)
+                )
 
-                if config.rename.func and config.rename.func.value:
-                    updated_node = updated_node.with_changes(
-                        func=updated_node.func.with_changes(
-                            value=cst.Name(config.rename.func.value)
-                        )
-                    )
-
-                if config.rename.func and config.rename.func.name:
-                    updated_node = updated_node.with_changes(
-                        func=cst.Name(config.rename.func.name)
-                    )
+            if config.to_set_comp:
+                comp = config.to_set_comp
+                updated_node = cst.SetComp(
+                    elt=cst.Name(comp.target.name),
+                    for_in=cst.CompFor(
+                        target=cst.Name(comp.target.name),
+                        iter=updated_node.args[0].value,
+                        asynchronous=(
+                            cst.Asynchronous() if comp.to_async else None
+                        ),
+                    ),
+                )
 
             if config.to_await:
                 updated_node = cst.Await(updated_node)
@@ -131,6 +210,39 @@ def call_transformer(config: Call) -> cst.CSTTransformer:
             return updated_node
 
     return CallTransformed()
+
+
+def apply_calls(original_node, updated_node, calls):
+    for call_config in calls:
+        args = m.DoNotCare()
+
+        if call_config.args:
+            args = [m.ZeroOrMore()]
+
+            for arg in call_config.args:
+                if isinstance(arg, Call) and arg.func:
+                    args.append(
+                        m.Arg(value=m.Call(func=attr_matcher(arg.func)))
+                    )
+                else:
+                    raise Exception("unhandled")
+
+            args.append(m.ZeroOrMore())
+
+        matcher = m.Call(
+            func=(
+                attr_matcher(call_config.func)
+                if call_config.func
+                else m.DoNotCare()
+            ),
+            args=args,
+        )
+
+        if m.matches(original_node, matcher):
+            updated_node = updated_node.visit(call_transformer(call_config))
+            break
+
+    return updated_node
 
 
 def context_manager_transformer(config: ContextManagers) -> cst.CSTTransformer:
@@ -250,23 +362,8 @@ def apply_return_blocks(original_node, updated_node, return_blocks):
     for return_config in return_blocks:
         if return_config.call and return_config.call.func:
             matcher = m.Return(
-                m.Call(
-                    func=m.Attribute(
-                        attr=(
-                            m.Name(return_config.call.func.attr)
-                            if return_config.call.func.attr
-                            else m.DoNotCare()
-                        ),
-                        value=(
-                            m.Name(return_config.call.func.value)
-                            if return_config.call.func.value
-                            else m.DoNotCare()
-                        ),
-                    )
-                )
+                m.Call(func=attr_matcher(return_config.call.func))
             )
-        elif return_config.call and return_config.call.name:
-            matcher = m.Return(m.Call(func=m.Name(return_config.call.name)))
         else:
             matcher = m.Return()
         if m.matches(original_node, matcher):
@@ -296,6 +393,9 @@ def apply_for_statements(original_node, updated_node, for_statements):
 
 
 def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
+    name_attrs = [attr for attr in config.attrs or [] if attr.name]
+    node_attrs = [attr for attr in config.attrs or [] if not attr.name]
+
     class FunctionTransformed(m.MatcherDecoratableTransformer):
         if config.for_statements:
             @m.leave(m.For())
@@ -347,40 +447,68 @@ def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
             ) -> cst.FunctionDef:
                 return updated_node.with_changes(name=cst.Name(config.rename))
 
+        if config.functions:
+
+            @m.leave(
+                m.FunctionDef(
+                    name=m.OneOf(
+                        *[m.Name(name) for name in config.functions.keys()]
+                    ),
+                )
+            )
+            def nested_functions(
+                self,
+                original_node: cst.FunctionDef,
+                updated_node: cst.FunctionDef,
+            ) -> cst.FunctionDef | cst.RemovalSentinel:
+                nested_name = original_node.name.value
+
+                if nested_name == name:
+                    return updated_node
+
+                return updated_node.visit(
+                    function_transformer(
+                        nested_name, config.functions[nested_name]
+                    )
+                )
+
+        if name_attrs:
+
+            @m.leave(m.Name())
+            def attr_names(
+                self, original_node: cst.Name, updated_node: cst.Name
+            ) -> cst.BaseExpression:
+                return apply_attrs(original_node, updated_node, name_attrs)
+
+        if node_attrs:
+
+            @m.leave(m.Attribute())
+            def attr_nodes(
+                self,
+                original_node: cst.Attribute,
+                updated_node: cst.Attribute,
+            ) -> cst.BaseExpression:
+                return apply_attrs(original_node, updated_node, node_attrs)
+
+        if config.boolean_operations:
+
+            @m.leave(m.BooleanOperation())
+            def boolean_operations(
+                self,
+                original_node: cst.BooleanOperation,
+                updated_node: cst.BooleanOperation,
+            ) -> cst.BooleanOperation:
+                return apply_boolean_operations(
+                    original_node, updated_node, config.boolean_operations
+                )
+
         if config.calls:
 
             @m.leave(m.Call())
             def calls(
                 self, original_node: cst.Call, updated_node: cst.Call
-            ) -> cst.Await | cst.Call:
-                for call_config in config.calls:
-                    if call_config.func:
-                        matcher = m.Call(
-                            func=m.Attribute(
-                                attr=(
-                                    m.Name(call_config.func.attr)
-                                    if call_config.func.attr
-                                    else m.DoNotCare()
-                                ),
-                                value=(
-                                    m.Name(call_config.func.value)
-                                    if call_config.func.value
-                                    else m.DoNotCare()
-                                ),
-                            )
-                        )
-                    elif call_config.name:
-                        matcher = m.Call(func=m.Name(call_config.name))
-                    else:
-                        matcher = m.Call()
-
-                    if m.matches(original_node, matcher):
-                        updated_node = updated_node.visit(
-                            call_transformer(call_config)
-                        )
-                        break
-
-                return updated_node
+            ) -> cst.BaseExpression:
+                return apply_calls(original_node, updated_node, config.calls)
 
         if config.add_raw_top:
 
@@ -408,6 +536,9 @@ def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
 
 
 def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
+    name_attrs = [attr for attr in config.attrs or [] if attr.name]
+    node_attrs = [attr for attr in config.attrs or [] if not attr.name]
+
     class MethodTransformed(m.MatcherDecoratableTransformer):
 
         if config.return_blocks:
@@ -457,84 +588,38 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
             @m.leave(m.Call())
             def calls(
                 self, original_node: cst.Call, updated_node: cst.Call
-            ) -> cst.Await | cst.Call:
-                for call_config in config.calls:
-                    args = []
-                    if call_config.args:
-                        args = [m.ZeroOrMore()]
+            ) -> cst.BaseExpression:
+                return apply_calls(original_node, updated_node, config.calls)
 
-                        for arg in call_config.args:
-                            if isinstance(arg, Call) and arg.func:
-                                args.append(
-                                    m.Arg(
-                                        value=m.Call(
-                                            func=m.Attribute(
-                                                attr=(
-                                                    m.Name(arg.func.attr)
-                                                    if arg.func.attr
-                                                    else m.DoNotCare()
-                                                ),
-                                                value=(
-                                                    m.Name(arg.func.value)
-                                                    if arg.func.value
-                                                    else m.DoNotCare()
-                                                ),
-                                            )
-                                        )
-                                    )
-                                )
-                            else:
-                                raise Exception("unhandled")
-
-                        args.append(m.ZeroOrMore())
-
-                    if call_config.func:
-                        matcher = m.Call(
-                            func=m.Attribute(
-                                attr=(
-                                    m.Name(call_config.func.attr)
-                                    if call_config.func.attr
-                                    else m.DoNotCare()
-                                ),
-                                value=(
-                                    m.Name(call_config.func.value)
-                                    if call_config.func.value
-                                    else m.DoNotCare()
-                                ),
-                            ),
-                            args=args if call_config.args else m.DoNotCare(),
-                        )
-                    elif call_config.name:
-                        matcher = m.Call(
-                            func=m.Name(call_config.name),
-                            args=args if call_config.args else m.DoNotCare(),
-                        )
-                    else:
-                        matcher = m.Call(
-                            args=args if call_config.args else m.DoNotCare()
-                        )
-
-                    if m.matches(original_node, matcher):
-                        updated_node = updated_node.visit(
-                            call_transformer(call_config)
-                        )
-                        break
-
-                return updated_node
-
-        if config.renames:
+        if name_attrs:
 
             @m.leave(m.Name())
-            def renames(
+            def attr_names(
                 self, original_node: cst.Name, updated_node: cst.Name
-            ) -> cst.Name:
-                for rename_config in config.renames:
-                    if updated_node.value == rename_config.name:
-                        return updated_node.with_changes(
-                            value=rename_config.rename
-                        )
+            ) -> cst.BaseExpression:
+                return apply_attrs(original_node, updated_node, name_attrs)
 
-                return updated_node
+        if node_attrs:
+
+            @m.leave(m.Attribute())
+            def attr_nodes(
+                self,
+                original_node: cst.Attribute,
+                updated_node: cst.Attribute,
+            ) -> cst.BaseExpression:
+                return apply_attrs(original_node, updated_node, node_attrs)
+
+        if config.boolean_operations:
+
+            @m.leave(m.BooleanOperation())
+            def boolean_operations(
+                self,
+                original_node: cst.BooleanOperation,
+                updated_node: cst.BooleanOperation,
+            ) -> cst.BooleanOperation:
+                return apply_boolean_operations(
+                    original_node, updated_node, config.boolean_operations
+                )
 
         if config.context_managers:
 
@@ -696,23 +781,13 @@ def class_transformer(name: str, config: Class) -> cst.CSTTransformer:
                 self, original_node: cst.Assign, updated_node: cst.Assign
             ) -> cst.RemovalSentinel | cst.Assign:
                 for assign_config in config.assigns:
-                    if assign_config.target.name:
-                        matcher = m.Assign(
-                            targets=[
-                                m.ZeroOrMore(),
-                                m.AssignTarget(
-                                    m.OneOf(
-                                        m.Attribute(
-                                            m.Name(assign_config.target.name)
-                                        ),
-                                        m.Name(assign_config.target.name),
-                                    )
-                                ),
-                                m.ZeroOrMore(),
-                            ]
-                        )
-                    else:
-                        matcher = m.Assign()
+                    matcher = m.Assign(
+                        targets=[
+                            m.ZeroOrMore(),
+                            m.AssignTarget(attr_matcher(assign_config.target)),
+                            m.ZeroOrMore(),
+                        ]
+                    )
 
                     if m.matches(original_node, matcher):
                         updated_node = updated_node.visit(
@@ -842,27 +917,16 @@ def module_transformer(config: Module) -> cst.CSTTransformer:
                         for assign_config in config.assigns:
                             if not assign_config.remove:
                                 continue
-                            if assign_config.target.name:
-                                matcher = m.Assign(
-                                    targets=[
-                                        m.ZeroOrMore(),
-                                        m.AssignTarget(
-                                            m.OneOf(
-                                                m.Attribute(
-                                                    m.Name(
-                                                        assign_config.target.name
-                                                    )
-                                                ),
-                                                m.Name(
-                                                    assign_config.target.name
-                                                ),
-                                            )
-                                        ),
-                                        m.ZeroOrMore(),
-                                    ]
-                                )
-                            else:
-                                matcher = m.Assign()
+
+                            matcher = m.Assign(
+                                targets=[
+                                    m.ZeroOrMore(),
+                                    m.AssignTarget(
+                                        attr_matcher(assign_config.target)
+                                    ),
+                                    m.ZeroOrMore(),
+                                ]
+                            )
 
                             if any(
                                 m.matches(stmt, matcher) for stmt in item.body

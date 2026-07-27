@@ -19,59 +19,63 @@ module:
     QuerySet:
       assigns:
         - target:
-            name: create
-          rename: acreate
+            value: create
+            rename:
+              value: acreate
 
         - target:
-            name: bulk_update
+            value: bulk_update
           remove: true
 
         - target:
-            name: get_or_create
-          rename: aget_or_create
+            value: get_or_create
+            rename:
+              value: aget_or_create
 
         - target:
-            name: update
-          rename: aupdate
+            value: update
+            rename:
+              value: aupdate
 
         - target:
-            name: update_or_create
+            value: update_or_create
           remove: true
 
         - target:
-            name: bulk_create
-          rename: abulk_create
+            value: bulk_create
+            rename:
+              value: abulk_create
 
         - target:
-            name: delete
+            value: delete
           remove: true
 
         - target:
-            name: acreate
+            value: acreate
           remove: true
 
         - target:
-            name: abulk_create
+            value: abulk_create
           remove: true
 
         - target:
-            name: abulk_update
+            value: abulk_update
           remove: true
 
         - target:
-            name: aget_or_create
+            value: aget_or_create
           remove: true
 
         - target:
-            name: aupdate_or_create
+            value: aupdate_or_create
           remove: true
 
         - target:
-            name: adelete
+            value: adelete
           remove: true
 
         - target:
-            name: aupdate
+            value: aupdate
           remove: true
 
       methods:
@@ -79,8 +83,7 @@ module:
           calls:
             - func:
                 attr: Query
-              rename:
-                func:
+                rename:
                   value: async_sql
 
         __getitem__:
@@ -119,7 +122,8 @@ module:
         _prefetch_related_objects:
           to_async: true
           calls:
-            - name: prefetch_related_objects
+            - func:
+                name: prefetch_related_objects
               to_await: true
 
         aexplain:
@@ -249,7 +253,8 @@ module:
           to_async: true
           rename: aget
           calls:
-            - name: len
+            - func:
+                name: len
               replace_raw: 'len([i async for i in clone])'
 
         create:
@@ -258,17 +263,17 @@ module:
           calls:
             - func:
                 attr: save
-              rename:
-                func:
+                rename:
                   attr: async_save
               to_await: true
 
         bulk_create:
           to_async: true
           rename: abulk_create
-          renames:
+          attrs:
             - name: connections
-              rename: async_connections
+              rename:
+                name: async_connections
           context_managers:
             - to_async: true
           calls:
@@ -278,8 +283,7 @@ module:
             - func:
                 value: transaction
                 attr: atomic
-              rename:
-                func:
+                rename:
                   name: async_atomic
             - func:
                 attr: _batched_insert
@@ -289,9 +293,10 @@ module:
           to_async: true
           # _base_manager runs a sync query; _async_base_manager is its async
           # twin, and the values_list result is consumed with `async for`.
-          renames:
+          attrs:
             - name: _base_manager
-              rename: _async_base_manager
+              rename:
+                name: _async_base_manager
           calls:
             - func:
                 value: group_next_orders
@@ -317,20 +322,17 @@ module:
           calls:
             - func:
                 attr: get
-              rename:
-                func:
+                rename:
                   attr: aget
               to_await: true
             - func:
                 value: transaction
                 attr: atomic
-              rename:
-                func:
+                rename:
                   name: async_atomic
             - func:
                 attr: create
-              rename:
-                func:
+                rename:
                   attr: acreate
               to_await: true
 
@@ -387,8 +389,7 @@ module:
           calls:
             - func:
                 attr: get
-              rename:
-                func:
+                rename:
                   attr: aget
 
         earliest:
@@ -406,7 +407,8 @@ module:
               to_async: true
 
           calls:
-            - name: tuple
+            - func:
+                name: tuple
               args:
                 - func:
                     attr: filter
@@ -441,9 +443,10 @@ module:
 
         _raw_delete:
           to_async: true
-          renames:
+          attrs:
             - name: sql
-              rename: async_sql
+              rename:
+                name: async_sql
           calls:
             - func:
                 attr: execute_sql
@@ -467,8 +470,7 @@ module:
           calls:
             - func:
                 attr: InsertQuery
-              rename:
-                func:
+                rename:
                   value: async_sql
             - func:
                 attr: execute_sql
@@ -482,8 +484,7 @@ module:
             - func:
                 value: transaction
                 attr: atomic
-              rename:
-                func:
+                rename:
                   name: async_atomic
             - func:
                 attr: _insert
@@ -491,13 +492,15 @@ module:
 
         __aiter__:
           calls:
-            - name: sync_to_async
+            - func:
+                name: sync_to_async
               replace_raw: self._fetch_all
 
         _fetch_all:
           to_async: true
           calls:
-            - name: list
+            - func:
+                name: list
               replace_raw: list([i async for i in self._iterable_class(self)])
             - func:
                 value: self
@@ -568,8 +571,7 @@ module:
           calls:
             - func:
                 attr: __iter__
-              rename:
-                func:
+                rename:
                   attr: __aiter__
 
     FlatValuesListIterable:

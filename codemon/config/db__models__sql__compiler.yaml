@@ -8,7 +8,8 @@ module:
         - func:
             attr: close
           to_await: true
-        - name: iter
+        - func:
+            name: iter
           replace_raw: fetchmany_iter()
       for_statements:
         - target: rows
@@ -29,7 +30,8 @@ module:
           return_blocks:
             - replace_raw: '[i async for i in result]'
               call:
-                name: list
+                func:
+                  name: list
 
           calls:
             - func:
@@ -48,7 +50,8 @@ module:
                 value: cursor
                 attr: close
               to_await: true
-            - name: iter
+            - func:
+                name: iter
               replace_raw: '[]'
 
         has_results:
