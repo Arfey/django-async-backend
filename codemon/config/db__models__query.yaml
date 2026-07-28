@@ -25,7 +25,8 @@ module:
 
         - target:
             value: bulk_update
-          remove: true
+            rename:
+              value: abulk_update
 
         - target:
             value: get_or_create
@@ -267,6 +268,21 @@ module:
                   attr: async_save
               to_await: true
 
+        _prepare_for_bulk_create:
+          to_async: true
+          calls:
+            - func:
+                value: obj
+                attr: _is_pk_set
+                rename:
+                  attr: _async_is_pk_set
+            - func:
+                value: obj
+                attr: _prepare_related_fields_for_save
+                rename:
+                  attr: _async_prepare_related_fields_for_save
+              to_await: true
+
         bulk_create:
           to_async: true
           rename: abulk_create
@@ -277,6 +293,9 @@ module:
           context_managers:
             - to_async: true
           calls:
+            - func:
+                attr: _prepare_for_bulk_create
+              to_await: true
             - func:
                 attr: _handle_order_with_respect_to
               to_await: true
@@ -310,9 +329,40 @@ module:
                 )
 
         bulk_update:
-          # to_async: true
-          # rename: abulk_update
-          remove: true
+          to_async: true
+          rename: abulk_update
+          attrs:
+            - name: connections
+              rename:
+                name: async_connections
+          context_managers:
+            - to_async: true
+          calls:
+            - func:
+                value: obj
+                attr: _is_pk_set
+                rename:
+                  attr: _async_is_pk_set
+            - func:
+                value: obj
+                attr: _prepare_related_fields_for_save
+                rename:
+                  attr: _async_prepare_related_fields_for_save
+              to_await: true
+            # guard: keeps the set's `all_pk_fields.update()` untouched
+            - func:
+                value: all_pk_fields
+                attr: update
+            - func:
+                attr: update
+                rename:
+                  attr: aupdate
+              to_await: true
+            - func:
+                value: transaction
+                attr: atomic
+                rename:
+                  name: async_atomic
 
         get_or_create:
           to_async: true
