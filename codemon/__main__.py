@@ -51,6 +51,19 @@ def attr_has_changes(config: Attr) -> bool:
         or config.to_call_method
         or config.wrap
         or config.to_await
+        or config.to_async_comp
+    )
+
+
+def to_async_comp(node: cst.BaseExpression, target: str) -> cst.ListComp:
+    """``<iterable>`` -> ``[obj async for obj in <iterable>]``."""
+    return cst.ListComp(
+        elt=cst.Name(target),
+        for_in=cst.CompFor(
+            target=cst.Name(target),
+            iter=node,
+            asynchronous=cst.Asynchronous(),
+        ),
     )
 
 
@@ -98,10 +111,19 @@ def apply_attr(config: Attr, updated_node: cst.BaseExpression):
             func=cst.Name(config.wrap), args=[cst.Arg(updated_node)]
         )
 
+    if config.to_async_comp:
+        updated_node = to_async_comp(updated_node, config.to_async_comp)
+
     if config.to_await:
         updated_node = cst.Await(updated_node)
 
     return updated_node
+
+
+def attr_needs_call(config: Attr) -> bool:
+    """``to_async_comp`` iterates the call a reference heads, not the
+    reference, so those attrs are matched on a call's ``func`` instead."""
+    return bool(config.to_async_comp)
 
 
 def apply_attrs(original_node, updated_node, attrs):
@@ -189,6 +211,31 @@ def apply_comp_for_statements(original_node, updated_node, for_statements):
     return updated_node
 
 
+def arg_matcher(config: Attr) -> m.BaseMatcherNode:
+    """Matcher for an argument: a call on the reference, or the reference."""
+    matcher = attr_matcher(config)
+
+    return m.Arg(value=m.Call(func=matcher) | matcher)
+
+
+def apply_args(original_node: cst.Call, updated_node: cst.Call, config: Attr):
+    """Applies attr actions to the matching argument of a call."""
+    return updated_node.with_changes(
+        args=[
+            (
+                updated_arg.with_changes(
+                    value=apply_attr(config, updated_arg.value)
+                )
+                if m.matches(original_arg, arg_matcher(config))
+                else updated_arg
+            )
+            for original_arg, updated_arg in zip(
+                original_node.args, updated_node.args
+            )
+        ]
+    )
+
+
 def call_transformer(config: Call) -> cst.CSTTransformer:
     class CallTransformed(m.MatcherDecoratableTransformer):
         def visit_Call(self, node: cst.Call) -> bool:
@@ -211,18 +258,11 @@ def call_transformer(config: Call) -> cst.CSTTransformer:
                     func=apply_attr(config.func, updated_node.func)
                 )
 
-            if config.to_set_comp:
-                comp = config.to_set_comp
-                updated_node = cst.SetComp(
-                    elt=cst.Name(comp.target.name),
-                    for_in=cst.CompFor(
-                        target=cst.Name(comp.target.name),
-                        iter=updated_node.args[0].value,
-                        asynchronous=(
-                            cst.Asynchronous() if comp.to_async else None
-                        ),
-                    ),
-                )
+            for arg_config in config.args or []:
+                if arg_config.func and attr_has_changes(arg_config.func):
+                    updated_node = apply_args(
+                        original_node, updated_node, arg_config.func
+                    )
 
             if config.to_await:
                 updated_node = cst.Await(updated_node)
@@ -241,9 +281,7 @@ def apply_calls(original_node, updated_node, calls):
 
             for arg in call_config.args:
                 if isinstance(arg, Call) and arg.func:
-                    args.append(
-                        m.Arg(value=m.Call(func=attr_matcher(arg.func)))
-                    )
+                    args.append(arg_matcher(arg.func))
                 else:
                     raise Exception("unhandled")
 
@@ -380,13 +418,7 @@ def add_raw_bottom_to_function(updated_node, add_raw_top):
 
 def apply_return_blocks(original_node, updated_node, return_blocks):
     for return_config in return_blocks:
-        if return_config.call and return_config.call.func:
-            matcher = m.Return(
-                m.Call(func=attr_matcher(return_config.call.func))
-            )
-        else:
-            matcher = m.Return()
-        if m.matches(original_node, matcher):
+        if m.matches(original_node, m.Return()):
             updated_node = updated_node.visit(
                 return_transformer(return_config)
             )
@@ -413,8 +445,10 @@ def apply_for_statements(original_node, updated_node, for_statements):
 
 
 def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
-    name_attrs = [attr for attr in config.attrs or [] if attr.name]
-    node_attrs = [attr for attr in config.attrs or [] if not attr.name]
+    attrs = [attr for attr in config.attrs or [] if not attr_needs_call(attr)]
+    name_attrs = [attr for attr in attrs if attr.name]
+    node_attrs = [attr for attr in attrs if not attr.name]
+    call_attrs = [attr for attr in config.attrs or [] if attr_needs_call(attr)]
 
     class FunctionTransformed(m.MatcherDecoratableTransformer):
         if config.for_statements:
@@ -522,13 +556,20 @@ def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
                     original_node, updated_node, config.boolean_operations
                 )
 
-        if config.calls:
+        if config.calls or call_attrs:
 
             @m.leave(m.Call())
             def calls(
                 self, original_node: cst.Call, updated_node: cst.Call
             ) -> cst.BaseExpression:
-                return apply_calls(original_node, updated_node, config.calls)
+                if config.calls:
+                    updated_node = apply_calls(
+                        original_node, updated_node, config.calls
+                    )
+
+                return apply_attrs(
+                    original_node.func, updated_node, call_attrs
+                )
 
         if config.add_raw_top:
 
@@ -556,8 +597,10 @@ def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
 
 
 def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
-    name_attrs = [attr for attr in config.attrs or [] if attr.name]
-    node_attrs = [attr for attr in config.attrs or [] if not attr.name]
+    attrs = [attr for attr in config.attrs or [] if not attr_needs_call(attr)]
+    name_attrs = [attr for attr in attrs if attr.name]
+    node_attrs = [attr for attr in attrs if not attr.name]
+    call_attrs = [attr for attr in config.attrs or [] if attr_needs_call(attr)]
 
     class MethodTransformed(m.MatcherDecoratableTransformer):
 
@@ -603,13 +646,20 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
                     asynchronous=cst.Asynchronous()
                 )
 
-        if config.calls:
+        if config.calls or call_attrs:
 
             @m.leave(m.Call())
             def calls(
                 self, original_node: cst.Call, updated_node: cst.Call
             ) -> cst.BaseExpression:
-                return apply_calls(original_node, updated_node, config.calls)
+                if config.calls:
+                    updated_node = apply_calls(
+                        original_node, updated_node, config.calls
+                    )
+
+                return apply_attrs(
+                    original_node.func, updated_node, call_attrs
+                )
 
         if name_attrs:
 

@@ -256,7 +256,10 @@ module:
           calls:
             - func:
                 name: len
-              replace_raw: 'len([i async for i in clone])'
+              args:
+                - func:
+                    name: clone
+                    to_async_comp: i
 
         create:
           to_async: true
@@ -548,10 +551,11 @@ module:
 
         _fetch_all:
           to_async: true
+          attrs:
+            - value: self
+              attr: _iterable_class
+              to_async_comp: i
           calls:
-            - func:
-                name: list
-              replace_raw: list([i async for i in self._iterable_class(self)])
             - func:
                 value: self
                 attr: _prefetch_related_objects

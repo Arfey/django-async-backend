@@ -35,6 +35,10 @@ class Attr(BaseModel):
     to_call_method: MethodCall | None = None
     wrap: str | None = None
     to_await: bool = False
+    # Iterate the call headed by this reference asynchronously. The value is
+    # the comprehension variable, so ``obj`` on ``qs.filter`` turns
+    # ``qs.filter(...)`` into ``[obj async for obj in qs.filter(...)]``.
+    to_async_comp: str | None = None
 
 
 class BooleanOperation(BaseModel):
@@ -67,8 +71,6 @@ class Call(BaseModel):
     func: Attr | None = None
     replace_raw: str | None = None
     args: list[Call] | None = None
-    # ``set(<iterable>)`` -> ``{obj async for obj in <iterable>}``
-    to_set_comp: CompForBlock | None = None
 
 
 class ReturnBlock(BaseModel):

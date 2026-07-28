@@ -27,13 +27,13 @@ module:
       methods:
         execute_sql:
           to_async: true
-          return_blocks:
-            - replace_raw: '[i async for i in result]'
-              call:
-                func:
-                  name: list
-
           calls:
+            - func:
+                name: list
+              args:
+                - func:
+                    name: result
+                    to_async_comp: i
             - func:
                 attr: chunked_cursor
               to_await: true

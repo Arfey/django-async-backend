@@ -1800,7 +1800,7 @@ class SQLCompiler:
             # structure as normally, but ensure it is all read into memory
             # before going any further. Use chunked_fetch if requested,
             # unless the database doesn't support it.
-            return [i async for i in result]
+            return list([i async for i in result])
         return result
 
     async def explain_query(self):

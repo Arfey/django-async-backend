@@ -33,8 +33,7 @@ module:
 
         explain:
           to_async: true
-          return_blocks:
-            - replace_raw: '"\n".join([i async for i in compiler.explain_query()])'
-              call:
-                func:
-                  attr: join
+          attrs:
+            - value: compiler
+              attr: explain_query
+              to_async_comp: i

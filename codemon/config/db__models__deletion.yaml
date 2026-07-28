@@ -110,13 +110,10 @@ module:
 
         clear_restricted_objects_from_queryset:
           to_async: true
-          calls:
-            - func:
-                name: set
-              to_set_comp:
-                target:
-                  name: obj
-                to_async: true
+          attrs:
+            - value: qs
+              attr: filter
+              to_async_comp: obj
 
         collect:
           to_async: true
