@@ -17,14 +17,22 @@ class RenameAttr(BaseModel):
     name: str | None = None
 
 
+class MethodCall(BaseModel):
+    name: str
+    # Raw source for each argument, e.g. ``obj``, ``flat=True``, ``*rest``.
+    args: list[str] | None = None
+
+
 class Attr(BaseModel):
     name: str | None = None
     value: str | None = None
     parent_attr: str | None = None
     attr: str | None = None
 
+    # actions
     rename: RenameAttr | None = None
-    call: str | None = None
+    # ``<node>`` -> ``<node>.<name>(<args>)``
+    to_call_method: MethodCall | None = None
     wrap: str | None = None
     to_await: bool = False
 
@@ -66,7 +74,6 @@ class Call(BaseModel):
 class ReturnBlock(BaseModel):
     replace_raw: str | None = None
     remove: bool = False
-    call: Call | None = None
 
 
 class Assign(BaseModel):

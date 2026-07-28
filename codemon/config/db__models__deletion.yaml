@@ -127,7 +127,8 @@ module:
           boolean_operations:
             - operands:
                 - name: sub_objs
-                  call: aexists
+                  to_call_method:
+                    name: aexists
                   to_await: true
           calls:
             - func:

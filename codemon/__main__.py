@@ -46,7 +46,24 @@ def attr_matcher(config: Attr) -> m.BaseMatcherNode:
 
 
 def attr_has_changes(config: Attr) -> bool:
-    return bool(config.rename or config.call or config.wrap or config.to_await)
+    return bool(
+        config.rename
+        or config.to_call_method
+        or config.wrap
+        or config.to_await
+    )
+
+
+def call_args(args: list[str] | None) -> list[cst.Arg]:
+    """Parse raw argument sources, so kwargs and unpacking keep working."""
+    if not args:
+        return []
+
+    call = cst.ensure_type(
+        cst.parse_expression(f"_({', '.join(args)})"), cst.Call
+    )
+
+    return list(call.args)
 
 
 def apply_attr(config: Attr, updated_node: cst.BaseExpression):
@@ -68,9 +85,12 @@ def apply_attr(config: Attr, updated_node: cst.BaseExpression):
                 rpar=updated_node.rpar,
             )
 
-    if config.call:
+    if config.to_call_method:
         updated_node = cst.Call(
-            func=cst.Attribute(value=updated_node, attr=cst.Name(config.call))
+            func=cst.Attribute(
+                value=updated_node, attr=cst.Name(config.to_call_method.name)
+            ),
+            args=call_args(config.to_call_method.args),
         )
 
     if config.wrap:
