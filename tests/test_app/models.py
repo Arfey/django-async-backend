@@ -403,3 +403,35 @@ class DoNothingChildModel(AsyncModelMixin, models.Model):
 
     class Meta:
         db_table = "do_nothing_child_model"
+
+
+class MultiLevelDeleteModel(AsyncModelMixin, models.Model):
+    """Cascade chain deep enough for the collector to walk its own relations
+    more than once, which queues one field update per level.
+    """
+
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        related_name="children",
+    )
+
+    class Meta:
+        db_table = "multi_level_delete_model"
+
+
+class MultiLevelSetNullChildModel(AsyncModelMixin, models.Model):
+    """SET_NULL defers its sub_objs, so every visit queues another queryset."""
+
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        MultiLevelDeleteModel,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="set_null_children",
+    )
+
+    class Meta:
+        db_table = "multi_level_set_null_child_model"

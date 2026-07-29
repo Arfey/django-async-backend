@@ -11,6 +11,8 @@ from test_app.models import (
     DeleteModel,
     DoNothingChildModel,
     FastDeleteModel,
+    MultiLevelDeleteModel,
+    MultiLevelSetNullChildModel,
     ProtectChildModel,
     RestrictChildModel,
     SetCallableChildModel,
@@ -259,6 +261,79 @@ class TestADeleteCascade(AsyncioTestCase):
         self.assertEqual(per_model, {"test_app.DeleteModel": 1})
         child = await DoNothingChildModel.async_objects.aget(name="Child1")
         self.assertEqual(child.parent_id, self.parent.pk)
+
+
+class TestADeleteCombinedFieldUpdates(AsyncioTestCase):
+    """A cascade chain makes the collector walk the same relations once per
+    level, queueing one deferred queryset per level under the same
+    (field, value) key. delete() combines them with `|` into a single update.
+    """
+
+    async def asyncSetUp(self):
+        self.root = MultiLevelDeleteModel(name="Root")
+        await self.root.async_save()
+        self.middle = MultiLevelDeleteModel(name="Middle", parent=self.root)
+        await self.middle.async_save()
+        self.leaf = MultiLevelDeleteModel(name="Leaf", parent=self.middle)
+        await self.leaf.async_save()
+
+    async def add_child(self, name, parent):
+        await MultiLevelSetNullChildModel(
+            name=name, parent=parent
+        ).async_save()
+
+    async def aget_parent_id(self, name):
+        child = await MultiLevelSetNullChildModel.async_objects.aget(name=name)
+        return child.parent_id
+
+    async def test_deletes_chain_without_any_children(self):
+        """SET_NULL defers its sub_objs, so a level queues a queryset even with
+        nothing to update -- the chain alone is enough to combine two of them.
+        """
+        count, per_model = await MultiLevelDeleteModel.async_objects.filter(
+            name="Root"
+        ).adelete()
+
+        self.assertEqual(count, 3)
+        self.assertEqual(per_model, {"test_app.MultiLevelDeleteModel": 3})
+        self.assertEqual(await MultiLevelDeleteModel.async_objects.acount(), 0)
+
+    async def test_nulls_children_of_every_level(self):
+        await self.add_child("RootChild", self.root)
+        await self.add_child("MiddleChild", self.middle)
+        await self.add_child("LeafChild", self.leaf)
+
+        count, per_model = await MultiLevelDeleteModel.async_objects.filter(
+            name="Root"
+        ).adelete()
+
+        self.assertEqual(count, 3)
+        self.assertEqual(per_model, {"test_app.MultiLevelDeleteModel": 3})
+        self.assertIsNone(await self.aget_parent_id("RootChild"))
+        self.assertIsNone(await self.aget_parent_id("MiddleChild"))
+        self.assertIsNone(await self.aget_parent_id("LeafChild"))
+
+    async def test_leaves_children_outside_the_deleted_chain(self):
+        await self.add_child("RootChild", self.root)
+        await self.add_child("MiddleChild", self.middle)
+        await self.add_child("LeafChild", self.leaf)
+
+        count, per_model = await MultiLevelDeleteModel.async_objects.filter(
+            name="Middle"
+        ).adelete()
+
+        self.assertEqual(count, 2)
+        self.assertEqual(per_model, {"test_app.MultiLevelDeleteModel": 2})
+        self.assertEqual(await self.aget_parent_id("RootChild"), self.root.pk)
+        self.assertIsNone(await self.aget_parent_id("MiddleChild"))
+        self.assertIsNone(await self.aget_parent_id("LeafChild"))
+
+    async def test_combines_a_level_with_no_children(self):
+        await self.add_child("LeafChild", self.leaf)
+
+        await MultiLevelDeleteModel.async_objects.filter(name="Root").adelete()
+
+        self.assertIsNone(await self.aget_parent_id("LeafChild"))
 
 
 class TestADeleteCustomOnDelete(AsyncioTestCase):

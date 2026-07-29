@@ -11,6 +11,8 @@ from test_app.models import (
     FastDeleteModel,
     GenericChildModel,
     GenericRelationModel,
+    MultiLevelDeleteModel,
+    MultiLevelSetNullChildModel,
     ParentModel,
     ProtectChildModel,
     RestrictChildModel,
@@ -114,6 +116,44 @@ class TestAsyncDeleteCascade(AsyncioTestCase):
             await self.parent.async_delete()
 
         self.assertEqual(await DeleteModel.async_objects.acount(), 1)
+
+
+class TestAsyncDeleteCombinedFieldUpdates(AsyncioTestCase):
+    """Deleting the head of a cascade chain queues one deferred SET_NULL
+    queryset per level, which delete() combines with `|`.
+    """
+
+    async def asyncSetUp(self):
+        self.root = MultiLevelDeleteModel(name="Root")
+        await self.root.async_save()
+        self.middle = MultiLevelDeleteModel(name="Middle", parent=self.root)
+        await self.middle.async_save()
+
+    async def test_deletes_chain_without_any_children(self):
+        count, per_model = await self.root.async_delete()
+
+        self.assertEqual(count, 2)
+        self.assertEqual(per_model, {"test_app.MultiLevelDeleteModel": 2})
+        self.assertEqual(await MultiLevelDeleteModel.async_objects.acount(), 0)
+
+    async def test_nulls_children_of_every_level(self):
+        await MultiLevelSetNullChildModel(
+            name="RootChild", parent=self.root
+        ).async_save()
+        await MultiLevelSetNullChildModel(
+            name="MiddleChild", parent=self.middle
+        ).async_save()
+
+        count, _ = await self.root.async_delete()
+
+        self.assertEqual(count, 2)
+        parent_ids = [
+            obj.parent_id
+            async for obj in MultiLevelSetNullChildModel.async_objects.order_by(
+                "name"
+            )
+        ]
+        self.assertEqual(parent_ids, [None, None])
 
 
 class TestAsyncDeleteGenericRelation(AsyncioTestCase):
