@@ -184,12 +184,11 @@ module:
                     nullable,
                     reverse_dependency=reverse_dependency,
                 )
-            # only() is not part of the async QuerySet, so the deferred-field
-            # optimization is dropped and every field is fetched instead.
             - func:
                 value: sub_objs
                 attr: only
-              replace_raw: "sub_objs"
+                rename:
+                  attr: _only
             - func:
                 value: field
                 attr: bulk_related_objects

@@ -1,4 +1,7 @@
-from django.db import NotSupportedError
+from django.db import (
+    DEFAULT_DB_ALIAS,
+    NotSupportedError,
+)
 from django.db.models import signals
 from django.db.models.deletion import (
     ProtectedError,
@@ -23,7 +26,11 @@ from test_app.models import (
     TestModel,
 )
 
-from django_async_backend.test import AsyncioTestCase
+from django_async_backend.db import async_connections
+from django_async_backend.test import (
+    AsyncCaptureQueriesContext,
+    AsyncioTestCase,
+)
 
 
 class TestADelete(AsyncioTestCase):
@@ -401,3 +408,55 @@ class TestADeleteSignals(AsyncioTestCase):
                 ("post_delete", "Parent", instance.pk),
             ],
         )
+
+
+class TestADeleteDefersUnreferencedFields(AsyncioTestCase):
+    async def asyncSetUp(self):
+        self.root = MultiLevelDeleteModel(name="Root")
+        await self.root.async_save()
+        self.middle = MultiLevelDeleteModel(name="Middle", parent=self.root)
+        await self.middle.async_save()
+
+    def sub_object_selects(self, captured_queries):
+        """The collector's SELECTs for cascade candidates: they filter on the
+        parent FK and, unlike the aexists() probe, fetch real columns.
+        """
+        return [
+            query["sql"]
+            for query in captured_queries
+            if '"multi_level_delete_model"."parent_id" IN' in query["sql"]
+            and query["sql"].startswith('SELECT "multi_level_delete_model"')
+        ]
+
+    async def test_sub_object_select_fetches_referenced_fields_only(self):
+        async with AsyncCaptureQueriesContext(
+            async_connections[DEFAULT_DB_ALIAS]
+        ) as ctx:
+            await MultiLevelDeleteModel.async_objects.filter(
+                name="Root"
+            ).adelete()
+
+        selects = self.sub_object_selects(ctx.captured_queries)
+
+        self.assertTrue(selects, "Collector should query cascade candidates")
+        for sql in selects:
+            self.assertIn('"multi_level_delete_model"."id"', sql)
+            self.assertNotIn(
+                '"multi_level_delete_model"."name"',
+                sql,
+                "Unreferenced column should be deferred",
+            )
+            self.assertNotIn(
+                '"multi_level_delete_model"."parent_id" FROM',
+                sql,
+                "Unreferenced column should be deferred",
+            )
+
+    async def test_cascade_still_deletes_every_level(self):
+        count, per_model = await MultiLevelDeleteModel.async_objects.filter(
+            name="Root"
+        ).adelete()
+
+        self.assertEqual(count, 2)
+        self.assertEqual(per_model, {"test_app.MultiLevelDeleteModel": 2})
+        self.assertEqual(await MultiLevelDeleteModel.async_objects.acount(), 0)

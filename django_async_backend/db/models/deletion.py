@@ -390,7 +390,7 @@ class Collector:
                             )
                         )
                     )
-                    sub_objs = sub_objs
+                    sub_objs = sub_objs._only(*tuple(referenced_fields))
                 if (
                     getattr(on_delete, "lazy_sub_objs", False)
                     or await sub_objs.aexists()
