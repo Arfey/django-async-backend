@@ -31,6 +31,7 @@ from django_async_backend.db.transaction import (
     async_atomic,
     async_mark_for_rollback_on_error,
 )
+from django_async_backend.utils.contenttypes import aget_for_model
 
 
 async def CASCADE(collector, field, sub_objs, using):
@@ -49,6 +50,9 @@ async def CASCADE(collector, field, sub_objs, using):
 
 
 async def PROTECT(collector, field, sub_objs, using):
+
+    sub_objs = [obj async for obj in sub_objs]
+
     raise ProtectedError(
         "Cannot delete some instances of model '%s' because they are "
         "referenced through a protected foreign key: '%s.%s'"
@@ -62,6 +66,9 @@ async def PROTECT(collector, field, sub_objs, using):
 
 
 async def RESTRICT(collector, field, sub_objs, using):
+
+    sub_objs = [obj async for obj in sub_objs]
+
     collector.add_restricted_objects(field, sub_objs)
     collector.add_dependency(field.remote_field.model, field.model)
 
@@ -218,7 +225,11 @@ class Collector:
         skipping parent -> child -> parent chain preventing fast delete of
         the child.
         """
-        if from_field and from_field.remote_field.on_delete is not CASCADE:
+        if (
+            from_field
+            and _resolve_async_on_delete(from_field.remote_field.on_delete)
+            is not CASCADE
+        ):
             return False
         if hasattr(objs, "_meta"):
             model = objs._meta.model
@@ -239,7 +250,8 @@ class Collector:
             and
             # Foreign keys pointing to this model.
             all(
-                related.field.remote_field.on_delete is DO_NOTHING
+                _resolve_async_on_delete(related.field.remote_field.on_delete)
+                is DO_NOTHING
                 for related in get_candidate_relations_to_delete(opts)
             )
             and (
@@ -304,7 +316,14 @@ class Collector:
             self.fast_deletes.append(objs)
             return
         new_objs = self.add(
-            objs, source, nullable, reverse_dependency=reverse_dependency
+            (
+                [obj async for obj in objs]
+                if isinstance(objs, QuerySet)
+                else objs
+            ),
+            source,
+            nullable,
+            reverse_dependency=reverse_dependency,
         )
         if not new_objs:
             return
@@ -371,7 +390,7 @@ class Collector:
                             )
                         )
                     )
-                    sub_objs = sub_objs.only(*tuple(referenced_fields))
+                    sub_objs = sub_objs
                 if (
                     getattr(on_delete, "lazy_sub_objs", False)
                     or await sub_objs.aexists()
@@ -401,7 +420,9 @@ class Collector:
         for field in model._meta.private_fields:
             if hasattr(field, "bulk_related_objects"):
                 # It's something like generic foreign key.
-                sub_objs = field.bulk_related_objects(new_objs, self.using)
+                sub_objs = await _abulk_related_objects(
+                    field, new_objs, self.using
+                )
                 await self.collect(
                     sub_objs,
                     source=model,
@@ -601,4 +622,25 @@ def _resolve_async_on_delete(on_delete):
         "async delete does not support the synchronous on_delete handler "
         f"{on_delete!r}. Use a standard Django on_delete or an async "
         "callable."
+    )
+
+
+async def _abulk_related_objects(field, objs, using):
+    from django.contrib.contenttypes.fields import GenericRelation
+
+    if not isinstance(field, GenericRelation):  # pragma: no cover
+        raise TypeError(
+            "async delete does not support bulk_related_objects() on "
+            f"{field!r}. Only contenttypes' GenericRelation is "
+            "implemented."
+        )
+
+    content_type = await aget_for_model(
+        field.model, using, field.for_concrete_model
+    )
+    return field.remote_field.model._async_base_manager.using(using).filter(
+        **{
+            f"{field.content_type_field_name}__pk": content_type.pk,
+            f"{field.object_id_field_name}__in": [obj.pk for obj in objs],
+        }
     )

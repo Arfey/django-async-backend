@@ -36,10 +36,7 @@ from django.db.models import (
 )
 from django.db.models.base import ModelBase
 from django.db.models.constants import LOOKUP_SEP
-from django.db.models.deletion import (
-    CASCADE,
-    Collector,
-)
+from django.db.models.deletion import CASCADE
 from django.db.models.expressions import DatabaseDefault
 from django.db.models.fields.composite import CompositePrimaryKey
 from django.db.models.fields.related import (
@@ -76,6 +73,7 @@ from django.utils.text import (
 from django.utils.translation import gettext_lazy as _
 
 from django_async_backend.db import async_connections
+from django_async_backend.db.models.deletion import Collector
 from django_async_backend.db.models.manager import AsyncManager
 from django_async_backend.db.transaction import (
     async_atomic,
@@ -609,3 +607,16 @@ class AsyncModelMixin:
                         f"{operation_name}() prohibited to prevent data loss due to "
                         f"unsaved related object '{field.name}'."
                     )
+
+    async def async_delete(self, using=None, keep_parents=False):
+        if not self._async_is_pk_set():
+            raise ValueError(
+                "%s object can't be deleted because its %s attribute is set "
+                "to None." % (self._meta.object_name, self._meta.pk.attname)
+            )
+        using = using or router.db_for_write(self.__class__, instance=self)
+        collector = Collector(using=using, origin=self)
+        await collector.collect([self], keep_parents=keep_parents)
+        return await collector.delete()
+
+    async_delete.alters_data = True

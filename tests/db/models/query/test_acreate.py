@@ -1,6 +1,3 @@
-from unittest import skip
-
-from django.contrib.contenttypes.models import ContentType
 from test_app.models import (
     GenericFkModel,
     SaveModel,
@@ -9,6 +6,7 @@ from test_app.models import (
 )
 
 from django_async_backend.test import AsyncioTestCase
+from django_async_backend.utils.contenttypes import aget_for_model
 
 
 class TestACreate(AsyncioTestCase):
@@ -37,11 +35,13 @@ class TestACreate(AsyncioTestCase):
             "The following fields do not exist in this model: savechildmodel",
         )
 
-    @skip("temporary: acreate does not yet resolve GenericForeignKey async")
     async def test_acreate_with_generic_foreign_key(self):
         target = await SaveModel.async_objects.acreate(name="GfkTarget")
-        ContentType.objects.clear_cache()
+        content_type = await aget_for_model(SaveModel)
 
-        await GenericFkModel.async_objects.acreate(
+        obj = await GenericFkModel.async_objects.acreate(
             name="Gfk", content_object=target
         )
+
+        self.assertEqual(obj.object_id, target.pk)
+        self.assertEqual(obj.content_type_id, content_type.pk)

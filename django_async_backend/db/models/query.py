@@ -44,7 +44,6 @@ from django.db.models.constants import (
     LOOKUP_SEP,
     OnConflict,
 )
-from django.db.models.deletion import Collector
 from django.db.models.expressions import (
     Case,
     DatabaseDefault,
@@ -1034,6 +1033,44 @@ class QuerySet(AltersData):
         else:
             qs = self._chain()
         return {getattr(obj, field_name): obj async for obj in qs}
+
+    async def adelete(self):
+        """Delete the records in the current QuerySet."""
+
+        from django_async_backend.db.models.deletion import Collector
+
+        self._not_support_combined_queries("delete")
+        if self.query.is_sliced:
+            raise TypeError("Cannot use 'limit' or 'offset' with delete().")
+        if self.query.distinct_fields:
+            raise TypeError("Cannot call delete() after .distinct(*fields).")
+        if self._fields is not None:
+            raise TypeError(
+                "Cannot call delete() after .values() or .values_list()"
+            )
+
+        del_query = self._chain()
+
+        # The delete is actually 2 queries - one to find related objects,
+        # and one to delete. Make sure that the discovery of related
+        # objects is performed on the same database as the deletion.
+        del_query._for_write = True
+
+        # Disable non-supported fields.
+        del_query.query.select_for_update = False
+        del_query.query.select_related = False
+        del_query.query.clear_ordering(force=True)
+
+        collector = Collector(using=del_query.db, origin=self)
+        await collector.collect(del_query)
+        num_deleted, num_deleted_per_model = await collector.delete()
+
+        # Clear the result cache, in case this QuerySet gets reused.
+        self._result_cache = None
+        return num_deleted, num_deleted_per_model
+
+    adelete.alters_data = True
+    adelete.queryset_only = True
 
     async def _raw_delete(self, using):
         """

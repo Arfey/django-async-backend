@@ -35,6 +35,7 @@ class PatchAsyncManagerTest(AsyncioTestCase):
 
         # The patch reached the auto-created model.
         self.assertTrue(hasattr(through, "async_save"))
+        self.assertTrue(hasattr(through, "async_delete"))
         self.assertIsInstance(through.async_objects, AsyncManager)
         self.assertIsInstance(through._async_base_manager, AsyncManager)
 
@@ -59,3 +60,8 @@ class PatchAsyncManagerTest(AsyncioTestCase):
         )
         stored = await ContentType.async_objects.aget(pk=created.pk)
         self.assertEqual(stored.model, "widget")
+
+        await stored.async_delete()
+        self.assertFalse(
+            await ContentType.async_objects.filter(pk=created.pk).aexists()
+        )

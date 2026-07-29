@@ -5,12 +5,15 @@ module:
     - "from django.db.models.base import ModelBase"
     - "from django.utils.functional import classproperty"
     - "from django_async_backend.db import async_connections"
+    - "from django_async_backend.db.models.deletion import Collector"
     - "from django_async_backend.db.models.manager import AsyncManager"
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
 
   import_aliases:
     - name: connections
+      remove: true
+    - name: Collector
       remove: true
 
   assigns:
@@ -101,7 +104,8 @@ module:
 
         - target:
             value: delete
-          remove: true
+            rename:
+              value: async_delete
 
         - target:
             value: adelete
@@ -340,7 +344,21 @@ module:
                   attr: _async_is_pk_set
 
         delete:
-          remove: true
+          rename: async_delete
+          to_async: true
+          calls:
+            - func:
+                attr: _is_pk_set
+                rename:
+                  attr: _async_is_pk_set
+            - func:
+                value: collector
+                attr: collect
+              to_await: true
+            - func:
+                value: collector
+                attr: delete
+              to_await: true
 
         adelete:
           remove: true

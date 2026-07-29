@@ -1,6 +1,9 @@
 import uuid
 
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import (
+    GenericForeignKey,
+    GenericRelation,
+)
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.db.models import Value
@@ -180,6 +183,28 @@ class GenericFkModel(AsyncModelMixin, models.Model):
         db_table = "generic_fk_model"
 
 
+class GenericChildModel(AsyncModelMixin, models.Model):
+    """Generic child collected via GenericRelation.bulk_related_objects()."""
+
+    name = models.CharField(max_length=255)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    class Meta:
+        db_table = "generic_child_model"
+
+
+class GenericRelationModel(AsyncModelMixin, models.Model):
+    """Delete target whose generic children cascade via its GenericRelation."""
+
+    name = models.CharField(max_length=255)
+    children = GenericRelation(GenericChildModel)
+
+    class Meta:
+        db_table = "generic_relation_model"
+
+
 class M2MTagModel(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=255, unique=True)
 
@@ -193,3 +218,188 @@ class M2MOwnerModel(AsyncModelMixin, models.Model):
 
     class Meta:
         db_table = "m2m_owner_model"
+
+
+class FastDeleteModel(AsyncModelMixin, models.Model):
+    """No relations and no signal listeners, so it can be fast-deleted."""
+
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "fast_delete_model"
+
+
+class DeleteModel(AsyncModelMixin, models.Model):
+    """Delete target with one child per on_delete handler."""
+
+    name = models.CharField(max_length=255, unique=True)
+    value = models.IntegerField(null=True)
+
+    class Meta:
+        db_table = "delete_model"
+
+
+class CascadeChildModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        DeleteModel,
+        on_delete=models.CASCADE,
+        related_name="cascade_children",
+    )
+
+    class Meta:
+        db_table = "cascade_child_model"
+
+
+class ProtectChildModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        DeleteModel,
+        on_delete=models.PROTECT,
+        related_name="protect_children",
+    )
+
+    class Meta:
+        db_table = "protect_child_model"
+
+
+class RestrictChildModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        DeleteModel,
+        on_delete=models.RESTRICT,
+        related_name="restrict_children",
+    )
+    # RESTRICT is lifted when the same object is collected via CASCADE.
+    owner = models.ForeignKey(
+        DeleteModel,
+        on_delete=models.CASCADE,
+        null=True,
+        related_name="restrict_owned",
+    )
+
+    class Meta:
+        db_table = "restrict_child_model"
+
+
+class SetNullChildModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        DeleteModel,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="set_null_children",
+    )
+
+    class Meta:
+        db_table = "set_null_child_model"
+
+
+class SetDefaultChildModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        DeleteModel,
+        on_delete=models.SET_DEFAULT,
+        null=True,
+        default=None,
+        related_name="set_default_children",
+    )
+
+    class Meta:
+        db_table = "set_default_child_model"
+
+
+def get_set_callable_parent():
+    return None
+
+
+class SetCallableChildModel(AsyncModelMixin, models.Model):
+    """SET(callable) exercises the non-lazy branch of the collector."""
+
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        DeleteModel,
+        on_delete=models.SET(get_set_callable_parent),
+        null=True,
+        related_name="set_callable_children",
+    )
+
+    class Meta:
+        db_table = "set_callable_child_model"
+
+
+class SetChildModel(AsyncModelMixin, models.Model):
+    """SET(None) exercises the lazy_sub_objs branch of the collector."""
+
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        DeleteModel,
+        on_delete=models.SET(None),
+        null=True,
+        related_name="set_children",
+    )
+
+    class Meta:
+        db_table = "set_child_model"
+
+
+def sync_on_delete(collector, field, sub_objs, using):
+    """A synchronous on_delete handler, which async delete has to reject."""
+
+
+async def async_on_delete(collector, field, sub_objs, using):
+    collector.add_field_update(field, None, sub_objs)
+
+
+class SyncOnDeleteParentModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "sync_on_delete_parent_model"
+
+
+class SyncOnDeleteChildModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        SyncOnDeleteParentModel,
+        on_delete=sync_on_delete,
+        null=True,
+        related_name="children",
+    )
+
+    class Meta:
+        db_table = "sync_on_delete_child_model"
+
+
+class AsyncOnDeleteParentModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "async_on_delete_parent_model"
+
+
+class AsyncOnDeleteChildModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        AsyncOnDeleteParentModel,
+        on_delete=async_on_delete,
+        null=True,
+        related_name="children",
+    )
+
+    class Meta:
+        db_table = "async_on_delete_child_model"
+
+
+class DoNothingChildModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        DeleteModel,
+        on_delete=models.DO_NOTHING,
+        null=True,
+        db_constraint=False,
+        related_name="do_nothing_children",
+    )
+
+    class Meta:
+        db_table = "do_nothing_child_model"

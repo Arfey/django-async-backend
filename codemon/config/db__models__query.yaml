@@ -7,6 +7,12 @@ module:
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
 
+  import_aliases:
+    # The async Collector lives in django_async_backend.db.models.deletion,
+    # which imports this module, so adelete() imports it locally instead.
+    - name: Collector
+      remove: true
+
   functions:
     prefetch_related_objects:
       to_async: true
@@ -49,7 +55,8 @@ module:
 
         - target:
             value: delete
-          remove: true
+            rename:
+              value: adelete
 
         - target:
             value: acreate
@@ -468,9 +475,21 @@ module:
               replace_raw: 'tuple([i async for i in self.filter(**{filter_key: batch})])'
 
         delete:
-          # to_async: true
-          # rename: adelete
-          remove: true
+          to_async: true
+          rename: adelete
+          # deletion imports this module for its QuerySet isinstance check, so
+          # the async Collector can only be imported here.
+          add_raw_top:
+            - "from django_async_backend.db.models.deletion import Collector"
+          calls:
+            - func:
+                value: collector
+                attr: collect
+              to_await: true
+            - func:
+                value: collector
+                attr: delete
+              to_await: true
 
         update:
           to_async: true

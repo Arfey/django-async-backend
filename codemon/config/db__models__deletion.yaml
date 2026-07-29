@@ -11,6 +11,7 @@ module:
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
     - "from django_async_backend.db.models import sql"
     - "from django_async_backend.db.models.query import QuerySet"
+    - "from django_async_backend.utils.contenttypes import aget_for_model"
 
   add_raw_bottom:
     - |
@@ -42,6 +43,30 @@ module:
               f"{on_delete!r}. Use a standard Django on_delete or an async "
               "callable."
           )
+    - |
+      async def _abulk_related_objects(field, objs, using):
+          from django.contrib.contenttypes.fields import GenericRelation
+
+          if not isinstance(field, GenericRelation):  # pragma: no cover
+              raise TypeError(
+                  "async delete does not support bulk_related_objects() on "
+                  f"{field!r}. Only contenttypes' GenericRelation is "
+                  "implemented."
+              )
+
+          content_type = await aget_for_model(
+              field.model, using, field.for_concrete_model
+          )
+          return field.remote_field.model._async_base_manager.using(
+              using
+          ).filter(
+              **{
+                  f"{field.content_type_field_name}__pk": content_type.pk,
+                  f"{field.object_id_field_name}__in": [
+                      obj.pk for obj in objs
+                  ],
+              }
+          )
 
   import_aliases:
     - name: IntegrityError
@@ -69,9 +94,16 @@ module:
 
     PROTECT:
       to_async: true
+      # sub_objs is an async queryset: the error message indexes it and
+      # collect() extends a list with error.protected_objects.
+      add_raw_top:
+        - "sub_objs = [obj async for obj in sub_objs]"
 
     RESTRICT:
       to_async: true
+      # add_restricted_objects() indexes and iterates sub_objs synchronously.
+      add_raw_top:
+        - "sub_objs = [obj async for obj in sub_objs]"
 
     SET:
       functions:
@@ -102,6 +134,14 @@ module:
               rename:
                 name: async_connections
 
+        can_fast_delete:
+          # on_delete holds Django's sync handlers, which never compare equal
+          # to the async CASCADE/DO_NOTHING defined here.
+          attrs:
+            - attr: on_delete
+              parent_attr: remote_field
+              wrap: _resolve_async_on_delete
+
         related_objects:
           attrs:
             - name: _base_manager
@@ -128,6 +168,33 @@ module:
                     name: aexists
                   to_await: true
           calls:
+            # add() indexes and iterates objs, which the sync collector gets
+            # for free from the queryset result cache.
+            - func:
+                value: self
+                attr: add
+              replace_raw: |
+                self.add(
+                    (
+                        [obj async for obj in objs]
+                        if isinstance(objs, QuerySet)
+                        else objs
+                    ),
+                    source,
+                    nullable,
+                    reverse_dependency=reverse_dependency,
+                )
+            # only() is not part of the async QuerySet, so the deferred-field
+            # optimization is dropped and every field is fetched instead.
+            - func:
+                value: sub_objs
+                attr: only
+              replace_raw: "sub_objs"
+            - func:
+                value: field
+                attr: bulk_related_objects
+              replace_raw: |
+                await _abulk_related_objects(field, new_objs, self.using)
             - func:
                 attr: collect
               to_await: true
