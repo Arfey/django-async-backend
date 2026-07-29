@@ -347,7 +347,7 @@ async def main():
 | `__repr__`                          | ❌        |          |
 | `__len__`                           | ❌        |          |
 | `__and__`                           | ❌        |          |
-| `__or__`                            | ❌        |          |
+| `__or__`                            | ✅        |          |
 | `__xor__`                           | ❌        |          |
 | `__getitem__`                       | ✅        |          |
 | `Model.objects.aiterator`           | ❌        |          |

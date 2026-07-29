@@ -445,6 +445,29 @@ class QuerySet(AltersData):
     def __class_getitem__(cls, *args, **kwargs):
         return cls
 
+    def __or__(self, other):
+        self._check_operator_queryset(other, "|")
+        self._merge_sanity_check(other)
+        if isinstance(self, EmptyQuerySet):
+            return other
+        if isinstance(other, EmptyQuerySet):
+            return self
+        query = (
+            self
+            if self.query.can_filter()
+            else self.model._async_base_manager.filter(
+                pk__in=self.values("pk")
+            )
+        )
+        combined = query._chain()
+        combined._merge_known_related_objects(other)
+        if not other.query.can_filter():
+            other = other.model._async_base_manager.filter(
+                pk__in=other.values("pk")
+            )
+        combined.query.combine(other.query, sql.OR)
+        return combined
+
     async def aaggregate(self, *args, **kwargs):
         """
         Return a dictionary containing the calculations (aggregation)
@@ -1752,6 +1775,13 @@ class QuerySet(AltersData):
             )
 
     def _check_operator_queryset(self, other, operator_):
+
+        if not isinstance(other, QuerySet):
+            raise TypeError(
+                f"Cannot use {operator_} operator with a non-async queryset. "
+                f"Use Model.async_objects instead of Model.objects."
+            )
+
         if self.query.combinator or other.query.combinator:
             raise TypeError(
                 f"Cannot use {operator_} operator with combined queryset."

@@ -227,11 +227,23 @@ module:
         __xor__:
           remove: true
 
-        __or__:
-          remove: true
-
         __and__:
           remove: true
+
+        __or__:
+          attrs:
+            - name: _base_manager
+              rename:
+                name: _async_base_manager
+
+        _check_operator_queryset:
+          add_raw_top:
+            - |
+              if not isinstance(other, QuerySet):
+                  raise TypeError(
+                      f"Cannot use {operator_} operator with a non-async queryset. "
+                      f"Use Model.async_objects instead of Model.objects."
+                  )
 
         only:
           remove: true
