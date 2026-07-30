@@ -122,8 +122,9 @@ def apply_attr(config: Attr, updated_node: cst.BaseExpression):
 
 def attr_needs_call(config: Attr) -> bool:
     """``to_async_comp`` iterates the call a reference heads, not the
-    reference, so those attrs are matched on a call's ``func`` instead."""
-    return bool(config.to_async_comp)
+    reference, so those attrs are matched on a call's ``func`` instead. A
+    bare ``name`` heads no call, so it is iterated where it is referenced."""
+    return bool(config.to_async_comp and not config.name)
 
 
 def apply_attrs(original_node, updated_node, attrs):
@@ -528,6 +529,7 @@ def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
 
         if name_attrs:
 
+            @m.call_if_not_inside(m.Param())
             @m.leave(m.Name())
             def attr_names(
                 self, original_node: cst.Name, updated_node: cst.Name
@@ -663,6 +665,7 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
         if name_attrs:
 
+            @m.call_if_not_inside(m.Param())
             @m.leave(m.Name())
             def attr_names(
                 self, original_node: cst.Name, updated_node: cst.Name

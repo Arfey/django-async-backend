@@ -94,16 +94,20 @@ module:
 
     PROTECT:
       to_async: true
-      # sub_objs is an async queryset: the error message indexes it and
-      # collect() extends a list with error.protected_objects.
-      add_raw_top:
-        - "sub_objs = [obj async for obj in sub_objs]"
+      attrs:
+        - name: sub_objs
+          to_async_comp: obj
 
     RESTRICT:
       to_async: true
-      # add_restricted_objects() indexes and iterates sub_objs synchronously.
-      add_raw_top:
-        - "sub_objs = [obj async for obj in sub_objs]"
+      calls:
+        - func:
+            value: collector
+            attr: add_restricted_objects
+          args:
+            - func:
+                name: sub_objs
+                to_async_comp: obj
 
     SET:
       functions:
