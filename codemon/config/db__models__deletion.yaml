@@ -164,12 +164,10 @@ module:
           boolean_operations:
             - operands:
                 - name: sub_objs
-                  to_call_method:
-                    name: aexists
-                  to_await: true
+                  to_async_comp: obj
           calls:
-            # add() indexes and iterates objs, which the sync collector gets
-            # for free from the queryset result cache.
+            # add() indexes and iterates objs; when objs is the queryset
+            # collected above, this reads its result cache.
             - func:
                 value: self
                 attr: add
@@ -232,6 +230,15 @@ module:
             - func:
                 attr: _raw_delete
               to_await: true
+            - func:
+                value: objs
+                attr: extend
+              replace_raw: |
+                objs.extend(
+                    [obj async for obj in instances]
+                    if isinstance(instances, QuerySet)
+                    else instances
+                )
             - func:
                 attr: update
                 rename:

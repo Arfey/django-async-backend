@@ -391,10 +391,9 @@ class Collector:
                         )
                     )
                     sub_objs = sub_objs._only(*tuple(referenced_fields))
-                if (
-                    getattr(on_delete, "lazy_sub_objs", False)
-                    or await sub_objs.aexists()
-                ):
+                if getattr(on_delete, "lazy_sub_objs", False) or [
+                    obj async for obj in sub_objs
+                ]:
                     try:
                         await on_delete(self, field, sub_objs, self.using)
                     except ProtectedError as error:
@@ -554,7 +553,11 @@ class Collector:
                     ):
                         updates.append(instances)
                     else:
-                        objs.extend(instances)
+                        objs.extend(
+                            [obj async for obj in instances]
+                            if isinstance(instances, QuerySet)
+                            else instances
+                        )
                 if updates:
                     combined_updates = reduce(or_, updates)
                     await combined_updates.aupdate(**{field.name: value})

@@ -42,10 +42,11 @@ commands:
     depends:
       - _test_database
     options: |
-      Usage: lets test [<test>]
+      Usage: lets test [<test>] [-v <number>]
 
         Options:
             <test>                  path to the test or module
+            -v                      verbose level
 
         Example:
           lets test tests.db.models

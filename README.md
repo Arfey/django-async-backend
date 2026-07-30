@@ -344,8 +344,11 @@ async def main():
 | `Model.objects.datetimes`           | ❌        |          |
 | `Model.objects.alias    `           | ❌        |          |
 | `__aiter__`                         | ✅        |          |
+| `__iter__`                          | ⚠️        | raises `TypeError` — use `async for obj in qs` |
+| `__len__`                           | ⚠️        | raises `TypeError` — use `await qs.acount()` |
+| `__contains__`                      | ⚠️        | falls back to `__iter__`, so it raises `TypeError` too |
+| `__bool__`                          | ⚠️        | truth-testing falls back to `__len__`, so `if qs:` raises `TypeError` — use `await qs.aexists()` |
 | `__repr__`                          | ❌        |          |
-| `__len__`                           | ❌        |          |
 | `__and__`                           | ❌        |          |
 | `__or__`                            | ✅        |          |
 | `__xor__`                           | ❌        |          |

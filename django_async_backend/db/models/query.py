@@ -311,6 +311,18 @@ class FlatValuesListIterable(BaseIterable):
 class QuerySet(AltersData):
     """Represent a lazy database lookup for a set of objects."""
 
+    def __iter__(self):
+        raise TypeError(
+            f"{self.__class__.__name__} is not iterable synchronously. "
+            "Use `async for obj in qs` or `[obj async for obj in qs]`."
+        )
+
+    def __len__(self):
+        raise TypeError(
+            f"len() is not supported on {self.__class__.__name__}. "
+            "Use `await qs.acount()`."
+        )
+
     def __init__(self, model=None, query=None, using=None, hints=None):
         self.model = model
         self._db = using
