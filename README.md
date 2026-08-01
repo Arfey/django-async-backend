@@ -333,8 +333,8 @@ async def main():
 | `Model.objects.distinct`            | ✅        |          |
 | `Model.objects.extra`               | ✅        |          |
 | `Model.objects.reverse`             | ✅        |          |
-| `Model.objects.defer`               | ❌        |          |
-| `Model.objects.only`                | ❌        |          |
+| `Model.objects.defer`               | ⚠️        | not safe for async, will not be implemented — use `values`/`values_list` |
+| `Model.objects.only`                | ⚠️        | not safe for async, will not be implemented — use `values`/`values_list` |
 | `Model.objects.using`               | ✅        |          |
 | `Model.objects.resolve_expression`  | ❌        |          |
 | `Model.objects.ordered`             | ❌        |          |
