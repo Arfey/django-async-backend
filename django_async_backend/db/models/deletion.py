@@ -34,7 +34,7 @@ from django_async_backend.db.transaction import (
 from django_async_backend.utils.contenttypes import aget_for_model
 
 
-async def CASCADE(collector, field, sub_objs, using):
+async def _CASCADE(collector, field, sub_objs, using):
     await collector.collect(
         sub_objs,
         source=field.remote_field.model,
@@ -49,7 +49,7 @@ async def CASCADE(collector, field, sub_objs, using):
         collector.add_field_update(field, None, sub_objs)
 
 
-async def PROTECT(collector, field, sub_objs, using):
+async def _PROTECT(collector, field, sub_objs, using):
     raise ProtectedError(
         "Cannot delete some instances of model '%s' because they are "
         "referenced through a protected foreign key: '%s.%s'"
@@ -62,12 +62,12 @@ async def PROTECT(collector, field, sub_objs, using):
     )
 
 
-async def RESTRICT(collector, field, sub_objs, using):
+async def _RESTRICT(collector, field, sub_objs, using):
     collector.add_restricted_objects(field, [obj async for obj in sub_objs])
     collector.add_dependency(field.remote_field.model, field.model)
 
 
-def SET(value):
+def _SET(value):
     if callable(value):
 
         async def set_on_delete(collector, field, sub_objs, using):
@@ -84,22 +84,22 @@ def SET(value):
     return set_on_delete
 
 
-async def SET_NULL(collector, field, sub_objs, using):
+async def _SET_NULL(collector, field, sub_objs, using):
     collector.add_field_update(field, None, sub_objs)
 
 
-SET_NULL.lazy_sub_objs = True
+_SET_NULL.lazy_sub_objs = True
 
 
-async def SET_DEFAULT(collector, field, sub_objs, using):
+async def _SET_DEFAULT(collector, field, sub_objs, using):
     collector.add_field_update(field, field.get_default(), sub_objs)
 
 
-async def DO_NOTHING(collector, field, sub_objs, using):
+async def _DO_NOTHING(collector, field, sub_objs, using):
     pass
 
 
-def get_candidate_relations_to_delete(opts):
+def _get_candidate_relations_to_delete(opts):
     # The candidate relations are the ones that come from N-1 and 1-1
     # relations. N-N  (i.e., many-to-many) relations aren't candidates for
     # deletion.
@@ -221,8 +221,7 @@ class Collector:
         """
         if (
             from_field
-            and _resolve_async_on_delete(from_field.remote_field.on_delete)
-            is not CASCADE
+            and from_field.remote_field.on_delete is not _SYNC_CASCADE
         ):
             return False
         if hasattr(objs, "_meta"):
@@ -244,9 +243,8 @@ class Collector:
             and
             # Foreign keys pointing to this model.
             all(
-                _resolve_async_on_delete(related.field.remote_field.on_delete)
-                is DO_NOTHING
-                for related in get_candidate_relations_to_delete(opts)
+                related.field.remote_field.on_delete is _SYNC_DO_NOTHING
+                for related in _get_candidate_relations_to_delete(opts)
             )
             and (
                 # Something like generic foreign key.
@@ -344,7 +342,7 @@ class Collector:
 
         model_fast_deletes = defaultdict(list)
         protected_objects = defaultdict(list)
-        for related in get_candidate_relations_to_delete(model._meta):
+        for related in _get_candidate_relations_to_delete(model._meta):
             # Preserve parent reverse relationships if keep_parents=True.
             if (
                 keep_parents
@@ -354,7 +352,7 @@ class Collector:
                 continue
             field = related.field
             on_delete = _resolve_async_on_delete(field.remote_field.on_delete)
-            if on_delete == DO_NOTHING:
+            if on_delete == _DO_NOTHING:
                 continue
             related_model = related.related_model
             if self.can_fast_delete(related_model, from_field=field):
@@ -379,7 +377,7 @@ class Collector:
                                 rf.attname
                                 for rf in rel.field.foreign_related_fields
                             )
-                            for rel in get_candidate_relations_to_delete(
+                            for rel in _get_candidate_relations_to_delete(
                                 related_model._meta
                             )
                         )
@@ -597,13 +595,19 @@ class Collector:
         return sum(deleted_counter.values()), dict(deleted_counter)
 
 
+_SYNC_CASCADE = django_deletion.CASCADE
+
+
+_SYNC_DO_NOTHING = django_deletion.DO_NOTHING
+
+
 _SYNC_TO_ASYNC_ON_DELETE = {
-    django_deletion.CASCADE: CASCADE,
-    django_deletion.PROTECT: PROTECT,
-    django_deletion.RESTRICT: RESTRICT,
-    django_deletion.SET_NULL: SET_NULL,
-    django_deletion.SET_DEFAULT: SET_DEFAULT,
-    django_deletion.DO_NOTHING: DO_NOTHING,
+    django_deletion.CASCADE: _CASCADE,
+    django_deletion.PROTECT: _PROTECT,
+    django_deletion.RESTRICT: _RESTRICT,
+    django_deletion.SET_NULL: _SET_NULL,
+    django_deletion.SET_DEFAULT: _SET_DEFAULT,
+    django_deletion.DO_NOTHING: _DO_NOTHING,
 }
 
 
@@ -618,7 +622,7 @@ def _resolve_async_on_delete(on_delete):
     if deconstruct is not None:
         path, args, kwargs = deconstruct()
         if path == "django.db.models.SET":
-            return SET(*args, **kwargs)
+            return _SET(*args, **kwargs)
     if iscoroutinefunction(on_delete):
         return on_delete
     raise TypeError(

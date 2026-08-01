@@ -494,7 +494,7 @@ def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
 
         if config.rename:
 
-            @m.leave(m.FunctionDef())
+            @m.leave(m.FunctionDef(name=m.Name(name)))
             def rename(
                 self,
                 original_node: cst.FunctionDef,
@@ -618,7 +618,7 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
         if config.rename:
 
-            @m.leave(m.FunctionDef())
+            @m.leave(m.FunctionDef(name=m.Name(name)))
             def rename(
                 self,
                 original_node: cst.FunctionDef,
@@ -774,7 +774,7 @@ def class_transformer(name: str, config: Class) -> cst.CSTTransformer:
 
         if config.rename:
 
-            @m.leave(m.ClassDef())
+            @m.leave(m.ClassDef(name=m.Name(name)))
             def rename(
                 self, original_node: cst.ClassDef, updated_node: cst.ClassDef
             ) -> cst.ClassDef:
@@ -988,9 +988,6 @@ def module_transformer(config: Module) -> cst.CSTTransformer:
                     remove_item = False
                     if isinstance(item, cst.SimpleStatementLine):
                         for assign_config in config.assigns:
-                            if not assign_config.remove:
-                                continue
-
                             matcher = m.Assign(
                                 targets=[
                                     m.ZeroOrMore(),
@@ -1001,11 +998,18 @@ def module_transformer(config: Module) -> cst.CSTTransformer:
                                 ]
                             )
 
-                            if any(
+                            if not any(
                                 m.matches(stmt, matcher) for stmt in item.body
                             ):
+                                continue
+
+                            if assign_config.remove:
                                 remove_item = True
                                 break
+
+                            item = item.visit(
+                                assignment_transformer(assign_config)
+                            )
 
                     if not remove_item:
                         body.append(item)

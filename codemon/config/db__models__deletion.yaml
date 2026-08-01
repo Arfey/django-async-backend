@@ -14,14 +14,16 @@ module:
     - "from django_async_backend.utils.contenttypes import aget_for_model"
 
   add_raw_bottom:
+    - "_SYNC_CASCADE = django_deletion.CASCADE"
+    - "_SYNC_DO_NOTHING = django_deletion.DO_NOTHING"
     - |
       _SYNC_TO_ASYNC_ON_DELETE = {
-          django_deletion.CASCADE: CASCADE,
-          django_deletion.PROTECT: PROTECT,
-          django_deletion.RESTRICT: RESTRICT,
-          django_deletion.SET_NULL: SET_NULL,
-          django_deletion.SET_DEFAULT: SET_DEFAULT,
-          django_deletion.DO_NOTHING: DO_NOTHING,
+          django_deletion.CASCADE: _CASCADE,
+          django_deletion.PROTECT: _PROTECT,
+          django_deletion.RESTRICT: _RESTRICT,
+          django_deletion.SET_NULL: _SET_NULL,
+          django_deletion.SET_DEFAULT: _SET_DEFAULT,
+          django_deletion.DO_NOTHING: _DO_NOTHING,
       }
     - |
       def _resolve_async_on_delete(on_delete):
@@ -35,7 +37,7 @@ module:
           if deconstruct is not None:
               path, args, kwargs = deconstruct()
               if path == "django.db.models.SET":
-                  return SET(*args, **kwargs)
+                  return _SET(*args, **kwargs)
           if iscoroutinefunction(on_delete):
               return on_delete
           raise TypeError(
@@ -98,8 +100,19 @@ module:
     - name: sql
       remove: true
 
+  # The on_delete handlers and their helper are private: user models declare
+  # Django's public sentinels, and _resolve_async_on_delete() maps those onto
+  # these.
+  assigns:
+    - target:
+        value: SET_NULL
+        attr: lazy_sub_objs
+        rename:
+          value: _SET_NULL
+
   functions:
     CASCADE:
+      rename: _CASCADE
       to_async: true
       attrs:
         - name: connections
@@ -111,12 +124,14 @@ module:
           to_await: true
 
     PROTECT:
+      rename: _PROTECT
       to_async: true
       attrs:
         - name: sub_objs
           to_async_comp: obj
 
     RESTRICT:
+      rename: _RESTRICT
       to_async: true
       calls:
         - func:
@@ -128,18 +143,25 @@ module:
                 to_async_comp: obj
 
     SET:
+      rename: _SET
       functions:
         set_on_delete:
           to_async: true
 
     SET_NULL:
+      rename: _SET_NULL
       to_async: true
 
     SET_DEFAULT:
+      rename: _SET_DEFAULT
       to_async: true
 
     DO_NOTHING:
+      rename: _DO_NOTHING
       to_async: true
+
+    get_candidate_relations_to_delete:
+      rename: _get_candidate_relations_to_delete
 
   classes:
     ProtectedError:
@@ -157,12 +179,18 @@ module:
                 name: async_connections
 
         can_fast_delete:
-          # on_delete holds Django's sync handlers, which never compare equal
-          # to the async CASCADE/DO_NOTHING defined here.
           attrs:
-            - attr: on_delete
-              parent_attr: remote_field
-              wrap: _resolve_async_on_delete
+            - name: CASCADE
+              rename:
+                name: _SYNC_CASCADE
+            - name: DO_NOTHING
+              rename:
+                name: _SYNC_DO_NOTHING
+          calls:
+            - func:
+                name: get_candidate_relations_to_delete
+                rename:
+                  name: _get_candidate_relations_to_delete
 
         related_objects:
           attrs:
@@ -183,11 +211,18 @@ module:
             - attr: on_delete
               parent_attr: remote_field
               wrap: _resolve_async_on_delete
+            - name: DO_NOTHING
+              rename:
+                name: _DO_NOTHING
           boolean_operations:
             - operands:
                 - name: sub_objs
                   to_async_comp: obj
           calls:
+            - func:
+                name: get_candidate_relations_to_delete
+                rename:
+                  name: _get_candidate_relations_to_delete
             # add() indexes and iterates objs; when objs is the queryset
             # collected above, this reads its result cache.
             - func:
