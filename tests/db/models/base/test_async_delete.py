@@ -1,4 +1,5 @@
 from django.contrib.contenttypes.models import ContentType
+from django.db import DEFAULT_DB_ALIAS
 from django.db.models import signals
 from django.db.models.deletion import (
     ProtectedError,
@@ -11,6 +12,7 @@ from test_app.models import (
     FastDeleteModel,
     GenericChildModel,
     GenericRelationModel,
+    GrandChildModel,
     MultiLevelDeleteModel,
     MultiLevelSetNullChildModel,
     ParentModel,
@@ -19,7 +21,11 @@ from test_app.models import (
     SetNullChildModel,
 )
 
-from django_async_backend.test import AsyncioTestCase
+from django_async_backend.db import async_connections
+from django_async_backend.test import (
+    AsyncCaptureQueriesContext,
+    AsyncioTestCase,
+)
 
 
 class TestAsyncDelete(AsyncioTestCase):
@@ -273,6 +279,92 @@ class TestAsyncDeleteInheritance(AsyncioTestCase):
         self.assertEqual(count, 1)
         self.assertEqual(per_model, {"test_app.ChildModel": 1})
         self.assertEqual(await ParentModel.async_objects.acount(), 1)
+
+    async def test_deletes_every_row_of_the_parent_chain(self):
+        grand_child = GrandChildModel(
+            parent_value=1, child_value=2, grand_child_value=3
+        )
+        await grand_child.async_save()
+
+        count, per_model = await grand_child.async_delete()
+
+        self.assertEqual(count, 3)
+        self.assertEqual(
+            per_model,
+            {
+                "test_app.GrandChildModel": 1,
+                "test_app.ChildModel": 1,
+                "test_app.ParentModel": 1,
+            },
+        )
+        self.assertEqual(await GrandChildModel.async_objects.acount(), 0)
+        self.assertEqual(await ChildModel.async_objects.acount(), 0)
+        self.assertEqual(await ParentModel.async_objects.acount(), 0)
+
+    async def test_keep_parents_leaves_the_whole_parent_chain(self):
+        grand_child = GrandChildModel(
+            parent_value=1, child_value=2, grand_child_value=3
+        )
+        await grand_child.async_save()
+
+        count, per_model = await grand_child.async_delete(keep_parents=True)
+
+        self.assertEqual(count, 1)
+        self.assertEqual(per_model, {"test_app.GrandChildModel": 1})
+        self.assertEqual(await GrandChildModel.async_objects.acount(), 0)
+        self.assertEqual(await ChildModel.async_objects.acount(), 1)
+        self.assertEqual(await ParentModel.async_objects.acount(), 1)
+
+    async def test_deleting_the_root_cascades_down_the_chain(self):
+        grand_child = GrandChildModel(
+            parent_value=1, child_value=2, grand_child_value=3
+        )
+        await grand_child.async_save()
+        parent = await ParentModel.async_objects.aget(pk=grand_child.pk)
+
+        count, per_model = await parent.async_delete()
+
+        self.assertEqual(count, 3)
+        self.assertEqual(
+            per_model,
+            {
+                "test_app.GrandChildModel": 1,
+                "test_app.ChildModel": 1,
+                "test_app.ParentModel": 1,
+            },
+        )
+        self.assertEqual(await GrandChildModel.async_objects.acount(), 0)
+
+    async def test_cascade_loads_the_ancestry_without_extra_queries(self):
+        """Parent instances have to come out of the columns the cascade
+        already selected. If any ancestor field were deferred, Django's
+        descriptor would fall back to a query per object -- a synchronous one,
+        which raises SynchronousOnlyOperation here.
+        """
+        grand_child = GrandChildModel(
+            parent_value=1, child_value=2, grand_child_value=3
+        )
+        await grand_child.async_save()
+        parent = await ParentModel.async_objects.aget(pk=grand_child.pk)
+
+        async with AsyncCaptureQueriesContext(
+            async_connections[DEFAULT_DB_ALIAS]
+        ) as ctx:
+            await parent.async_delete()
+
+        selects = [
+            query["sql"]
+            for query in ctx.captured_queries
+            if query["sql"].startswith("SELECT")
+        ]
+        self.assertEqual(
+            len(selects), 1, f"Expected a single cascade select, got {selects}"
+        )
+        # The ancestry is loaded ...
+        self.assertIn('"parent_model"."id"', selects[0])
+        self.assertIn('"parent_model"."parent_value"', selects[0])
+        # ... but the child's own unreferenced columns stay deferred.
+        self.assertNotIn('"child_model"."child_value"', selects[0])
 
 
 class TestAsyncDeleteSignals(AsyncioTestCase):

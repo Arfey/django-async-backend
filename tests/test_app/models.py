@@ -63,6 +63,17 @@ class ChildModel(ParentModel):
         db_table = "child_model"
 
 
+class GrandChildModel(ChildModel):
+    """Third level of multi-table inheritance, so deleting a leaf has to
+    cascade up through two parent tables.
+    """
+
+    grand_child_value = models.IntegerField(null=True)
+
+    class Meta:
+        db_table = "grand_child_model"
+
+
 class SaveParentModel(AsyncModelMixin, models.Model):
     parent_value = models.IntegerField(null=True)
 

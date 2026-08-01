@@ -14,6 +14,8 @@ from test_app.models import (
     DeleteModel,
     DoNothingChildModel,
     FastDeleteModel,
+    M2MOwnerModel,
+    M2MTagModel,
     MultiLevelDeleteModel,
     MultiLevelSetNullChildModel,
     ProtectChildModel,
@@ -341,6 +343,70 @@ class TestADeleteCombinedFieldUpdates(AsyncioTestCase):
         await MultiLevelDeleteModel.async_objects.filter(name="Root").adelete()
 
         self.assertIsNone(await self.aget_parent_id("LeafChild"))
+
+
+class TestADeleteM2M(AsyncioTestCase):
+    """The auto-created "through" model carries no mixin, so the cascade only
+    reaches it through the ``Model`` patch applied at app ready.
+    """
+
+    async def asyncSetUp(self):
+        self.through = M2MOwnerModel.tags.through
+        self.owner = await M2MOwnerModel.async_objects.acreate(name="Owner")
+        self.other = await M2MOwnerModel.async_objects.acreate(name="Other")
+        self.tag = await M2MTagModel.async_objects.acreate(name="Tag")
+        await self.through.async_objects.acreate(
+            m2mownermodel=self.owner, m2mtagmodel=self.tag
+        )
+        await self.through.async_objects.acreate(
+            m2mownermodel=self.other, m2mtagmodel=self.tag
+        )
+
+    async def test_deleting_the_owner_removes_its_through_rows(self):
+        count, per_model = await M2MOwnerModel.async_objects.filter(
+            name="Owner"
+        ).adelete()
+
+        self.assertEqual(count, 2)
+        self.assertEqual(
+            per_model,
+            {
+                "test_app.M2MOwnerModel": 1,
+                "test_app.M2MOwnerModel_tags": 1,
+            },
+        )
+        self.assertFalse(
+            await self.through.async_objects.filter(
+                m2mownermodel=self.owner.pk
+            ).aexists()
+        )
+
+    async def test_deleting_the_owner_leaves_the_tag_and_other_rows(self):
+        await M2MOwnerModel.async_objects.filter(name="Owner").adelete()
+
+        self.assertEqual(await M2MTagModel.async_objects.acount(), 1)
+        self.assertEqual(await self.through.async_objects.acount(), 1)
+        self.assertTrue(
+            await self.through.async_objects.filter(
+                m2mownermodel=self.other.pk
+            ).aexists()
+        )
+
+    async def test_deleting_the_tag_removes_every_through_row(self):
+        count, per_model = await M2MTagModel.async_objects.filter(
+            name="Tag"
+        ).adelete()
+
+        self.assertEqual(count, 3)
+        self.assertEqual(
+            per_model,
+            {
+                "test_app.M2MTagModel": 1,
+                "test_app.M2MOwnerModel_tags": 2,
+            },
+        )
+        self.assertEqual(await self.through.async_objects.acount(), 0)
+        self.assertEqual(await M2MOwnerModel.async_objects.acount(), 2)
 
 
 class TestADeleteCustomOnDelete(AsyncioTestCase):

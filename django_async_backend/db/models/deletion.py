@@ -384,7 +384,13 @@ class Collector:
                             )
                         )
                     )
-                    sub_objs = sub_objs._only(*tuple(referenced_fields))
+                    sub_objs = sub_objs._only(
+                        *tuple(
+                            referenced_fields.union(
+                                _parent_chain_fields(related_model._meta)
+                            )
+                        )
+                    )
                 if getattr(on_delete, "lazy_sub_objs", False) or [
                     obj async for obj in sub_objs
                 ]:
@@ -641,3 +647,22 @@ async def _abulk_related_objects(field, objs, using):
             f"{field.object_id_field_name}__in": [obj.pk for obj in objs],
         }
     )
+
+
+def _parent_chain_fields(opts):
+    """Field names that must stay loaded on a multi-table inheritance
+    child so its parent instances can be built from data already in
+    memory.
+
+    ``collect()`` reads parent instances with ``getattr(obj, ptr.name)``.
+    Django's ``ForwardOneToOneDescriptor`` answers that from the child's
+    own columns, but only while none of the parent's concrete fields is
+    deferred -- otherwise it falls back to a query per object, which is
+    synchronous and blows up in an async context.
+    """
+    return {
+        field.name
+        for ptr in opts.concrete_model._meta.parents.values()
+        if ptr is not None
+        for field in ptr.remote_field.model._meta.concrete_fields
+    }

@@ -67,6 +67,24 @@ module:
                   ],
               }
           )
+    - |
+      def _parent_chain_fields(opts):
+          """Field names that must stay loaded on a multi-table inheritance
+          child so its parent instances can be built from data already in
+          memory.
+
+          ``collect()`` reads parent instances with ``getattr(obj, ptr.name)``.
+          Django's ``ForwardOneToOneDescriptor`` answers that from the child's
+          own columns, but only while none of the parent's concrete fields is
+          deferred -- otherwise it falls back to a query per object, which is
+          synchronous and blows up in an async context.
+          """
+          return {
+              field.name
+              for ptr in opts.concrete_model._meta.parents.values()
+              if ptr is not None
+              for field in ptr.remote_field.model._meta.concrete_fields
+          }
 
   import_aliases:
     - name: IntegrityError
@@ -191,6 +209,15 @@ module:
                 attr: only
                 rename:
                   attr: _only
+            - func:
+                name: tuple
+              args:
+                - func:
+                    name: referenced_fields
+                    to_call_method:
+                      name: union
+                      args:
+                        - "_parent_chain_fields(related_model._meta)"
             - func:
                 value: field
                 attr: bulk_related_objects
