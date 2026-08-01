@@ -155,9 +155,9 @@ class TestABulkUpdate(AsyncioTestCase):
         # objects outside the queryset are not touched.
         self.item1.value = 111
         self.item2.value = 222
-        rows = await TestModel.async_objects.filter(
-            name="Item1"
-        ).abulk_update([self.item1, self.item2], ["value"])
+        rows = await TestModel.async_objects.filter(name="Item1").abulk_update(
+            [self.item1, self.item2], ["value"]
+        )
         self.assertEqual(rows, 1)
         self.assertEqual(
             await self._values_by_name(),

@@ -25,10 +25,10 @@ commands:
     description: Run test application
     cmd: cd test_example && PYTHONPATH=. DJANGO_SETTINGS_MODULE='test_example.settings' poetry run uvicorn test_example.asgi:application --reload --host 0.0.0.0 --port 8000
 
-  test_generate:
+  generate:
     description: Generate ORM
     cmd: |
-      git restore django_async_backend/db/models/query.py django_async_backend/db/models/sql/compiler.py django_async_backend/db/models/sql/query.py django_async_backend/db/models/sql/subqueries.py
+      git restore django_async_backend/db/models/query.py django_async_backend/db/models/sql/compiler.py django_async_backend/db/models/sql/query.py django_async_backend/db/models/sql/subqueries.py django_async_backend/db/models/deletion.py
       poetry run python -m codemon
       poetry run pre-commit run darker -v --all-files || true
 
@@ -42,10 +42,11 @@ commands:
     depends:
       - _test_database
     options: |
-      Usage: lets test [<test>]
+      Usage: lets test [<test>] [-v <number>]
 
         Options:
             <test>                  path to the test or module
+            -v                      verbose level
 
         Example:
           lets test tests.db.models

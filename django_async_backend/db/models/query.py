@@ -44,7 +44,6 @@ from django.db.models.constants import (
     LOOKUP_SEP,
     OnConflict,
 )
-from django.db.models.deletion import Collector
 from django.db.models.expressions import (
     Case,
     DatabaseDefault,
@@ -311,6 +310,16 @@ class FlatValuesListIterable(BaseIterable):
 
 class QuerySet(AltersData):
     """Represent a lazy database lookup for a set of objects."""
+    def __iter__(self):
+        raise TypeError(
+            f"{self.__class__.__name__} is not iterable synchronously. "
+            "Use `async for obj in qs` or `[obj async for obj in qs]`."
+        )
+    def __len__(self):
+        raise TypeError(
+            f"len() is not supported on {self.__class__.__name__}. "
+            "Use `await qs.acount()`."
+        )
 
     def __init__(self, model=None, query=None, using=None, hints=None):
         self.model = model
@@ -445,6 +454,29 @@ class QuerySet(AltersData):
 
     def __class_getitem__(cls, *args, **kwargs):
         return cls
+
+    def __or__(self, other):
+        self._check_operator_queryset(other, "|")
+        self._merge_sanity_check(other)
+        if isinstance(self, EmptyQuerySet):
+            return other
+        if isinstance(other, EmptyQuerySet):
+            return self
+        query = (
+            self
+            if self.query.can_filter()
+            else self.model._async_base_manager.filter(
+                pk__in=self.values("pk")
+            )
+        )
+        combined = query._chain()
+        combined._merge_known_related_objects(other)
+        if not other.query.can_filter():
+            other = other.model._async_base_manager.filter(
+                pk__in=other.values("pk")
+            )
+        combined.query.combine(other.query, sql.OR)
+        return combined
 
     async def aaggregate(self, *args, **kwargs):
         """
@@ -1035,13 +1067,51 @@ class QuerySet(AltersData):
             qs = self._chain()
         return {getattr(obj, field_name): obj async for obj in qs}
 
+    async def adelete(self):
+        """Delete the records in the current QuerySet."""
+
+        from django_async_backend.db.models.deletion import Collector
+
+        self._not_support_combined_queries("delete")
+        if self.query.is_sliced:
+            raise TypeError("Cannot use 'limit' or 'offset' with delete().")
+        if self.query.distinct_fields:
+            raise TypeError("Cannot call delete() after .distinct(*fields).")
+        if self._fields is not None:
+            raise TypeError(
+                "Cannot call delete() after .values() or .values_list()"
+            )
+
+        del_query = self._chain()
+
+        # The delete is actually 2 queries - one to find related objects,
+        # and one to delete. Make sure that the discovery of related
+        # objects is performed on the same database as the deletion.
+        del_query._for_write = True
+
+        # Disable non-supported fields.
+        del_query.query.select_for_update = False
+        del_query.query.select_related = False
+        del_query.query.clear_ordering(force=True)
+
+        collector = Collector(using=del_query.db, origin=self)
+        await collector.collect(del_query)
+        num_deleted, num_deleted_per_model = await collector.delete()
+
+        # Clear the result cache, in case this QuerySet gets reused.
+        self._result_cache = None
+        return num_deleted, num_deleted_per_model
+
+    adelete.alters_data = True
+    adelete.queryset_only = True
+
     async def _raw_delete(self, using):
         """
         Delete objects found from the given queryset in single direct SQL
         query. No signals are sent and there is no protection for cascades.
         """
         query = self.query.clone()
-        query.__class__ = sql.DeleteQuery
+        query.__class__ = async_sql.DeleteQuery
         return await query.get_compiler(using).execute_sql(ROW_COUNT)
 
     _raw_delete.alters_data = True
@@ -1474,6 +1544,31 @@ class QuerySet(AltersData):
         clone.query.standard_ordering = not clone.query.standard_ordering
         return clone
 
+    def _only(self, *fields):
+        """
+        Essentially, the opposite of defer(). Only the fields passed into this
+        method and that are not already specified as deferred are loaded
+        immediately when the queryset is evaluated.
+        """
+        self._not_support_combined_queries("only")
+        if self._fields is not None:
+            raise TypeError(
+                "Cannot call only() after .values() or .values_list()"
+            )
+        if fields == (None,):
+            # Can only pass None to defer(), not only(), as the rest option.
+            # That won't stop people trying to do this, so let's be explicit.
+            raise TypeError("Cannot pass None as an argument to only().")
+        for field in fields:
+            field = field.split(LOOKUP_SEP, 1)[0]
+            if field in self.query._filtered_relations:
+                raise ValueError(
+                    "only() is not supported with FilteredRelation."
+                )
+        clone = self._chain()
+        clone.query.add_immediate_loading(fields)
+        return clone
+
     def using(self, alias):
         """Select which database this QuerySet should execute against."""
         clone = self._chain()
@@ -1715,6 +1810,13 @@ class QuerySet(AltersData):
             )
 
     def _check_operator_queryset(self, other, operator_):
+
+        if not isinstance(other, QuerySet):
+            raise TypeError(
+                f"Cannot use {operator_} operator with a non-async queryset. "
+                f"Use Model.async_objects instead of Model.objects."
+            )
+
         if self.query.combinator or other.query.combinator:
             raise TypeError(
                 f"Cannot use {operator_} operator with combined queryset."

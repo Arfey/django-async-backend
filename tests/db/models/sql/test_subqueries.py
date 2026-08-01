@@ -81,3 +81,53 @@ class TestUpdateBatch(AsyncioTestCase):
             await self._values_by_name(),
             {"Item1": 5, "Item2": 5, "Item3": 5},
         )
+
+
+class TestDeleteQuery(AsyncioTestCase):
+    async def asyncSetUp(self):
+        self.item1 = TestModel(name="Item1", value=1)
+        await self.item1.async_save()
+        self.item2 = TestModel(name="Item2", value=2)
+        await self.item2.async_save()
+        self.item3 = TestModel(name="Item3", value=3)
+        await self.item3.async_save()
+
+    async def _remaining_names(self):
+        return {obj.name async for obj in TestModel.async_objects.all()}
+
+    async def test_deletes_only_listed_pks(self):
+        query = async_sql.DeleteQuery(TestModel)
+        deleted = await query.delete_batch(
+            [self.item1.pk, self.item3.pk], DEFAULT_DB_ALIAS
+        )
+        self.assertEqual(deleted, 2)
+        self.assertEqual(await self._remaining_names(), {"Item2"})
+
+    async def test_deletes_all_listed_pks(self):
+        query = async_sql.DeleteQuery(TestModel)
+        deleted = await query.delete_batch(
+            [self.item1.pk, self.item2.pk, self.item3.pk],
+            DEFAULT_DB_ALIAS,
+        )
+        self.assertEqual(deleted, 3)
+        self.assertEqual(await self._remaining_names(), set())
+
+    async def test_empty_pk_list_is_noop(self):
+        query = async_sql.DeleteQuery(TestModel)
+        deleted = await query.delete_batch([], DEFAULT_DB_ALIAS)
+        self.assertEqual(deleted, 0)
+        self.assertEqual(
+            await self._remaining_names(), {"Item1", "Item2", "Item3"}
+        )
+
+    async def test_batches_across_chunk_boundary(self):
+        pk_list = [self.item1.pk, self.item2.pk, self.item3.pk]
+        query = async_sql.DeleteQuery(TestModel)
+        with mock.patch(
+            "django_async_backend.db.models.sql.subqueries."
+            "GET_ITERATOR_CHUNK_SIZE",
+            1,
+        ):
+            deleted = await query.delete_batch(pk_list, DEFAULT_DB_ALIAS)
+        self.assertEqual(deleted, 3)
+        self.assertEqual(await self._remaining_names(), set())

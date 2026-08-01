@@ -224,7 +224,8 @@ boilerplate:
 
 - an `async_objects` manager (an `AsyncManager`), so you don't have to declare
   one by hand;
-- an `async_save()` method for saving instances asynchronously.
+- `async_save()` and `async_delete()` methods for saving and deleting instances
+  asynchronously.
 
 ```python
 from django.db import models, DEFAULT_DB_ALIAS
@@ -249,6 +250,10 @@ async def main():
     async for i in Book.async_objects.all():
         print(i.id, i.name)
 
+    # delete a single instance, or a whole queryset
+    await book.async_delete()
+    await Book.async_objects.filter(name="Django Async").adelete()
+
     await async_connections[DEFAULT_DB_ALIAS].close()
 ```
 
@@ -256,6 +261,14 @@ async def main():
 (`force_insert`, `force_update`, `using`, `update_fields`) and honors model
 `Meta` options such as `select_on_save` and `order_with_respect_to`, as well as
 multi-table inheritance.
+
+`async_delete()` accepts the same keyword arguments as Django's `delete()`
+(`using`, `keep_parents`), returns the `(count, {label: count})` pair, and
+cascades through related objects, sending `pre_delete` / `post_delete` along
+the way. `on_delete` handlers are resolved to async equivalents, so the standard
+`CASCADE`, `PROTECT`, `RESTRICT`, `SET_NULL`, `SET_DEFAULT`, `SET(...)` and
+`DO_NOTHING` all work; a custom **synchronous** `on_delete` callable is
+rejected with a `TypeError`, because it would run a blocking query.
 
 ### Manager:
 
@@ -298,7 +311,7 @@ async def main():
 | `Model.objects.afirst`              | ✅        |          |
 | `Model.objects.alast`               | ✅        |          |
 | `Model.objects.ain_bulk`            | ✅        |          |
-| `Model.objects.adelete`             | ❌        |          |
+| `Model.objects.adelete`             | ✅        |          |
 | `Model.objects.aupdate`             | ✅        |          |
 | `Model.objects.aexists`             | ✅        |          |
 | `Model.objects.acontains`           | ❌        |          |
@@ -331,10 +344,13 @@ async def main():
 | `Model.objects.datetimes`           | ❌        |          |
 | `Model.objects.alias    `           | ❌        |          |
 | `__aiter__`                         | ✅        |          |
+| `__iter__`                          | ⚠️        | raises `TypeError` — use `async for obj in qs` |
+| `__len__`                           | ⚠️        | raises `TypeError` — use `await qs.acount()` |
+| `__contains__`                      | ⚠️        | falls back to `__iter__`, so it raises `TypeError` too |
+| `__bool__`                          | ⚠️        | truth-testing falls back to `__len__`, so `if qs:` raises `TypeError` — use `await qs.aexists()` |
 | `__repr__`                          | ❌        |          |
-| `__len__`                           | ❌        |          |
 | `__and__`                           | ❌        |          |
-| `__or__`                            | ❌        |          |
+| `__or__`                            | ✅        |          |
 | `__xor__`                           | ❌        |          |
 | `__getitem__`                       | ✅        |          |
 | `Model.objects.aiterator`           | ❌        |          |
@@ -345,11 +361,11 @@ Not supported ❌
 
 ### Model:
 
-| methods                  | supported | comments   |
-| ------------------------ | --------- | ---------- |
-| `Model.asave`            | ✅        | async_save |
-| `Model.adelete`          | ❌        |            |
-| `Model.arefresh_from_db` | ❌        |            |
+| methods                  | supported | comments     |
+| ------------------------ | --------- | ------------ |
+| `Model.asave`            | ✅        | async_save   |
+| `Model.adelete`          | ✅        | async_delete |
+| `Model.arefresh_from_db` | ❌        |              |
 
 ## Code generation
 
@@ -366,7 +382,7 @@ To change them, edit the codemon config under `codemon/config/*.yaml` — **not*
 the generated files — then regenerate:
 
 ```bash
-lets test_generate
+lets generate
 ```
 
 This restores the Django-derived files to pristine, runs `python -m codemon`,

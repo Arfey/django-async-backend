@@ -19,7 +19,7 @@ things that are easy to get wrong.
   they look hand-written but are not. Each carries a `# This file was generated
   automatically. Do not modify it manually.` header. Do not hand-edit those
   files — your changes will be lost on the next regeneration. Edit the config
-  under `codemon/config/*.yaml` and run `lets test_generate` (not a bare
+  under `codemon/config/*.yaml` and run `lets generate` (not a bare
   `python -m codemon`) instead. See the README "Code generation" section.
 
 - **Generated code is committed.** Because the generated modules are checked in,

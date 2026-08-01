@@ -6,25 +6,9 @@ import pathlib
 import libcst as cst
 import requests
 import yaml
-from pydantic import (
-    BaseModel,
-    model_validator,
-)
+from pydantic import BaseModel
 
 parent = pathlib.Path(__file__).parent
-
-
-class CallFun(BaseModel):
-    attr: str | None = None
-    value: str | None = None
-
-    @model_validator(mode="after")
-    def validate_at_least_one_provided(self):
-        if self.attr is None and self.value is None:
-            raise ValueError(
-                'At least one of "attr" or "value" must be provided.'
-            )
-        return self
 
 
 class RenameAttr(BaseModel):
@@ -33,13 +17,32 @@ class RenameAttr(BaseModel):
     name: str | None = None
 
 
-class RenameFun(BaseModel):
-    func: RenameAttr | None = None
-
-
-class NameRename(BaseModel):
+class MethodCall(BaseModel):
     name: str
-    rename: str
+    # Raw source for each argument, e.g. ``obj``, ``flat=True``, ``*rest``.
+    args: list[str] | None = None
+
+
+class Attr(BaseModel):
+    name: str | None = None
+    value: str | None = None
+    parent_attr: str | None = None
+    attr: str | None = None
+
+    # actions
+    rename: RenameAttr | None = None
+    # ``<node>`` -> ``<node>.<name>(<args>)``
+    to_call_method: MethodCall | None = None
+    wrap: str | None = None
+    to_await: bool = False
+    # Iterate the call headed by this reference asynchronously. The value is
+    # the comprehension variable, so ``obj`` on ``qs.filter`` turns
+    # ``qs.filter(...)`` into ``[obj async for obj in qs.filter(...)]``.
+    to_async_comp: str | None = None
+
+
+class BooleanOperation(BaseModel):
+    operands: list[Attr] | None = None
 
 
 class ContextManagers(BaseModel):
@@ -52,42 +55,6 @@ class ForStatement(BaseModel):
     to_async: bool = False
 
 
-class Call(BaseModel):
-    to_await: bool = False
-    func: CallFun | None = None
-    name: str | None = None
-    rename: RenameFun | None = None
-    replace_raw: str | None = None
-    args: list[Call] | None = None
-
-    @model_validator(mode="after")
-    def validate_either_attr_or_name(self):
-        if (self.func is None and self.name is None) or (
-            self.func is not None and self.name is not None
-        ):
-            raise ValueError(
-                'Exactly one of "fun" or "name" must '
-                "be set, not both or neither."
-            )
-        return self
-
-
-class ReturnBlock(BaseModel):
-    replace_raw: str | None = None
-    remove: bool = False
-    call: Call | None = None
-
-
-class AssignTarget(BaseModel):
-    name: str
-
-
-class Assign(BaseModel):
-    remove: bool = False
-    rename: str | None = None
-    target: AssignTarget
-
-
 class CompForTarget(BaseModel):
     name: str
 
@@ -97,6 +64,26 @@ class CompForBlock(BaseModel):
     target: CompForTarget
 
 
+class Call(BaseModel):
+    to_await: bool = False
+    # Matcher for the called reference, and the operations applied to it. An
+    # omitted ``func`` matches any call.
+    func: Attr | None = None
+    replace_raw: str | None = None
+    args: list[Call] | None = None
+
+
+class ReturnBlock(BaseModel):
+    replace_raw: str | None = None
+    remove: bool = False
+
+
+class Assign(BaseModel):
+    remove: bool = False
+    # Matcher for the assignment target, and the operations applied to it.
+    target: Attr
+
+
 class Method(BaseModel):
     remove: bool = False
     add_raw_top: list[str] = None
@@ -104,7 +91,8 @@ class Method(BaseModel):
     to_async: bool = False
     rename: str | None = None
     calls: list[Call] | None = None
-    renames: list[NameRename] | None = None
+    attrs: list[Attr] | None = None
+    boolean_operations: list[BooleanOperation] | None = None
     for_statements: list[ForStatement] | None = None
     context_managers: list[ContextManagers] | None = None
     return_blocks: list[ReturnBlock] | None = None
@@ -124,7 +112,10 @@ class Function(BaseModel):
     rename: str | None = None
     add_raw_top: list[str] = None
     to_async: bool = False
+    functions: dict[str, Function] | None = None
     calls: list[Call] | None = None
+    attrs: list[Attr] | None = None
+    boolean_operations: list[BooleanOperation] | None = None
     for_statements: list[ForStatement] | None = None
     return_blocks: list[ReturnBlock] | None = None
     remove: bool = False

@@ -1,0 +1,318 @@
+pathname: db/models/deletion.py
+
+module:
+  new_imports:
+    - "from inspect import iscoroutinefunction"
+    - "from django.db.models import deletion as django_deletion"
+    - "from django.db.models.deletion import ProtectedError"
+    - "from django.db.models.deletion import RestrictedError"
+    - "from django_async_backend.db import async_connections"
+    - "from django_async_backend.db.transaction import async_atomic"
+    - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
+    - "from django_async_backend.db.models import sql"
+    - "from django_async_backend.db.models.query import QuerySet"
+    - "from django_async_backend.utils.contenttypes import aget_for_model"
+
+  add_raw_bottom:
+    - "_SYNC_CASCADE = django_deletion.CASCADE"
+    - "_SYNC_DO_NOTHING = django_deletion.DO_NOTHING"
+    - |
+      _SYNC_TO_ASYNC_ON_DELETE = {
+          django_deletion.CASCADE: _CASCADE,
+          django_deletion.PROTECT: _PROTECT,
+          django_deletion.RESTRICT: _RESTRICT,
+          django_deletion.SET_NULL: _SET_NULL,
+          django_deletion.SET_DEFAULT: _SET_DEFAULT,
+          django_deletion.DO_NOTHING: _DO_NOTHING,
+      }
+    - |
+      def _resolve_async_on_delete(on_delete):
+          handler = _SYNC_TO_ASYNC_ON_DELETE.get(on_delete)
+
+          if handler is not None:
+              return handler
+
+          deconstruct = getattr(on_delete, "deconstruct", None)
+
+          if deconstruct is not None:
+              path, args, kwargs = deconstruct()
+              if path == "django.db.models.SET":
+                  return _SET(*args, **kwargs)
+          if iscoroutinefunction(on_delete):
+              return on_delete
+          raise TypeError(
+              "async delete does not support the synchronous on_delete handler "
+              f"{on_delete!r}. Use a standard Django on_delete or an async "
+              "callable."
+          )
+    - |
+      async def _abulk_related_objects(field, objs, using):
+          from django.contrib.contenttypes.fields import GenericRelation
+
+          if not isinstance(field, GenericRelation):  # pragma: no cover
+              raise TypeError(
+                  "async delete does not support bulk_related_objects() on "
+                  f"{field!r}. Only contenttypes' GenericRelation is "
+                  "implemented."
+              )
+
+          content_type = await aget_for_model(
+              field.model, using, field.for_concrete_model
+          )
+          return field.remote_field.model._async_base_manager.using(
+              using
+          ).filter(
+              **{
+                  f"{field.content_type_field_name}__pk": content_type.pk,
+                  f"{field.object_id_field_name}__in": [
+                      obj.pk for obj in objs
+                  ],
+              }
+          )
+    - |
+      def _parent_chain_fields(opts):
+          """Field names that must stay loaded on a multi-table inheritance
+          child so its parent instances can be built from data already in
+          memory.
+
+          ``collect()`` reads parent instances with ``getattr(obj, ptr.name)``.
+          Django's ``ForwardOneToOneDescriptor`` answers that from the child's
+          own columns, but only while none of the parent's concrete fields is
+          deferred -- otherwise it falls back to a query per object, which is
+          synchronous and blows up in an async context.
+          """
+          return {
+              field.name
+              for ptr in opts.concrete_model._meta.parents.values()
+              if ptr is not None
+              for field in ptr.remote_field.model._meta.concrete_fields
+          }
+
+  import_aliases:
+    - name: IntegrityError
+      remove: true
+    - name: connections
+      remove: true
+    - name: transaction
+      remove: true
+    - name: models
+      remove: true
+    - name: sql
+      remove: true
+
+  # The on_delete handlers and their helper are private: user models declare
+  # Django's public sentinels, and _resolve_async_on_delete() maps those onto
+  # these.
+  assigns:
+    - target:
+        value: SET_NULL
+        attr: lazy_sub_objs
+        rename:
+          value: _SET_NULL
+
+  functions:
+    CASCADE:
+      rename: _CASCADE
+      to_async: true
+      attrs:
+        - name: connections
+          rename:
+            name: async_connections
+      calls:
+        - func:
+            attr: collect
+          to_await: true
+
+    PROTECT:
+      rename: _PROTECT
+      to_async: true
+      attrs:
+        - name: sub_objs
+          to_async_comp: obj
+
+    RESTRICT:
+      rename: _RESTRICT
+      to_async: true
+      calls:
+        - func:
+            value: collector
+            attr: add_restricted_objects
+          args:
+            - func:
+                name: sub_objs
+                to_async_comp: obj
+
+    SET:
+      rename: _SET
+      functions:
+        set_on_delete:
+          to_async: true
+
+    SET_NULL:
+      rename: _SET_NULL
+      to_async: true
+
+    SET_DEFAULT:
+      rename: _SET_DEFAULT
+      to_async: true
+
+    DO_NOTHING:
+      rename: _DO_NOTHING
+      to_async: true
+
+    get_candidate_relations_to_delete:
+      rename: _get_candidate_relations_to_delete
+
+  classes:
+    ProtectedError:
+      remove: true
+
+    RestrictedError:
+      remove: true
+
+    Collector:
+      methods:
+        get_del_batches:
+          attrs:
+            - name: connections
+              rename:
+                name: async_connections
+
+        can_fast_delete:
+          attrs:
+            - name: CASCADE
+              rename:
+                name: _SYNC_CASCADE
+            - name: DO_NOTHING
+              rename:
+                name: _SYNC_DO_NOTHING
+          calls:
+            - func:
+                name: get_candidate_relations_to_delete
+                rename:
+                  name: _get_candidate_relations_to_delete
+
+        related_objects:
+          attrs:
+            - name: _base_manager
+              rename:
+                name: _async_base_manager
+
+        clear_restricted_objects_from_queryset:
+          to_async: true
+          attrs:
+            - value: qs
+              attr: filter
+              to_async_comp: obj
+
+        collect:
+          to_async: true
+          attrs:
+            - attr: on_delete
+              parent_attr: remote_field
+              wrap: _resolve_async_on_delete
+            - name: DO_NOTHING
+              rename:
+                name: _DO_NOTHING
+          boolean_operations:
+            - operands:
+                - name: sub_objs
+                  to_async_comp: obj
+          calls:
+            - func:
+                name: get_candidate_relations_to_delete
+                rename:
+                  name: _get_candidate_relations_to_delete
+            # add() indexes and iterates objs; when objs is the queryset
+            # collected above, this reads its result cache.
+            - func:
+                value: self
+                attr: add
+              replace_raw: |
+                self.add(
+                    (
+                        [obj async for obj in objs]
+                        if isinstance(objs, QuerySet)
+                        else objs
+                    ),
+                    source,
+                    nullable,
+                    reverse_dependency=reverse_dependency,
+                )
+            - func:
+                value: sub_objs
+                attr: only
+                rename:
+                  attr: _only
+            - func:
+                name: tuple
+              args:
+                - func:
+                    name: referenced_fields
+                    to_call_method:
+                      name: union
+                      args:
+                        - "_parent_chain_fields(related_model._meta)"
+            - func:
+                value: field
+                attr: bulk_related_objects
+              replace_raw: |
+                await _abulk_related_objects(field, new_objs, self.using)
+            - func:
+                attr: collect
+              to_await: true
+            - func:
+                attr: clear_restricted_objects_from_queryset
+              to_await: true
+            - func:
+                name: on_delete
+              to_await: true
+
+        delete:
+          to_async: true
+          context_managers:
+            - to_async: true
+          attrs:
+            - value: models
+              attr: QuerySet
+              rename:
+                name: QuerySet
+          calls:
+            - func:
+                value: transaction
+                attr: mark_for_rollback_on_error
+                rename:
+                  name: async_mark_for_rollback_on_error
+            - func:
+                value: transaction
+                attr: atomic
+                rename:
+                  name: async_atomic
+            - func:
+                attr: send
+                rename:
+                  attr: asend
+              to_await: true
+            - func:
+                attr: _raw_delete
+              to_await: true
+            - func:
+                value: objs
+                attr: extend
+              replace_raw: |
+                objs.extend(
+                    [obj async for obj in instances]
+                    if isinstance(instances, QuerySet)
+                    else instances
+                )
+            - func:
+                attr: update
+                rename:
+                  attr: aupdate
+              to_await: true
+            - func:
+                attr: update_batch
+              to_await: true
+            - func:
+                attr: delete_batch
+              to_await: true

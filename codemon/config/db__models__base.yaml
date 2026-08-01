@@ -5,12 +5,15 @@ module:
     - "from django.db.models.base import ModelBase"
     - "from django.utils.functional import classproperty"
     - "from django_async_backend.db import async_connections"
+    - "from django_async_backend.db.models.deletion import Collector"
     - "from django_async_backend.db.models.manager import AsyncManager"
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
 
   import_aliases:
     - name: connections
+      remove: true
+    - name: Collector
       remove: true
 
   assigns:
@@ -19,7 +22,7 @@ module:
       remove: true
 
     - target:
-        name: model_unpickle
+        value: model_unpickle
       remove: true
 
   functions:
@@ -86,23 +89,26 @@ module:
           remove: true
 
         - target:
-            name: save
-          rename: async_save
+            value: save
+            rename:
+              value: async_save
 
         - target:
-            name: save_base
-          rename: _async_save_base
+            value: save_base
+            rename:
+              value: _async_save_base
 
         - target:
-            name: asave
+            value: asave
           remove: true
 
         - target:
-            name: delete
-          remove: true
+            value: delete
+            rename:
+              value: async_delete
 
         - target:
-            name: adelete
+            value: adelete
           remove: true
 
       methods:
@@ -144,8 +150,7 @@ module:
           calls:
             - func:
                 attr: _get_pk_val
-              rename:
-                func:
+                rename:
                   attr: _async_get_pk_val
 
         get_deferred_fields:
@@ -172,19 +177,16 @@ module:
           calls:
             - func:
                 attr: _prepare_related_fields_for_save
-              rename:
-                func:
+                rename:
                   attr: _async_prepare_related_fields_for_save
               to_await: true
             - func:
                 attr: _is_pk_set
-              rename:
-                func:
+                rename:
                   attr: _async_is_pk_set
             - func:
                 attr: save_base
-              rename:
-                func:
+                rename:
                   attr: _async_save_base
               to_await: true
 
@@ -196,56 +198,51 @@ module:
           calls:
             - func:
                 attr: _validate_force_insert
-              rename:
-                func:
+                rename:
                   attr: _async_validate_force_insert
             - func:
                 attr: _save_parents
-              rename:
-                func:
+                rename:
                   attr: _async_save_parents
               to_await: true
             - func:
                 value: transaction
                 attr: atomic
-              rename:
-                func:
+                rename:
                   name: async_atomic
             - func:
                 value: transaction
                 attr: mark_for_rollback_on_error
-              rename:
-                func:
+                rename:
                   name: async_mark_for_rollback_on_error
             - func:
                 value: pre_save
                 attr: send
-              rename:
-                func:
+                rename:
                   attr: asend
               to_await: true
             - func:
                 value: post_save
                 attr: send
-              rename:
-                func:
+                rename:
                   attr: asend
               to_await: true
             - func:
                 attr: _save_table
-              rename:
-                func:
+                rename:
                   attr: _async_save_table
               to_await: true
 
         _save_table:
           rename: _async_save_table
           to_async: true
-          renames:
+          attrs:
             - name: connections
-              rename: async_connections
+              rename:
+                name: async_connections
             - name: _base_manager
-              rename: _async_base_manager
+              rename:
+                name: _async_base_manager
           calls:
             - func:
                 attr: aggregate
@@ -265,24 +262,20 @@ module:
                 )
             - func:
                 attr: _do_update
-              rename:
-                func:
+                rename:
                   attr: _async_do_update
               to_await: true
             - func:
                 attr: _assign_returned_values
-              rename:
-                func:
+                rename:
                   attr: _async_assign_returned_values
             - func:
                 attr: _is_pk_set
-              rename:
-                func:
+                rename:
                   attr: _async_is_pk_set
             - func:
                 attr: _get_pk_val
-              rename:
-                func:
+                rename:
                   attr: _async_get_pk_val
             - func:
                 attr: _do_insert
@@ -301,20 +294,17 @@ module:
           calls:
             - func:
                 attr: _save_parents
-              rename:
-                func:
+                rename:
                   attr: _async_save_parents
               to_await: true
             - func:
                 attr: _save_table
-              rename:
-                func:
+                rename:
                   attr: _async_save_table
               to_await: true
             - func:
                 attr: _get_pk_val
-              rename:
-                func:
+                rename:
                   attr: _async_get_pk_val
 
         _do_update:
@@ -324,8 +314,7 @@ module:
             - func:
                 value: filtered
                 attr: exists
-              rename:
-                func:
+                rename:
                   attr: aexists
               to_await: true
             - func:
@@ -351,12 +340,25 @@ module:
           calls:
             - func:
                 attr: _is_pk_set
-              rename:
-                func:
+                rename:
                   attr: _async_is_pk_set
 
         delete:
-          remove: true
+          rename: async_delete
+          to_async: true
+          calls:
+            - func:
+                attr: _is_pk_set
+                rename:
+                  attr: _async_is_pk_set
+            - func:
+                value: collector
+                attr: collect
+              to_await: true
+            - func:
+                value: collector
+                attr: delete
+              to_await: true
 
         adelete:
           remove: true

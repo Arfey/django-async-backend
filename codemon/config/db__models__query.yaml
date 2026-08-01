@@ -7,6 +7,12 @@ module:
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
 
+  import_aliases:
+    # The async Collector lives in django_async_backend.db.models.deletion,
+    # which imports this module, so adelete() imports it locally instead.
+    - name: Collector
+      remove: true
+
   functions:
     prefetch_related_objects:
       to_async: true
@@ -17,61 +23,80 @@ module:
 
   classes:
     QuerySet:
+      add_raw_top:
+        - |
+          def __iter__(self):
+              raise TypeError(
+                  f"{self.__class__.__name__} is not iterable synchronously. "
+                  "Use `async for obj in qs` or `[obj async for obj in qs]`."
+              )
+        - |
+          def __len__(self):
+              raise TypeError(
+                  f"len() is not supported on {self.__class__.__name__}. "
+                  "Use `await qs.acount()`."
+              )
       assigns:
         - target:
-            name: create
-          rename: acreate
+            value: create
+            rename:
+              value: acreate
 
         - target:
-            name: bulk_update
-          rename: abulk_update
+            value: bulk_update
+            rename:
+              value: abulk_update
 
         - target:
-            name: get_or_create
-          rename: aget_or_create
+            value: get_or_create
+            rename:
+              value: aget_or_create
 
         - target:
-            name: update
-          rename: aupdate
+            value: update
+            rename:
+              value: aupdate
 
         - target:
-            name: update_or_create
+            value: update_or_create
           remove: true
 
         - target:
-            name: bulk_create
-          rename: abulk_create
+            value: bulk_create
+            rename:
+              value: abulk_create
 
         - target:
-            name: delete
+            value: delete
+            rename:
+              value: adelete
+
+        - target:
+            value: acreate
           remove: true
 
         - target:
-            name: acreate
+            value: abulk_create
           remove: true
 
         - target:
-            name: abulk_create
+            value: abulk_update
           remove: true
 
         - target:
-            name: abulk_update
+            value: aget_or_create
           remove: true
 
         - target:
-            name: aget_or_create
+            value: aupdate_or_create
           remove: true
 
         - target:
-            name: aupdate_or_create
+            value: adelete
           remove: true
 
         - target:
-            name: adelete
-          remove: true
-
-        - target:
-            name: aupdate
+            value: aupdate
           remove: true
 
       methods:
@@ -79,8 +104,7 @@ module:
           calls:
             - func:
                 attr: Query
-              rename:
-                func:
+                rename:
                   value: async_sql
 
         __getitem__:
@@ -119,7 +143,8 @@ module:
         _prefetch_related_objects:
           to_async: true
           calls:
-            - name: prefetch_related_objects
+            - func:
+                name: prefetch_related_objects
               to_await: true
 
         aexplain:
@@ -215,14 +240,34 @@ module:
         __xor__:
           remove: true
 
-        __or__:
-          remove: true
-
         __and__:
           remove: true
 
+        __or__:
+          attrs:
+            - name: _base_manager
+              rename:
+                name: _async_base_manager
+
+        _check_operator_queryset:
+          add_raw_top:
+            - |
+              if not isinstance(other, QuerySet):
+                  raise TypeError(
+                      f"Cannot use {operator_} operator with a non-async queryset. "
+                      f"Use Model.async_objects instead of Model.objects."
+                  )
+
+        # only() is generated as a private _only(): the method itself is pure
+        # sync, but the instances it returns carry deferred fields, and
+        # Django's DeferredAttribute.__get__ falls back to the *sync*
+        # refresh_from_db (removed from the async Model), so reading one raises
+        # SynchronousOnlyOperation. The async Collector only ever reads the FK
+        # columns it asked for; users would not, hence no public only().
+        # The leading underscore also keeps it off AsyncManager, since
+        # BaseManager.from_queryset() skips private methods.
         only:
-          remove: true
+          rename: _only
 
         defer:
           remove: true
@@ -249,8 +294,12 @@ module:
           to_async: true
           rename: aget
           calls:
-            - name: len
-              replace_raw: 'len([i async for i in clone])'
+            - func:
+                name: len
+              args:
+                - func:
+                    name: clone
+                    to_async_comp: i
 
         create:
           to_async: true
@@ -258,8 +307,7 @@ module:
           calls:
             - func:
                 attr: save
-              rename:
-                func:
+                rename:
                   attr: async_save
               to_await: true
 
@@ -269,23 +317,22 @@ module:
             - func:
                 value: obj
                 attr: _is_pk_set
-              rename:
-                func:
+                rename:
                   attr: _async_is_pk_set
             - func:
                 value: obj
                 attr: _prepare_related_fields_for_save
-              rename:
-                func:
+                rename:
                   attr: _async_prepare_related_fields_for_save
               to_await: true
 
         bulk_create:
           to_async: true
           rename: abulk_create
-          renames:
+          attrs:
             - name: connections
-              rename: async_connections
+              rename:
+                name: async_connections
           context_managers:
             - to_async: true
           calls:
@@ -298,8 +345,7 @@ module:
             - func:
                 value: transaction
                 attr: atomic
-              rename:
-                func:
+                rename:
                   name: async_atomic
             - func:
                 attr: _batched_insert
@@ -309,9 +355,10 @@ module:
           to_async: true
           # _base_manager runs a sync query; _async_base_manager is its async
           # twin, and the values_list result is consumed with `async for`.
-          renames:
+          attrs:
             - name: _base_manager
-              rename: _async_base_manager
+              rename:
+                name: _async_base_manager
           calls:
             - func:
                 value: group_next_orders
@@ -327,23 +374,22 @@ module:
         bulk_update:
           to_async: true
           rename: abulk_update
-          renames:
+          attrs:
             - name: connections
-              rename: async_connections
+              rename:
+                name: async_connections
           context_managers:
             - to_async: true
           calls:
             - func:
                 value: obj
                 attr: _is_pk_set
-              rename:
-                func:
+                rename:
                   attr: _async_is_pk_set
             - func:
                 value: obj
                 attr: _prepare_related_fields_for_save
-              rename:
-                func:
+                rename:
                   attr: _async_prepare_related_fields_for_save
               to_await: true
             # guard: keeps the set's `all_pk_fields.update()` untouched
@@ -352,15 +398,13 @@ module:
                 attr: update
             - func:
                 attr: update
-              rename:
-                func:
+                rename:
                   attr: aupdate
               to_await: true
             - func:
                 value: transaction
                 attr: atomic
-              rename:
-                func:
+                rename:
                   name: async_atomic
 
         get_or_create:
@@ -371,20 +415,17 @@ module:
           calls:
             - func:
                 attr: get
-              rename:
-                func:
+                rename:
                   attr: aget
               to_await: true
             - func:
                 value: transaction
                 attr: atomic
-              rename:
-                func:
+                rename:
                   name: async_atomic
             - func:
                 attr: create
-              rename:
-                func:
+                rename:
                   attr: acreate
               to_await: true
 
@@ -441,8 +482,7 @@ module:
           calls:
             - func:
                 attr: get
-              rename:
-                func:
+                rename:
                   attr: aget
 
         earliest:
@@ -460,16 +500,29 @@ module:
               to_async: true
 
           calls:
-            - name: tuple
+            - func:
+                name: tuple
               args:
                 - func:
                     attr: filter
               replace_raw: 'tuple([i async for i in self.filter(**{filter_key: batch})])'
 
         delete:
-          # to_async: true
-          # rename: adelete
-          remove: true
+          to_async: true
+          rename: adelete
+          # deletion imports this module for its QuerySet isinstance check, so
+          # the async Collector can only be imported here.
+          add_raw_top:
+            - "from django_async_backend.db.models.deletion import Collector"
+          calls:
+            - func:
+                value: collector
+                attr: collect
+              to_await: true
+            - func:
+                value: collector
+                attr: delete
+              to_await: true
 
         update:
           to_async: true
@@ -495,6 +548,10 @@ module:
 
         _raw_delete:
           to_async: true
+          attrs:
+            - name: sql
+              rename:
+                name: async_sql
           calls:
             - func:
                 attr: execute_sql
@@ -518,8 +575,7 @@ module:
           calls:
             - func:
                 attr: InsertQuery
-              rename:
-                func:
+                rename:
                   value: async_sql
             - func:
                 attr: execute_sql
@@ -533,8 +589,7 @@ module:
             - func:
                 value: transaction
                 attr: atomic
-              rename:
-                func:
+                rename:
                   name: async_atomic
             - func:
                 attr: _insert
@@ -542,14 +597,17 @@ module:
 
         __aiter__:
           calls:
-            - name: sync_to_async
+            - func:
+                name: sync_to_async
               replace_raw: self._fetch_all
 
         _fetch_all:
           to_async: true
+          attrs:
+            - value: self
+              attr: _iterable_class
+              to_async_comp: i
           calls:
-            - name: list
-              replace_raw: list([i async for i in self._iterable_class(self)])
             - func:
                 value: self
                 attr: _prefetch_related_objects
@@ -619,8 +677,7 @@ module:
           calls:
             - func:
                 attr: __iter__
-              rename:
-                func:
+                rename:
                   attr: __aiter__
 
     FlatValuesListIterable:
