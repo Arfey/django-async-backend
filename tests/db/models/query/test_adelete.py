@@ -1,3 +1,6 @@
+from collections import defaultdict
+from unittest import mock
+
 from django.db import (
     DEFAULT_DB_ALIAS,
     NotSupportedError,
@@ -29,6 +32,11 @@ from test_app.models import (
 )
 
 from django_async_backend.db import async_connections
+from django_async_backend.db.models.deletion import (
+    _DO_NOTHING,
+    Collector,
+    _resolve_async_on_delete,
+)
 from django_async_backend.test import (
     AsyncCaptureQueriesContext,
     AsyncioTestCase,
@@ -426,6 +434,19 @@ class TestADeleteCustomOnDelete(AsyncioTestCase):
         child = await AsyncOnDeleteChildModel.async_objects.aget(name="Child1")
         self.assertIsNone(child.parent_id)
 
+    async def test_do_nothing_handler_collects_nothing(self):
+        field = DoNothingChildModel._meta.get_field("parent")
+        handler = _resolve_async_on_delete(field.remote_field.on_delete)
+        collector = Collector(using=DEFAULT_DB_ALIAS)
+
+        self.assertIs(handler, _DO_NOTHING)
+        self.assertIsNone(
+            await handler(collector, field, [], DEFAULT_DB_ALIAS)
+        )
+        self.assertEqual(collector.data, {})
+        self.assertEqual(collector.field_updates, {})
+        self.assertEqual(collector.fast_deletes, [])
+
     async def test_sync_handler_is_rejected(self):
         parent = SyncOnDeleteParentModel(name="Parent")
         await parent.async_save()
@@ -526,3 +547,104 @@ class TestADeleteDefersUnreferencedFields(AsyncioTestCase):
         self.assertEqual(count, 2)
         self.assertEqual(per_model, {"test_app.MultiLevelDeleteModel": 2})
         self.assertEqual(await MultiLevelDeleteModel.async_objects.acount(), 0)
+
+
+class TestADeleteBatches(AsyncioTestCase):
+
+    async def asyncSetUp(self):
+        self.roots = []
+        for index in range(3):
+            root = await MultiLevelDeleteModel.async_objects.acreate(
+                name=f"Root{index}"
+            )
+            await MultiLevelSetNullChildModel.async_objects.acreate(
+                name=f"Child{index}", parent=root
+            )
+            self.roots.append(root)
+
+    async def test_relations_are_collected_once_per_batch(self):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+
+        with mock.patch.object(
+            connection.ops, "bulk_batch_size", return_value=1
+        ):
+            (
+                count,
+                per_model,
+            ) = await MultiLevelDeleteModel.async_objects.all().adelete()
+
+        # One SET_NULL queryset per batch, all combined into a single update.
+        self.assertEqual(count, 3)
+        self.assertEqual(per_model, {"test_app.MultiLevelDeleteModel": 3})
+        self.assertEqual(await MultiLevelDeleteModel.async_objects.acount(), 0)
+        parent_ids = [
+            child.parent_id
+            async for child in MultiLevelSetNullChildModel.async_objects.all()
+        ]
+        self.assertEqual(parent_ids, [None, None, None])
+
+
+class TestADeleteWithoutDeferredConstraints(AsyncioTestCase):
+
+    async def asyncSetUp(self):
+        self.root = await MultiLevelDeleteModel.async_objects.acreate(
+            name="Root"
+        )
+        self.leaf = await MultiLevelDeleteModel.async_objects.acreate(
+            name="Leaf", parent=self.root
+        )
+
+    async def test_cascade_nulls_the_fk_before_deleting(self):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+
+        with mock.patch.object(
+            connection.features, "can_defer_constraint_checks", False
+        ):
+            count, per_model = (
+                await MultiLevelDeleteModel.async_objects.filter(
+                    name="Root"
+                ).adelete()
+            )
+
+        self.assertEqual(count, 2)
+        self.assertEqual(per_model, {"test_app.MultiLevelDeleteModel": 2})
+        self.assertEqual(await MultiLevelDeleteModel.async_objects.acount(), 0)
+
+
+class TestCollectorSort(AsyncioTestCase):
+    def make_collector(self):
+        collector = Collector(using=DEFAULT_DB_ALIAS)
+        collector.data[MultiLevelDeleteModel] = set()
+        collector.data[MultiLevelSetNullChildModel] = set()
+        return collector
+
+    async def test_orders_models_after_their_dependencies(self):
+        collector = self.make_collector()
+        collector.dependencies[MultiLevelDeleteModel].add(
+            MultiLevelSetNullChildModel
+        )
+
+        collector.sort()
+
+        self.assertEqual(
+            list(collector.data),
+            [MultiLevelSetNullChildModel, MultiLevelDeleteModel],
+        )
+
+    async def test_cyclic_dependencies_leave_the_order_untouched(self):
+        collector = self.make_collector()
+        collector.dependencies[MultiLevelDeleteModel].add(
+            MultiLevelSetNullChildModel
+        )
+        collector.dependencies[MultiLevelSetNullChildModel].add(
+            MultiLevelDeleteModel
+        )
+
+        collector.sort()
+
+        # sort() bails out instead of replacing data with an ordered dict.
+        self.assertIsInstance(collector.data, defaultdict)
+        self.assertEqual(
+            list(collector.data),
+            [MultiLevelDeleteModel, MultiLevelSetNullChildModel],
+        )

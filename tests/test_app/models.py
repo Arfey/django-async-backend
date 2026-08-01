@@ -446,3 +446,37 @@ class MultiLevelSetNullChildModel(AsyncModelMixin, models.Model):
 
     class Meta:
         db_table = "multi_level_set_null_child_model"
+
+
+class KeepParentsParentModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "keep_parents_parent_model"
+
+
+class KeepParentsChildModel(KeepParentsParentModel):
+    """Multi-table inheritance child whose parent is the target of a cascading
+    foreign key, so keep_parents=True has to skip that reverse relation.
+    """
+
+    child_value = models.IntegerField(null=True)
+
+    class Meta:
+        db_table = "keep_parents_child_model"
+
+
+class KeepParentsRefModel(AsyncModelMixin, models.Model):
+    """The child inherits this reverse relation, and it points at a row that
+    keep_parents=True leaves behind.
+    """
+
+    name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        KeepParentsParentModel,
+        on_delete=models.CASCADE,
+        related_name="refs",
+    )
+
+    class Meta:
+        db_table = "keep_parents_ref_model"

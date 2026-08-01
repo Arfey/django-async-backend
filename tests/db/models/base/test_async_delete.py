@@ -13,6 +13,9 @@ from test_app.models import (
     GenericChildModel,
     GenericRelationModel,
     GrandChildModel,
+    KeepParentsChildModel,
+    KeepParentsParentModel,
+    KeepParentsRefModel,
     MultiLevelDeleteModel,
     MultiLevelSetNullChildModel,
     ParentModel,
@@ -365,6 +368,51 @@ class TestAsyncDeleteInheritance(AsyncioTestCase):
         self.assertIn('"parent_model"."parent_value"', selects[0])
         # ... but the child's own unreferenced columns stay deferred.
         self.assertNotIn('"child_model"."child_value"', selects[0])
+
+
+class TestAsyncDeleteKeepParentsRelations(AsyncioTestCase):
+    """A child inherits the reverse relations of its parents. keep_parents
+    leaves the parent rows alone, so those relations must be skipped as well --
+    the child and its parent share a primary key, so a cascade aimed at the
+    parent would otherwise match through the child.
+    """
+
+    async def asyncSetUp(self):
+        self.child = KeepParentsChildModel(name="Child", child_value=1)
+        await self.child.async_save()
+        parent = await KeepParentsParentModel.async_objects.aget(
+            pk=self.child.pk
+        )
+        await KeepParentsRefModel.async_objects.acreate(
+            name="Ref", parent=parent
+        )
+
+    async def test_keep_parents_leaves_relations_aimed_at_the_parent(self):
+        count, per_model = await self.child.async_delete(keep_parents=True)
+
+        self.assertEqual(count, 1)
+        self.assertEqual(per_model, {"test_app.KeepParentsChildModel": 1})
+        self.assertEqual(
+            await KeepParentsParentModel.async_objects.acount(), 1
+        )
+        self.assertEqual(await KeepParentsRefModel.async_objects.acount(), 1)
+
+    async def test_without_keep_parents_the_relation_cascades(self):
+        count, per_model = await self.child.async_delete()
+
+        self.assertEqual(count, 3)
+        self.assertEqual(
+            per_model,
+            {
+                "test_app.KeepParentsChildModel": 1,
+                "test_app.KeepParentsParentModel": 1,
+                "test_app.KeepParentsRefModel": 1,
+            },
+        )
+        self.assertEqual(
+            await KeepParentsParentModel.async_objects.acount(), 0
+        )
+        self.assertEqual(await KeepParentsRefModel.async_objects.acount(), 0)
 
 
 class TestAsyncDeleteSignals(AsyncioTestCase):
