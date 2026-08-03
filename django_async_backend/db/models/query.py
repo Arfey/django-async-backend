@@ -1248,6 +1248,29 @@ class QuerySet(AltersData):
             return await self.query.has_results(using=self.db)
         return bool(self._result_cache)
 
+    async def acontains(self, obj):
+        """
+        Return True if the QuerySet contains the provided obj,
+        False otherwise.
+        """
+        self._not_support_combined_queries("contains")
+        if self._fields is not None:
+            raise TypeError(
+                "Cannot call QuerySet.contains() after .values() or .values_list()."
+            )
+        try:
+            if obj._meta.concrete_model != self.model._meta.concrete_model:
+                return False
+        except AttributeError:
+            raise TypeError("'obj' must be a model instance.")
+        if not obj._async_is_pk_set():
+            raise ValueError(
+                "QuerySet.contains() cannot be used on unsaved objects."
+            )
+        if self._result_cache is not None:
+            return obj in self._result_cache
+        return await self.filter(pk=obj.pk).aexists()
+
     async def _prefetch_related_objects(self):
         # This method can only be called once the result cache has been filled.
         await prefetch_related_objects(

@@ -58,8 +58,9 @@ module:
               value: aupdate
 
         - target:
-            name: update_or_create
-          rename: aupdate_or_create
+            value: update_or_create
+            rename:
+              value: aupdate_or_create
 
         - target:
             value: bulk_create
@@ -290,9 +291,10 @@ module:
         get:
           to_async: true
           rename: aget
-          renames:
+          attrs:
             - name: connections
-              rename: async_connections
+              rename:
+                name: async_connections
           calls:
             - func:
                 name: len
@@ -438,20 +440,17 @@ module:
             - func:
                 value: transaction
                 attr: atomic
-              rename:
-                func:
+                rename:
                   name: async_atomic
             - func:
                 attr: get_or_create
-              rename:
-                func:
+                rename:
                   attr: aget_or_create
               to_await: true
             - func:
                 value: obj
                 attr: save
-              rename:
-                func:
+                rename:
                   attr: async_save
               to_await: true
 
@@ -481,9 +480,19 @@ module:
               to_await: true
 
         contains:
-          # to_async: true
-          # rename: acontains
-          remove: true
+          to_async: true
+          rename: acontains
+          calls:
+            - func:
+                value: obj
+                attr: _is_pk_set
+                rename:
+                  attr: _async_is_pk_set
+            - func:
+                attr: exists
+                rename:
+                  attr: aexists
+              to_await: true
 
         first:
           to_async: true
