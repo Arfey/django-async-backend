@@ -180,6 +180,44 @@ class GetOrCreateModel(AsyncModelMixin, models.Model):
         db_table = "get_or_create_model"
 
 
+class TouchingForeignKey(models.ForeignKey):
+    """A ForeignKey with its own pre_save(), so update_or_create() has to add
+    both its name and its attname to update_fields.
+    """
+
+    def pre_save(self, model_instance, add):
+        return super().pre_save(model_instance, add)
+
+
+class UpdateOrCreateModel(AsyncModelMixin, models.Model):
+    """Covers the update_fields branches of update_or_create():
+    ``updated_at`` is added because it defines pre_save(), ``related`` because
+    its name differs from its attname, and ``upper_name`` is a non-concrete
+    property that forces the plain save() path.
+    """
+
+    name = models.CharField(max_length=255, unique=True)
+    value = models.IntegerField(null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    related = TouchingForeignKey(
+        SaveModel,
+        on_delete=models.CASCADE,
+        null=True,
+        related_name="+",
+    )
+
+    class Meta:
+        db_table = "update_or_create_model"
+
+    @property
+    def upper_name(self):
+        return self.name.upper()
+
+    @upper_name.setter
+    def upper_name(self, value):
+        self.name = value.lower()
+
+
 class GenericFkModel(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=255)
     content_type = models.ForeignKey(

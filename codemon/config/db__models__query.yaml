@@ -58,8 +58,8 @@ module:
               value: aupdate
 
         - target:
-            value: update_or_create
-          remove: true
+            name: update_or_create
+          rename: aupdate_or_create
 
         - target:
             value: bulk_create
@@ -207,9 +207,6 @@ module:
         prefetch_related:
           remove: true
 
-        select_for_update:
-          remove: true
-
         ain_bulk:
           remove: true
 
@@ -293,6 +290,9 @@ module:
         get:
           to_async: true
           rename: aget
+          renames:
+            - name: connections
+              rename: async_connections
           calls:
             - func:
                 name: len
@@ -430,9 +430,30 @@ module:
               to_await: true
 
         update_or_create:
-          # to_async: true
-          # rename: aupdate_or_create
-          remove: true
+          to_async: true
+          rename: aupdate_or_create
+          context_managers:
+            - to_async: true
+          calls:
+            - func:
+                value: transaction
+                attr: atomic
+              rename:
+                func:
+                  name: async_atomic
+            - func:
+                attr: get_or_create
+              rename:
+                func:
+                  attr: aget_or_create
+              to_await: true
+            - func:
+                value: obj
+                attr: save
+              rename:
+                func:
+                  attr: async_save
+              to_await: true
 
         aggregate:
           to_async: true
