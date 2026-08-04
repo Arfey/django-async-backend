@@ -518,3 +518,12 @@ class KeepParentsRefModel(AsyncModelMixin, models.Model):
 
     class Meta:
         db_table = "keep_parents_ref_model"
+
+
+class DatesModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    date = models.DateField(null=True)
+    datetime = models.DateTimeField(null=True)
+
+    class Meta:
+        db_table = "dates_model"

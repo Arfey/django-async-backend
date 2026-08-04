@@ -1248,6 +1248,29 @@ class QuerySet(AltersData):
             return await self.query.has_results(using=self.db)
         return bool(self._result_cache)
 
+    async def acontains(self, obj):
+        """
+        Return True if the QuerySet contains the provided obj,
+        False otherwise.
+        """
+        self._not_support_combined_queries("contains")
+        if self._fields is not None:
+            raise TypeError(
+                "Cannot call QuerySet.contains() after .values() or .values_list()."
+            )
+        try:
+            if obj._meta.concrete_model != self.model._meta.concrete_model:
+                return False
+        except AttributeError:
+            raise TypeError("'obj' must be a model instance.")
+        if not obj._async_is_pk_set():
+            raise ValueError(
+                "QuerySet.contains() cannot be used on unsaved objects."
+            )
+        if self._result_cache is not None:
+            return obj in self._result_cache
+        return await self.filter(pk=obj.pk).aexists()
+
     async def _prefetch_related_objects(self):
         # This method can only be called once the result cache has been filled.
         await prefetch_related_objects(
@@ -1334,6 +1357,69 @@ class QuerySet(AltersData):
             else FlatValuesListIterable if flat else ValuesListIterable
         )
         return clone
+
+    def dates(self, field_name, kind, order="ASC"):
+        """
+        Return a list of date objects representing all available dates for
+        the given field_name, scoped to 'kind'.
+        """
+        if kind not in ("year", "month", "week", "day"):
+            raise ValueError(
+                "'kind' must be one of 'year', 'month', 'week', or 'day'."
+            )
+        if order not in ("ASC", "DESC"):
+            raise ValueError("'order' must be either 'ASC' or 'DESC'.")
+        return (
+            self.annotate(
+                datefield=Trunc(field_name, kind, output_field=DateField()),
+                plain_field=F(field_name),
+            )
+            .values_list("datefield", flat=True)
+            .distinct()
+            .filter(plain_field__isnull=False)
+            .order_by(("-" if order == "DESC" else "") + "datefield")
+        )
+
+    def datetimes(self, field_name, kind, order="ASC", tzinfo=None):
+        """
+        Return a list of datetime objects representing all available
+        datetimes for the given field_name, scoped to 'kind'.
+        """
+        if kind not in (
+            "year",
+            "month",
+            "week",
+            "day",
+            "hour",
+            "minute",
+            "second",
+        ):
+            raise ValueError(
+                "'kind' must be one of 'year', 'month', 'week', 'day', "
+                "'hour', 'minute', or 'second'."
+            )
+        if order not in ("ASC", "DESC"):
+            raise ValueError("'order' must be either 'ASC' or 'DESC'.")
+        if settings.USE_TZ:
+            if tzinfo is None:
+                tzinfo = timezone.get_current_timezone()
+        else:
+            tzinfo = None
+        return (
+            self.annotate(
+                datetimefield=Trunc(
+                    field_name,
+                    kind,
+                    output_field=DateTimeField(),
+                    tzinfo=tzinfo,
+                ),
+                plain_field=F(field_name),
+            )
+            .values_list("datetimefield", flat=True)
+            .distinct()
+            .filter(plain_field__isnull=False)
+            .order_by(("-" if order == "DESC" else "") + "datetimefield")
+        )
 
     def none(self):
         """Return an empty QuerySet."""
@@ -1504,6 +1590,13 @@ class QuerySet(AltersData):
         """
         self._not_support_combined_queries("annotate")
         return self._annotate(args, kwargs, select=True)
+
+    def alias(self, *args, **kwargs):
+        """
+        Return a query set with added aliases for extra data or aggregations.
+        """
+        self._not_support_combined_queries("alias")
+        return self._annotate(args, kwargs, select=False)
 
     def _annotate(self, args, kwargs, select=True):
         self._validate_values_are_expressions(
