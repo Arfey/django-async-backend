@@ -241,9 +241,6 @@ module:
         __xor__:
           remove: true
 
-        __and__:
-          remove: true
-
         __or__:
           attrs:
             - name: _base_manager
