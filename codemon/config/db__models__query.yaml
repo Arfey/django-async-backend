@@ -239,7 +239,10 @@ module:
           remove: true
 
         __xor__:
-          remove: true
+          attrs:
+            - name: _base_manager
+              rename:
+                name: _async_base_manager
 
         __or__:
           attrs:
