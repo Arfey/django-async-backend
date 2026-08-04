@@ -527,3 +527,120 @@ class DatesModel(AsyncModelMixin, models.Model):
 
     class Meta:
         db_table = "dates_model"
+
+
+class SelectRelatedAuthorModel(AsyncModelMixin, models.Model):
+    """Root of the select_related graph: reachable forward from
+    ``SelectRelatedBookModel.author`` and backwards through the reverse
+    one-to-one ``profile``.
+    """
+
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "select_related_author_model"
+
+
+class SelectRelatedProfileModel(AsyncModelMixin, models.Model):
+    """Reverse one-to-one target, so select_related("profile") exercises the
+    reverse branch of SQLCompiler.get_related_selections().
+    """
+
+    author = models.OneToOneField(
+        SelectRelatedAuthorModel,
+        on_delete=models.CASCADE,
+        related_name="profile",
+    )
+    bio = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = "select_related_profile_model"
+
+
+class SelectRelatedPublisherModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "select_related_publisher_model"
+
+
+class DepthLevel0Model(AsyncModelMixin, models.Model):
+    """Head of a chain of non-nullable foreign keys. select_related() with no
+    arguments only descends non-null relations, so a chain this deep is what
+    makes get_related_selections() hit its ``cur_depth > max_depth`` bail-out.
+    """
+
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "depth_level0_model"
+
+
+def _depth_level(index, parent_model):
+    return type(
+        "DepthLevel%dModel" % index,
+        (AsyncModelMixin, models.Model),
+        {
+            "__module__": __name__,
+            "name": models.CharField(max_length=255, unique=True),
+            "parent": models.ForeignKey(
+                parent_model,
+                on_delete=models.CASCADE,
+                related_name="children",
+            ),
+            "Meta": type(
+                "Meta", (), {"db_table": "depth_level%d_model" % index}
+            ),
+        },
+    )
+
+
+DepthLevel1Model = _depth_level(1, DepthLevel0Model)
+DepthLevel2Model = _depth_level(2, DepthLevel1Model)
+DepthLevel3Model = _depth_level(3, DepthLevel2Model)
+DepthLevel4Model = _depth_level(4, DepthLevel3Model)
+DepthLevel5Model = _depth_level(5, DepthLevel4Model)
+DepthLevel6Model = _depth_level(6, DepthLevel5Model)
+DepthLevel7Model = _depth_level(7, DepthLevel6Model)
+
+
+class SelectRelatedMtiParentModel(AsyncModelMixin, models.Model):
+    """Multi-table inheritance base. Selecting the child through the implicit
+    parent link makes RelatedPopulator take its ``reorder_for_init`` branch,
+    because the parent columns are not in Model.__init__ order.
+    """
+
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "select_related_mti_parent_model"
+
+
+class SelectRelatedMtiChildModel(SelectRelatedMtiParentModel):
+    child_value = models.IntegerField(null=True)
+
+    class Meta:
+        db_table = "select_related_mti_child_model"
+
+
+class SelectRelatedBookModel(AsyncModelMixin, models.Model):
+    """Two forward foreign keys, one of them nullable, so select_related() can
+    be tested with several relations at once and with a NULL related object.
+    """
+
+    title = models.CharField(max_length=255, unique=True)
+    author = models.ForeignKey(
+        SelectRelatedAuthorModel,
+        on_delete=models.CASCADE,
+        related_name="books",
+    )
+    publisher = models.ForeignKey(
+        SelectRelatedPublisherModel,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="books",
+    )
+
+    class Meta:
+        db_table = "select_related_book_model"
