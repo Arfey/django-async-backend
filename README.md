@@ -336,7 +336,7 @@ async def main():
 | `Model.objects.defer`               | ⚠️        | not safe for async, will not be implemented — use `values`/`values_list` |
 | `Model.objects.only`                | ⚠️        | not safe for async, will not be implemented — use `values`/`values_list` |
 | `Model.objects.using`               | ✅        |          |
-| `Model.objects.resolve_expression`  | ❌        |          |
+| `Model.objects.resolve_expression`  | ✅        |          |
 | `Model.objects.ordered`             | ✅        |          |
 | `Model.objects.values`              | ✅        |          |
 | `Model.objects.values_list`         | ✅        |          |
