@@ -325,7 +325,7 @@ async def main():
 | `Model.objects.intersection`        | ✅        |          |
 | `Model.objects.difference`          | ✅        |          |
 | `Model.objects.select_related`      | ❌        |          |
-| `Model.objects.select_for_update`   | ✅        | requires `async_atomic` |
+| `Model.objects.select_for_update`   | ✅        |          |
 | `Model.objects.prefetch_related`    | ❌        |          |
 | `Model.objects.aaggregate`          | ❌        |          |
 | `Model.objects.annotate`            | ✅        |          |
@@ -340,8 +340,8 @@ async def main():
 | `Model.objects.ordered`             | ❌        |          |
 | `Model.objects.values`              | ✅        |          |
 | `Model.objects.values_list`         | ✅        |          |
-| `Model.objects.dates`               | ❌        |          |
-| `Model.objects.datetimes`           | ❌        |          |
+| `Model.objects.dates`               | ✅        |          |
+| `Model.objects.datetimes`           | ✅        |          |
 | `Model.objects.alias    `           | ❌        |          |
 | `__aiter__`                         | ✅        |          |
 | `__iter__`                          | ⚠️        | raises `TypeError` — use `async for obj in qs` |

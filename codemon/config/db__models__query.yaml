@@ -273,12 +273,6 @@ module:
         alias:
           remove: true
 
-        datetimes:
-          remove: true
-
-        dates:
-          remove: true
-
         explain:
           to_async: true
           rename: aexplain
