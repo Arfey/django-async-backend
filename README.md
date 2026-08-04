@@ -337,7 +337,7 @@ async def main():
 | `Model.objects.only`                | ⚠️        | not safe for async, will not be implemented — use `values`/`values_list` |
 | `Model.objects.using`               | ✅        |          |
 | `Model.objects.resolve_expression`  | ❌        |          |
-| `Model.objects.ordered`             | ❌        |          |
+| `Model.objects.ordered`             | ✅        |          |
 | `Model.objects.values`              | ✅        |          |
 | `Model.objects.values_list`         | ✅        |          |
 | `Model.objects.dates`               | ✅        |          |

@@ -122,6 +122,15 @@ class OrderItemModel(AsyncModelMixin, models.Model):
         order_with_respect_to = "parent"
 
 
+class DefaultOrderingModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    value = models.IntegerField(null=True)
+
+    class Meta:
+        db_table = "default_ordering_model"
+        ordering = ["name"]
+
+
 class PkOnlyModel(AsyncModelMixin, models.Model):
 
     class Meta:
