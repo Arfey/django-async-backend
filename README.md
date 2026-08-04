@@ -342,7 +342,7 @@ async def main():
 | `Model.objects.values_list`         | ✅        |          |
 | `Model.objects.dates`               | ✅        |          |
 | `Model.objects.datetimes`           | ✅        |          |
-| `Model.objects.alias    `           | ❌        |          |
+| `Model.objects.alias`               | ✅        |          |
 | `__aiter__`                         | ✅        |          |
 | `__iter__`                          | ⚠️        | raises `TypeError` — use `async for obj in qs` |
 | `__len__`                           | ⚠️        | raises `TypeError` — use `await qs.acount()` |
