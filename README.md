@@ -336,8 +336,8 @@ async def main():
 | `Model.objects.defer`               | ⚠️        | not safe for async, will not be implemented — use `values`/`values_list` |
 | `Model.objects.only`                | ⚠️        | not safe for async, will not be implemented — use `values`/`values_list` |
 | `Model.objects.using`               | ✅        |          |
-| `Model.objects.resolve_expression`  | ❌        |          |
-| `Model.objects.ordered`             | ❌        |          |
+| `Model.objects.resolve_expression`  | ✅        |          |
+| `Model.objects.ordered`             | ✅        |          |
 | `Model.objects.values`              | ✅        |          |
 | `Model.objects.values_list`         | ✅        |          |
 | `Model.objects.dates`               | ✅        |          |
@@ -348,10 +348,10 @@ async def main():
 | `__len__`                           | ⚠️        | raises `TypeError` — use `await qs.acount()` |
 | `__contains__`                      | ⚠️        | falls back to `__iter__`, so it raises `TypeError` too |
 | `__bool__`                          | ⚠️        | truth-testing falls back to `__len__`, so `if qs:` raises `TypeError` — use `await qs.aexists()` |
-| `__repr__`                          | ❌        |          |
-| `__and__`                           | ❌        |          |
+| `__repr__`                          | ✅        |          |
+| `__and__`                           | ✅        |          |
 | `__or__`                            | ✅        |          |
-| `__xor__`                           | ❌        |          |
+| `__xor__`                           | ✅        |          |
 | `__getitem__`                       | ✅        |          |
 | `Model.objects.aiterator`           | ❌        |          |
 
