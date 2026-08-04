@@ -321,6 +321,9 @@ class QuerySet(AltersData):
             "Use `await qs.acount()`."
         )
 
+    def __repr__(self):
+        return "<%s [%s]>" % (self.__class__.__name__, self.query)
+
     def __init__(self, model=None, query=None, using=None, hints=None):
         self.model = model
         self._db = using
