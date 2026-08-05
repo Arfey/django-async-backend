@@ -7,7 +7,7 @@
 
 Async Django ORM and PostgreSQL database backend.
 
-📖 **[Read the documentation](https://django-async-backend.readthedocs.io/)**
+📖 **[Read the documentation](https://django-async-backend.readthedocs.io/en/latest/)**
 
 ---
 
