@@ -19,6 +19,60 @@ jobs:
         run: pip install pre-commit
       - name: Lint using pre-commit
         run: pre-commit run --all-files
+
+  generated:
+    name: Generated ORM is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install and configure Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 2.1.3
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          virtualenvs-path: .venv
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --with dev --no-interaction --no-root
+
+      - name: Install project
+        run: poetry install --no-interaction
+
+      - name: Install lets
+        run: |
+          curl -sSL https://raw.githubusercontent.com/lets-cli/lets/master/install.sh | bash -s -- v0.0.63
+          echo "$HOME/.lets/bin" >> "$GITHUB_PATH"
+
+      - name: Regenerate ORM
+        run: lets generate
+
+      - name: Fail if generated files are out of date
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Generated files are out of date. Run 'lets generate' and commit the result."
+            git status --short
+            echo "--- diff (tracked files) ---"
+            git diff
+            exit 1
+          fi
+          echo "✅ generated files are up to date"
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:

@@ -27,10 +27,19 @@ commands:
 
   generate:
     description: Generate ORM
+    env:
+      SKIP: flake8
     cmd: |
-      git restore django_async_backend/db/models/query.py django_async_backend/db/models/sql/compiler.py django_async_backend/db/models/sql/query.py django_async_backend/db/models/sql/subqueries.py django_async_backend/db/models/deletion.py
+      git restore $(sed -n 's|^pathname: *|django_async_backend/|p' codemon/config/*.yaml)
       poetry run python -m codemon
-      poetry run pre-commit run darker -v --all-files || true
+
+      for i in 1 2 3 4 5; do
+        poetry run pre-commit run --all-files && exit 0
+        echo "🔁 hooks modified files, re-running (attempt $i)"
+      done
+
+      echo "❌ formatting did not converge after 5 attempts" >&2
+      exit 1
 
   lint:
     group: Linters & Formatters
