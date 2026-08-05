@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation
+    url: https://django-async-backend.readthedocs.io/
+    about: Handbook, compatibility matrix and API reference.
+  - name: 💬 Questions and usage help
+    url: https://github.com/Arfey/django-async-backend/discussions
+    about: Ask here if something is not a bug — usage questions, design discussion.

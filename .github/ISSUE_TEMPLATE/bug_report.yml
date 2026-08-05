@@ -1,0 +1,100 @@
+name: 🐛 Bug report
+description: Report something that does not work as documented
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect instead?
+      placeholder: |
+        I expected ... but instead ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: >-
+        The smallest snippet that reproduces the problem — models plus the
+        async code that triggers it. This is rendered as Python, no backticks
+        needed.
+      render: python
+      placeholder: |
+        class Book(AsyncModelMixin, models.Model):
+            name = models.CharField(max_length=100)
+
+        async def main():
+            await Book.async_objects.acreate(name="Django")
+    validations:
+      required: true
+
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Full traceback
+      description: The complete traceback, not just the final line.
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: version-package
+    attributes:
+      label: django-async-backend version
+      placeholder: "6.0.8"
+    validations:
+      required: true
+
+  - type: input
+    id: version-django
+    attributes:
+      label: Django version
+      placeholder: "6.0"
+    validations:
+      required: true
+
+  - type: input
+    id: version-python
+    attributes:
+      label: Python version
+      placeholder: "3.13"
+    validations:
+      required: true
+
+  - type: input
+    id: version-postgres
+    attributes:
+      label: PostgreSQL version
+      placeholder: "15"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: server
+    attributes:
+      label: How are you running it?
+      options:
+        - ASGI
+        - WSGI (including the Django development server)
+        - Test suite only
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I am using `async_objects` (not `objects` via `sync_to_async`) for the failing query.
+          required: false
+        - label: The failing code does not touch a related manager (`instance.<related>.all()`).
+          required: false
+        - label: I am on the latest version of django-async-backend.
+          required: false

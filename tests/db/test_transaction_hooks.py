@@ -358,3 +358,84 @@ class TestConnectionOnCommit(AsyncioTransactionTestCase):
 
         with self.assertRaisesRegex(TypeError, msg):
             await connection.on_commit(None)
+
+    async def test_async_callback_executes_immediately_if_no_transaction(self):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+
+        async def async_callback():
+            self.notify(1)
+
+        await connection.on_commit(async_callback)
+
+        self.assertNotified([1])
+
+    async def test_async_callback_delayed_until_after_commit(self):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+
+        async def async_callback():
+            self.notify(1)
+
+        async with async_atomic():
+            await create_instance(1)
+            await connection.on_commit(async_callback)
+            self.assertNotified([])
+
+        await self.assertDone([1])
+
+    async def test_async_callback_not_executed_on_rollback(self):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+
+        async def async_callback():
+            self.notify(1)
+
+        try:
+            async with async_atomic():
+                await create_instance(1)
+                await connection.on_commit(async_callback)
+                raise ForcedError()
+        except ForcedError:
+            pass
+
+        await self.assertDone([])
+
+    async def test_async_and_sync_callbacks_run_in_order_registered(self):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+
+        async def async_callback():
+            self.notify(2)
+
+        async with async_atomic():
+            await connection.on_commit(lambda: self.notify(1))
+            await connection.on_commit(async_callback)
+            await connection.on_commit(lambda: self.notify(3))
+
+        self.assertNotified([1, 2, 3])
+
+    async def test_async_callback_can_query_the_database(self):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+
+        async def async_callback():
+            self.notify(len(await get_all()))
+
+        async with async_atomic():
+            await create_instance(1)
+            await connection.on_commit(async_callback)
+
+        self.assertNotified([1])
+
+    async def test_robust_async_callback_error_is_logged(self):
+        connection = async_connections[DEFAULT_DB_ALIAS]
+
+        async def async_callback():
+            raise ForcedError("robust async callback")
+
+        with self.assertLogs(
+            "django_async_backend.db.backends", "ERROR"
+        ) as cm:
+            async with async_atomic():
+                await connection.on_commit(async_callback, robust=True)
+                await connection.on_commit(lambda: self.notify(1))
+
+        # The failing hook is logged and the next one still runs.
+        self.assertNotified([1])
+        self.assertIn("ForcedError", cm.output[0])

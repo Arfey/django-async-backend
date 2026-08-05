@@ -1,0 +1,30 @@
+name: ✨ Feature request
+description: Suggest a feature, or ask for an unsupported ORM method
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: >-
+        Describe the use case rather than the implementation — what are you
+        trying to do that you cannot do today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: >-
+        What should the API look like? Keep the scope as narrow as possible.
+      render: python
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workaround you are using today.
+    validations:
+      required: false

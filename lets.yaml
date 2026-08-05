@@ -53,6 +53,16 @@ commands:
     description: Run all linters
     cmd: poetry run pre-commit run --all-files
 
+  docs:
+    group: Docs
+    description: Build the documentation into docs/build/html
+    cmd: poetry run python -m sphinx docs/source docs/build/html -b html
+
+  docs_serve:
+    group: Docs
+    description: Serve the docs with live reload on http://localhost:8080
+    cmd: poetry run sphinx-autobuild docs/source docs/build/html --port 8080
+
   test:
     group: Tests
     depends:
@@ -75,6 +85,12 @@ commands:
       - python
       - manage.py
       - test
+
+  test_django:
+    group: Tests
+    description: Run Django's own test suite against the async backend (docker)
+    cmd: |
+      cd tests_django && docker compose run --build --rm test_django_integration
 
   coverage:
     cmd: |

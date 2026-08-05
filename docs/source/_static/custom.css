@@ -1,0 +1,30 @@
+.header-badge {
+    display: inline-block;
+    margin: 0 0.2rem 0.4rem 0;
+    vertical-align: middle;
+}
+
+.badges p {
+    margin-bottom: 0;
+}
+
+/* The ORM support matrices are wide; let them scroll rather than
+   overflow the page body. */
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+    white-space: normal;
+}
+
+table.docutils {
+    display: block;
+    overflow-x: auto;
+}
+
+.sidebar-container, .toc-drawer {
+    box-sizing: border-box;
+    width: 18em;
+}
+
+.table-wrapper table {
+    width: 100%;
+}

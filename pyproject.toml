@@ -33,7 +33,7 @@ keywords = [
 ]
 license = "MIT"
 homepage = "https://github.com/Arfey/django-async-backend"
-documentation = "https://github.com/Arfey/django-async-backend/blob/main/README.md"
+documentation = "https://django-async-backend.readthedocs.io/"
 repository = "https://github.com/Arfey/django-async-backend"
 
 [tool.poetry.dependencies]
@@ -56,6 +56,24 @@ pydantic = "^2.12.5"
 pyyaml = "^6.0.3"
 requests = "^2.32.5"
 uvicorn = "^0.38.0"
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+furo = ">=2025.9.25"
+myst-parser = "^4"
+sphinx = ">=8,<10"
+sphinx-autobuild = "^2024.10.3"
+sphinx-copybutton = "^0.5.2"
+sphinx-design = "^0.6.1"
+sphinx-issues = "^5.0.1"
+sphinx-sitemap = "^2.9.0"
+sphinxext-opengraph = "^0.13.0"
+linkify-it-py = "^2"
+# 4.x is a deprecated stub that ships no `roman_numerals` module, which
+# breaks Sphinx's latex builder import at startup.
+roman-numerals-py = "<4"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
