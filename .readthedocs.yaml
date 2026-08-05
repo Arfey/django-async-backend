@@ -8,9 +8,10 @@ build:
     post_checkout:
       - git fetch --unshallow || true
     install:
-      - pip install poetry
-      - poetry config virtualenvs.create false
-      - poetry install --with docs --extras "binary pool"
+      - pip install poetry poetry-plugin-export
+      - poetry export --only docs --format requirements.txt --output docs-requirements.txt --without-hashes
+      - pip install -r docs-requirements.txt
+      - pip install .
     build:
       html:
         - python -m sphinx docs/source $READTHEDOCS_OUTPUT/html -b html
