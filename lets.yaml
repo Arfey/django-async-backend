@@ -30,7 +30,14 @@ commands:
     env:
       SKIP: flake8
     cmd: |
-      git restore $(sed -n 's|^pathname: *|django_async_backend/|p' codemon/config/*.yaml)
+      generated=$(sed -n 's|^pathname: *|django_async_backend/|p' codemon/config/*.yaml)
+
+      [ -n "$generated" ] || {
+        echo "❌ no 'pathname:' entries found in codemon/config/*.yaml" >&2
+        exit 1
+      }
+
+      git restore $generated
       poetry run python -m codemon
 
       for i in 1 2 3 4 5; do

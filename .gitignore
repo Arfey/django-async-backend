@@ -208,5 +208,4 @@ __marimo__/
 
 .vscode
 
-# lets init marker (local only, so `lets init` runs on fresh checkouts)
 .lets/
