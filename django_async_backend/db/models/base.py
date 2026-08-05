@@ -1,4 +1,5 @@
-# This file was generated automatically. Do not modify it manually. (based on django 6.0)
+# This file was generated automatically. Do not modify it manually. (based on django 2.0)
+
 import copy
 import inspect
 import warnings
