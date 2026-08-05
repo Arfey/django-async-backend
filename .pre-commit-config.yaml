@@ -11,6 +11,7 @@ repos:
         rev: v4.4.0
         hooks:
         -   id: trailing-whitespace
+            exclude: ^django_async_backend/db/models/(base|deletion|query|sql/(compiler|query|subqueries))\.py$
         -   id: end-of-file-fixer
         -   id: debug-statements
         -   id: detect-private-key

@@ -23,7 +23,7 @@ class TestGetItem(AsyncioTestCase):
         await TestModel(name="Item4").async_save()
 
     async def test_get_single_item(self):
-        qs = TestModel.async_objects.all()
+        qs = TestModel.async_objects.order_by("id")
 
         async with AsyncCaptureQueriesContext(
             async_connections[DEFAULT_DB_ALIAS]
@@ -54,7 +54,7 @@ class TestGetItem(AsyncioTestCase):
             self.assertEqual(len(qs._result_cache), await qs.acount())
 
     async def test_get_slice(self):
-        qs = TestModel.async_objects.all()
+        qs = TestModel.async_objects.order_by("id")
 
         async with AsyncCaptureQueriesContext(
             async_connections[DEFAULT_DB_ALIAS]
@@ -92,7 +92,7 @@ class TestGetItem(AsyncioTestCase):
             )
 
     async def test_get_slice_with_step(self):
-        qs = TestModel.async_objects.all()
+        qs = TestModel.async_objects.order_by("id")
         async with AsyncCaptureQueriesContext(
             async_connections[DEFAULT_DB_ALIAS]
         ) as ctx:
