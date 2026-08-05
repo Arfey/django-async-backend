@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "django-async-backend"
 version = "6.0.8"
-description = "Django extension providing async capabilities for database and other components"
+description = "True async Django ORM and PostgreSQL backend with connection pooling and async transactions"
 readme = "README.md"
 authors = ["Arfey <arfey@gmail.com>"]
 classifiers = [
@@ -29,6 +29,7 @@ keywords = [
   "django",
   "asyncio",
   "database",
+  "ORM",
 ]
 license = "MIT"
 homepage = "https://github.com/Arfey/django-async-backend"

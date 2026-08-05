@@ -1,5 +1,7 @@
 # Django Async Backend
 
+Async Django ORM and PostgreSQL database backend.
+
 ## 🚀 Installation & Django Integration
 
 ### 1. Install the package
