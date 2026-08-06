@@ -393,7 +393,48 @@ def add_raw_top_to_function(updated_node, add_raw_top):
             *updated_node.body.body[1:],
         ]
     else:
+        # No docstring to sit under, so drop the leading separator rather than
+        # opening the body with a blank line.
+        if blocks and isinstance(blocks[0], cst.EmptyLine):
+            blocks = blocks[1:]
         body = [*blocks, *updated_node.body.body]
+    return updated_node.with_changes(
+        body=updated_node.body.with_changes(body=body)
+    )
+
+
+def remove_docstring_from_function(updated_node):
+    """Drop a leading docstring.
+
+    Docstrings are copied from Django verbatim, so a transform can leave one
+    describing behavior the generated method no longer has. Dropping it beats
+    shipping a wrong one.
+    """
+    if not m.matches(
+        updated_node,
+        m.FunctionDef(
+            body=m.IndentedBlock(
+                body=[
+                    m.SimpleStatementLine(
+                        body=[m.Expr(value=m.SimpleString()), m.ZeroOrMore()]
+                    ),
+                    m.ZeroOrMore(),
+                ]
+            )
+        ),
+    ):
+        return updated_node
+
+    body = list(updated_node.body.body[1:])
+    # add_raw_top may already have run, leaving its separator where the
+    # docstring used to be.
+    while body and isinstance(body[0], cst.EmptyLine):
+        body.pop(0)
+    if body:
+        body[0] = body[0].with_changes(leading_lines=[])
+    else:
+        body = [cst.parse_statement("pass")]
+
     return updated_node.with_changes(
         body=updated_node.body.with_changes(body=body)
     )
@@ -745,6 +786,16 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
                 return add_raw_bottom_to_function(
                     updated_node, config.add_raw_bottom
                 )
+
+        if config.remove_docstring:
+
+            @m.leave(m.FunctionDef())
+            def remove_docstring(
+                self,
+                original_node: cst.FunctionDef,
+                updated_node: cst.FunctionDef,
+            ) -> cst.FunctionDef:
+                return remove_docstring_from_function(updated_node)
 
         if config.for_statements:
 

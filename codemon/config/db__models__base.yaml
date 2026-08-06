@@ -162,6 +162,9 @@ module:
         refresh_from_db:
           rename: async_refresh_from_db
           to_async: true
+          # Django's docstring says deferred access calls this; only true
+          # of the sync original, since __get__ cannot await.
+          remove_docstring: true
           # A sync queryset has filter() and aget() too, so without this it
           # reads another connection and transaction instead of failing.
           add_raw_top:

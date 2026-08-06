@@ -2015,7 +2015,6 @@ class QuerySet(AltersData):
             )
 
     def _check_operator_queryset(self, other, operator_):
-
         if not isinstance(other, QuerySet):
             raise TypeError(
                 f"Cannot use {operator_} operator with a non-async queryset. "

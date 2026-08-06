@@ -102,10 +102,19 @@ access falls back to. Reading a field left out of a deferred load still goes
 through Django's synchronous `refresh_from_db()` and raises
 `SynchronousOnlyOperation`, because attribute access cannot be awaited. Reload
 explicitly instead.
+```
 
-For the same reason the method's own docstring, which is generated from
-Django's source, still describes the deferred-loading fallback. It does not
-apply here.
+```{warning}
+Refresh instances that were loaded asynchronously. An instance fetched with
+the sync ORM (`Model.objects.get()`) and then reloaded with
+`async_refresh_from_db()` is read on the **async** connection — a different
+transaction from the one it came from. Nothing detects this, because
+`_state.db` records the alias, not which connection registry served it. Inside
+a sync `transaction.atomic()` block it will not see that transaction's
+uncommitted rows.
+
+Django's own `arefresh_from_db()` stays on the sync connection, so it remains
+the right call for an instance that lives in the sync world.
 ```
 
 ## Managers

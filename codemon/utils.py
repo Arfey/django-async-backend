@@ -88,6 +88,8 @@ class Method(BaseModel):
     remove: bool = False
     add_raw_top: list[str] = None
     add_raw_bottom: list[str] = None
+    # Drop Django's docstring when the transform makes it untrue.
+    remove_docstring: bool = False
     to_async: bool = False
     rename: str | None = None
     calls: list[Call] | None = None
