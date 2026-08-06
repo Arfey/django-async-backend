@@ -8,8 +8,8 @@ boilerplate:
 
 - an `async_objects` manager (an `AsyncManager`), so you don't have to declare
   one by hand;
-- `async_save()` and `async_delete()` methods for saving and deleting instances
-  asynchronously.
+- `async_save()`, `async_delete()` and `async_refresh_from_db()` methods for
+  saving, deleting and reloading instances asynchronously.
 
 ```python
 from django.db import models, DEFAULT_DB_ALIAS
@@ -73,6 +73,40 @@ through related objects, sending `pre_delete` / `post_delete` along the way.
 `CASCADE`, `PROTECT`, `RESTRICT`, `SET_NULL`, `SET_DEFAULT`, `SET(...)` and
 `DO_NOTHING` all work. A custom **synchronous** `on_delete` callable is
 rejected with a `TypeError`, because it would run a blocking query.
+
+### `async_refresh_from_db()`
+
+Reloads the instance's field values from the database. Accepts the same
+keyword arguments as Django's `refresh_from_db()` (`using`, `fields`,
+`from_queryset`), drops cached related objects and prefetched results, and
+leaves fields the reloaded row did not select untouched.
+
+```python
+book = await Book.async_objects.aget(name="Django")
+await Book.async_objects.filter(pk=book.pk).aupdate(name="Django Async")
+
+await book.async_refresh_from_db()
+assert book.name == "Django Async"
+
+# reload a subset
+await book.async_refresh_from_db(fields=["name"])
+```
+
+`from_queryset` must be an async queryset or an `AsyncManager` — passing
+`Model.objects` raises `TypeError`, because a sync queryset would read through
+Django's connection and a different transaction.
+
+```{note}
+Unlike Django's `refresh_from_db()`, this is **not** what deferred field
+access falls back to. Reading a field left out of a deferred load still goes
+through Django's synchronous `refresh_from_db()` and raises
+`SynchronousOnlyOperation`, because attribute access cannot be awaited. Reload
+explicitly instead.
+
+For the same reason the method's own docstring, which is generated from
+Django's source, still describes the deferred-loading fallback. It does not
+apply here.
+```
 
 ## Managers
 
@@ -219,11 +253,11 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 
 ### Model methods
 
-| methods                  | supported | comments     |
-| ------------------------ | --------- | ------------ |
-| `Model.asave`            | ✅        | `async_save`   |
-| `Model.adelete`          | ✅        | `async_delete` |
-| `Model.arefresh_from_db` | ❌        |              |
+| methods                  | supported | comments                 |
+| ------------------------ | --------- | ------------------------ |
+| `Model.asave`            | ✅        | `async_save`             |
+| `Model.adelete`          | ✅        | `async_delete`           |
+| `Model.arefresh_from_db` | ✅        | `async_refresh_from_db`  |
 
 ### RawQuerySet
 

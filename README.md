@@ -179,11 +179,11 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 
 ### Model methods
 
-| methods                  | supported | comments     |
-| ------------------------ | --------- | ------------ |
-| `Model.asave`            | ✅        | `async_save`   |
-| `Model.adelete`          | ✅        | `async_delete` |
-| `Model.arefresh_from_db` | ❌        |              |
+| methods                  | supported | comments                 |
+| ------------------------ | --------- | ------------------------ |
+| `Model.asave`            | ✅        | `async_save`             |
+| `Model.adelete`          | ✅        | `async_delete`           |
+| `Model.arefresh_from_db` | ✅        | `async_refresh_from_db`  |
 
 ### RawQuerySet
 
