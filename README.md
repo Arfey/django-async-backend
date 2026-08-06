@@ -179,11 +179,14 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 
 ### Model methods
 
-| methods                  | supported | comments     |
-| ------------------------ | --------- | ------------ |
-| `Model.asave`            | ✅        | `async_save`   |
-| `Model.adelete`          | ✅        | `async_delete` |
-| `Model.arefresh_from_db` | ❌        |              |
+Django's own `a*` methods keep their existing behavior; the genuinely async
+equivalents are the names in the comments column.
+
+| methods                  | supported | comments                 |
+| ------------------------ | --------- | ------------------------ |
+| `Model.asave`            | ✅        | `async_save`             |
+| `Model.adelete`          | ✅        | `async_delete`           |
+| `Model.arefresh_from_db` | ✅        | `async_refresh_from_db`  |
 
 ### RawQuerySet
 

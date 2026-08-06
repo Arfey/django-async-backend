@@ -7,6 +7,7 @@ module:
     - "from django_async_backend.db import async_connections"
     - "from django_async_backend.db.models.deletion import Collector"
     - "from django_async_backend.db.models.manager import AsyncManager"
+    - "from django_async_backend.db.models.query import QuerySet"
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
 
@@ -154,10 +155,56 @@ module:
                   attr: _async_get_pk_val
 
         get_deferred_fields:
-          remove: true
+          rename: _async_get_deferred_fields
 
+        # Safe on deferred instances: fields _only() left out are skipped
+        # via non_loaded_fields, so no DeferredAttribute is ever read.
         refresh_from_db:
-          remove: true
+          rename: async_refresh_from_db
+          to_async: true
+          # Django's docstring says deferred access calls this; only true
+          # of the sync original, since __get__ cannot await.
+          remove_docstring: true
+          # A sync queryset has filter() and aget() too, so without this it
+          # reads another connection and transaction instead of failing.
+          add_raw_top:
+            - |
+              if from_queryset is not None and not (
+                  isinstance(from_queryset, QuerySet)
+                  or issubclass(
+                      getattr(from_queryset, "_queryset_class", type(None)),
+                      QuerySet,
+                  )
+              ):
+                  raise TypeError(
+                      "from_queryset must be an async queryset or manager. "
+                      "Use Model.async_objects instead of Model.objects."
+                  )
+          attrs:
+            - name: _base_manager
+              rename:
+                name: _async_base_manager
+          calls:
+            # self.pk is Django's property; the mixin uses its own copy.
+            - func:
+                value: from_queryset
+                attr: filter
+              replace_raw: 'from_queryset.filter(pk=self._async_get_pk_val())'
+            - func:
+                attr: get_deferred_fields
+                rename:
+                  attr: _async_get_deferred_fields
+            - func:
+                value: db_instance_qs
+                attr: only
+                rename:
+                  attr: _only
+            - func:
+                value: db_instance_qs
+                attr: get
+                rename:
+                  attr: aget
+              to_await: true
 
         arefresh_from_db:
           remove: true
@@ -480,6 +527,7 @@ module:
 # into the mixin and add an _async prefix. We want 100% coverage so we can be
 # sure we haven't missed any sync operation (except _meta, _state, NotUpdated).
 # - 100% coverage.
-# - All methods should be private except async_save and async_objects.
+# - All methods should be private except async_objects, async_save,
+# async_delete and async_refresh_from_db.
 # - Don't use mocks in tests (if not accepted in test comment).
 # - Don't test private methods.
