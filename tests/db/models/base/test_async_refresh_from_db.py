@@ -219,6 +219,20 @@ class TestAsyncRefreshFromDb(AsyncioTestCase):
             len(ctx), 0, "Nothing was left in fields=, so nothing to reload"
         )
 
+    async def test_fields_mixing_a_prefetch_lookup_and_a_column(self):
+        """The prefetch lookup is dropped from fields=, and what remains still
+        reloads.
+        """
+        self.obj._prefetched_objects_cache = {"relatives": []}
+        await TestModel.async_objects.filter(pk=self.obj.pk).aupdate(value=99)
+
+        await self.obj.async_refresh_from_db(fields=["relatives", "value"])
+
+        self.assertEqual(self.obj._prefetched_objects_cache, {})
+        self.assertEqual(
+            self.obj.value, 99, "The surviving field should still be reloaded"
+        )
+
     async def test_cached_foreign_key_is_copied_from_the_reloaded_row(self):
         parent = TestModel(name="Parent", value=0)
         await parent.async_save()

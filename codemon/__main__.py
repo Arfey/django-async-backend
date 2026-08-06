@@ -426,14 +426,29 @@ def remove_docstring_from_function(updated_node):
         return updated_node
 
     body = list(updated_node.body.body[1:])
-    # add_raw_top may already have run, leaving its separator where the
-    # docstring used to be.
-    while body and isinstance(body[0], cst.EmptyLine):
+
+    # add_raw_top may already have run, leaving its blank separator where the
+    # docstring used to be. Only blank lines go; comments are content.
+    while (
+        body and isinstance(body[0], cst.EmptyLine) and body[0].comment is None
+    ):
         body.pop(0)
-    if body:
-        body[0] = body[0].with_changes(leading_lines=[])
-    else:
-        body = [cst.parse_statement("pass")]
+
+    if not body:
+        return updated_node.with_changes(
+            body=updated_node.body.with_changes(
+                body=[cst.parse_statement("pass")]
+            )
+        )
+
+    if isinstance(body[0], cst.BaseStatement):
+        body[0] = body[0].with_changes(
+            leading_lines=[
+                line
+                for line in body[0].leading_lines
+                if line.comment is not None
+            ]
+        )
 
     return updated_node.with_changes(
         body=updated_node.body.with_changes(body=body)
@@ -789,7 +804,8 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
         if config.remove_docstring:
 
-            @m.leave(m.FunctionDef())
+            # Matched by name so a nested def keeps its own docstring.
+            @m.leave(m.FunctionDef(name=m.Name(name)))
             def remove_docstring(
                 self,
                 original_node: cst.FunctionDef,
