@@ -127,11 +127,15 @@ class AsyncModelMixin:
     async def async_refresh_from_db(
         self, using=None, fields=None, from_queryset=None
     ):
-        if from_queryset is not None and not isinstance(
-            from_queryset, (QuerySet, AsyncManager)
+        if from_queryset is not None and not (
+            isinstance(from_queryset, QuerySet)
+            or issubclass(
+                getattr(from_queryset, "_queryset_class", type(None)),
+                QuerySet,
+            )
         ):
             raise TypeError(
-                "from_queryset must be an async queryset. "
+                "from_queryset must be an async queryset or manager. "
                 "Use Model.async_objects instead of Model.objects."
             )
 

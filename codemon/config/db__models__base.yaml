@@ -169,11 +169,15 @@ module:
           # reads another connection and transaction instead of failing.
           add_raw_top:
             - |
-              if from_queryset is not None and not isinstance(
-                  from_queryset, (QuerySet, AsyncManager)
+              if from_queryset is not None and not (
+                  isinstance(from_queryset, QuerySet)
+                  or issubclass(
+                      getattr(from_queryset, "_queryset_class", type(None)),
+                      QuerySet,
+                  )
               ):
                   raise TypeError(
-                      "from_queryset must be an async queryset. "
+                      "from_queryset must be an async queryset or manager. "
                       "Use Model.async_objects instead of Model.objects."
                   )
           attrs:

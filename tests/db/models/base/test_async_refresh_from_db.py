@@ -1,6 +1,7 @@
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import SynchronousOnlyOperation
 from django.db import DEFAULT_DB_ALIAS
+from django.db.models.manager import BaseManager
 from django.test import override_settings
 from test_app.models import (
     GenericFkModel,
@@ -12,6 +13,7 @@ from test_app.models import (
 
 from django_async_backend.db import async_connections
 from django_async_backend.db.models.base import AsyncModelMixin
+from django_async_backend.db.models.query import QuerySet
 from django_async_backend.test import (
     AsyncCaptureQueriesContext,
     AsyncioTestCase,
@@ -319,7 +321,7 @@ class TestAsyncRefreshFromDb(AsyncioTestCase):
 
         self.assertEqual(
             str(cm.exception),
-            "from_queryset must be an async queryset. "
+            "from_queryset must be an async queryset or manager. "
             "Use Model.async_objects instead of Model.objects.",
         )
 
@@ -328,6 +330,18 @@ class TestAsyncRefreshFromDb(AsyncioTestCase):
             await self.obj.async_refresh_from_db(
                 from_queryset=TestModel.objects
             )
+
+    async def test_hand_rolled_async_manager_is_accepted(self):
+        """The guard tests the queryset class, not the manager class, so a
+        manager built with BaseManager.from_queryset() works too.
+        """
+        manager = BaseManager.from_queryset(QuerySet)()
+        manager.model = TestModel
+        await TestModel.async_objects.filter(pk=self.obj.pk).aupdate(value=11)
+
+        await self.obj.async_refresh_from_db(from_queryset=manager)
+
+        self.assertEqual(self.obj.value, 11)
 
     async def test_async_manager_is_accepted(self):
         await TestModel.async_objects.filter(pk=self.obj.pk).aupdate(value=5)

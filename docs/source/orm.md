@@ -99,9 +99,14 @@ assert book.name == "Django Async"
 await book.async_refresh_from_db(fields=["name"])
 ```
 
-`from_queryset` must be an async queryset or an `AsyncManager` — passing
-`Model.objects` raises `TypeError`, because a sync queryset would read through
-Django's connection and a different transaction.
+`from_queryset` must be an async queryset or manager — passing `Model.objects`
+raises `TypeError`, because a sync queryset would read through Django's
+connection and a different transaction.
+
+One behavior does differ from Django's: with no `from_queryset`, the reload
+goes through `_async_base_manager`, which is always a plain `AsyncManager` and
+does not honor `Meta.base_manager_name`. Pass `from_queryset` explicitly if you
+need a specific manager.
 
 ```{note}
 Unlike Django's `refresh_from_db()`, this is **not** what deferred field

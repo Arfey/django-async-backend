@@ -427,8 +427,8 @@ def remove_docstring_from_function(updated_node):
 
     body = list(updated_node.body.body[1:])
 
-    # add_raw_top may already have run, leaving its blank separator where the
-    # docstring used to be. Only blank lines go; comments are content.
+    # Defensive: handler dispatch is libcst's reverse-alphabetical dir()
+    # order, which today runs add_raw_top after this. Don't rely on it.
     while (
         body and isinstance(body[0], cst.EmptyLine) and body[0].comment is None
     ):
@@ -442,13 +442,14 @@ def remove_docstring_from_function(updated_node):
         )
 
     if isinstance(body[0], cst.BaseStatement):
-        body[0] = body[0].with_changes(
-            leading_lines=[
-                line
-                for line in body[0].leading_lines
-                if line.comment is not None
-            ]
+        # Drop only the blanks the docstring left behind. Anything from the
+        # first comment onwards is content, blank separators included.
+        lines = list(body[0].leading_lines)
+        first_comment = next(
+            (i for i, line in enumerate(lines) if line.comment is not None),
+            len(lines),
         )
+        body[0] = body[0].with_changes(leading_lines=lines[first_comment:])
 
     return updated_node.with_changes(
         body=updated_node.body.with_changes(body=body)
@@ -780,7 +781,8 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
         if config.add_raw_top:
 
-            @m.leave(m.FunctionDef())
+            # Matched by name so a nested def is left alone.
+            @m.leave(m.FunctionDef(name=m.Name(name)))
             def add_raw_top(
                 self,
                 original_node: cst.FunctionDef,
@@ -792,7 +794,8 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
         if config.add_raw_bottom:
 
-            @m.leave(m.FunctionDef())
+            # Matched by name so a nested def is left alone.
+            @m.leave(m.FunctionDef(name=m.Name(name)))
             def add_raw_bottom(
                 self,
                 original_node: cst.FunctionDef,
