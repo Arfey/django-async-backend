@@ -179,6 +179,9 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 
 ### Model methods
 
+Django's own `a*` methods keep their existing behavior; the genuinely async
+equivalents are the names in the comments column.
+
 | methods                  | supported | comments                 |
 | ------------------------ | --------- | ------------------------ |
 | `Model.asave`            | ✅        | `async_save`             |

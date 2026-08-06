@@ -54,6 +54,13 @@ behavior instead of silently changing underneath it — and it **guarantees the
 async path is genuinely async**: when you call `async_save()`, you know the
 query runs on the asyncio connection, with no threadpool and no hidden sync
 connection.
+
+The same rule applies to querysets, with a different mechanism: there the
+opt-in is the *manager*. `Book.objects.aget()` stays Django's `sync_to_async`
+wrapper; only `Book.async_objects.aget()` is genuinely async. An instance has
+no manager to switch, so the method name carries the opt-in instead. Either
+way nothing this library adds to `Model` replaces something Django already
+defines, which is why third-party code keeps working unchanged.
 :::
 
 ### `async_save()`
@@ -106,15 +113,11 @@ explicitly instead.
 
 ```{warning}
 Refresh instances that were loaded asynchronously. An instance fetched with
-the sync ORM (`Model.objects.get()`) and then reloaded with
-`async_refresh_from_db()` is read on the **async** connection — a different
-transaction from the one it came from. Nothing detects this, because
-`_state.db` records the alias, not which connection registry served it. Inside
-a sync `transaction.atomic()` block it will not see that transaction's
-uncommitted rows.
-
-Django's own `arefresh_from_db()` stays on the sync connection, so it remains
-the right call for an instance that lives in the sync world.
+`Model.objects.get()` and then reloaded with `async_refresh_from_db()` is read
+on the **async** connection, in a different transaction from the one it came
+from, and nothing detects it — `_state.db` records the alias, not which
+connection served it. For an instance that lives in the sync world, Django's
+own `arefresh_from_db()` is still the right call. See [Pitfalls](#pitfalls).
 ```
 
 ## Managers
@@ -261,6 +264,9 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 | `__getitem__`      | ✅        |          |
 
 ### Model methods
+
+Django's own `a*` methods keep their existing behavior; the genuinely async
+equivalents are the names in the comments column.
 
 | methods                  | supported | comments                 |
 | ------------------------ | --------- | ------------------------ |
