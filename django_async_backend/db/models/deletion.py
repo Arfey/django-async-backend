@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 6.0)
+# This file was generated automatically. Do not modify it manually. (based on django 23b659402663dace32a04a0bf15dd13e5bfadc7e)
 from collections import (
     Counter,
     defaultdict,
@@ -344,11 +344,7 @@ class Collector:
         protected_objects = defaultdict(list)
         for related in _get_candidate_relations_to_delete(model._meta):
             # Preserve parent reverse relationships if keep_parents=True.
-            if (
-                keep_parents
-                and related.model._meta.concrete_model
-                in model._meta.all_parents
-            ):
+            if keep_parents and related.model in model._meta.all_parents:
                 continue
             field = related.field
             on_delete = _resolve_async_on_delete(field.remote_field.on_delete)

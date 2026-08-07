@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 6.0)
+# This file was generated automatically. Do not modify it manually. (based on django 23b659402663dace32a04a0bf15dd13e5bfadc7e)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -77,8 +77,6 @@ MAX_GET_RESULTS = 21
 
 # The maximum number of items to display in a QuerySet.__repr__
 REPR_OUTPUT_SIZE = 20
-
-PROHIBITED_FILTER_KWARGS = frozenset(["_connector", "_negated"])
 
 
 class BaseIterable:
@@ -681,7 +679,7 @@ class QuerySet(AltersData):
                     "Unique fields that can trigger the upsert must be provided."
                 )
             # Updating primary keys and non-concrete fields is forbidden.
-            if any(not f.concrete for f in update_fields):
+            if any(not f.concrete or f.many_to_many for f in update_fields):
                 raise ValueError(
                     "bulk_create() can only be used with concrete fields in "
                     "update_fields."
@@ -692,7 +690,9 @@ class QuerySet(AltersData):
                     "update_fields."
                 )
             if unique_fields:
-                if any(not f.concrete for f in unique_fields):
+                if any(
+                    not f.concrete or f.many_to_many for f in unique_fields
+                ):
                     raise ValueError(
                         "bulk_create() can only be used with concrete fields "
                         "in unique_fields."
@@ -879,7 +879,7 @@ class QuerySet(AltersData):
             )
         opts = self.model._meta
         fields = [opts.get_field(name) for name in fields]
-        if any(not f.concrete for f in fields):
+        if any(not f.concrete or f.many_to_many for f in fields):
             raise ValueError(
                 "bulk_update() can only be used with concrete fields."
             )
@@ -1505,13 +1505,6 @@ class QuerySet(AltersData):
         return clone
 
     def _filter_or_exclude_inplace(self, negate, args, kwargs):
-        if invalid_kwargs := PROHIBITED_FILTER_KWARGS.intersection(kwargs):
-            invalid_kwargs_str = ", ".join(
-                f"'{k}'" for k in sorted(invalid_kwargs)
-            )
-            raise TypeError(
-                f"The following kwargs are invalid: {invalid_kwargs_str}"
-            )
         if negate:
             self._query.add_q(~Q(*args, **kwargs))
         else:
@@ -2028,14 +2021,9 @@ class QuerySet(AltersData):
             )
 
     def _check_ordering_first_last_queryset_aggregation(self, method):
-        if (
-            isinstance(self.query.group_by, tuple)
-            # Raise if the pk fields are not in the group_by.
-            and self.model._meta.pk
-            not in {col.output_field for col in self.query.group_by}
-            and set(self.model._meta.pk_fields).difference(
-                {col.target for col in self.query.group_by}
-            )
+        if isinstance(self.query.group_by, tuple) and not any(
+            col.output_field is self.model._meta.pk
+            for col in self.query.group_by
         ):
             raise TypeError(
                 f"Cannot use QuerySet.{method}() on an unordered queryset performing "

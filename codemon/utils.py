@@ -141,9 +141,15 @@ class Config(BaseModel):
     module: Module
 
 
+def is_commit_hash(version: str) -> bool:
+    return len(version) >= 7 and all(c in "0123456789abcdef" for c in version)
+
+
 def load_file(*, config: Config, version: str):
+    ref = version if is_commit_hash(version) else f"refs/tags/{version}"
+
     response = requests.get(
-        f"https://raw.githubusercontent.com/django/django/refs/tags/{version}/django/{config.pathname}",  # noqa
+        f"https://raw.githubusercontent.com/django/django/{ref}/django/{config.pathname}",  # noqa
         timeout=10,
     )
     response.raise_for_status()

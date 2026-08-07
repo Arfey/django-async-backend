@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 6.0)
+# This file was generated automatically. Do not modify it manually. (based on django 23b659402663dace32a04a0bf15dd13e5bfadc7e)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -87,12 +87,12 @@ from django.utils.tree import Node
 __all__ = ["Query", "RawQuery"]
 
 # RemovedInDjango70Warning: When the deprecation ends, replace with:
-# Quotation marks ('"`[]), whitespace characters, semicolons, percent signs,
-# hashes, or inline SQL comments are forbidden in column aliases.
-# FORBIDDEN_ALIAS_PATTERN = _lazy_re_compile(r"['`\"\]\[;\s]|%|#|--|/\*|\*/")
-# Quotation marks ('"`[]), whitespace characters, semicolons, hashes, or inline
+# Quotation marks ('"`[]), whitespace characters, semicolons, percent signs
+# or inline SQL comments are forbidden in column aliases.
+# FORBIDDEN_ALIAS_PATTERN = _lazy_re_compile(r"['`\"\]\[;\s]|%|--|/\*|\*/")
+# Quotation marks ('"`[]), whitespace characters, semicolons, or inline
 # SQL comments are forbidden in column aliases.
-FORBIDDEN_ALIAS_PATTERN = _lazy_re_compile(r"['`\"\]\[;\s]|#|--|/\*|\*/")
+FORBIDDEN_ALIAS_PATTERN = _lazy_re_compile(r"['`\"\]\[;\s]|--|/\*|\*/")
 
 # Inspired from
 # https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
@@ -1314,12 +1314,11 @@ class Query(BaseExpression):
             )
         if FORBIDDEN_ALIAS_PATTERN.search(alias):
             raise ValueError(
-                "Column aliases cannot contain whitespace characters, hashes, "
+                "Column aliases cannot contain whitespace characters, quotation marks, "
                 # RemovedInDjango70Warning: When the deprecation ends, replace
                 # with:
-                # "quotation marks, semicolons, percent signs, or SQL "
-                # "comments."
-                "quotation marks, semicolons, or SQL comments."
+                # "semicolons, percent signs, or SQL comments."
+                "semicolons, or SQL comments."
             )
 
     def add_annotation(self, annotation, alias, select=True):
@@ -1340,12 +1339,13 @@ class Query(BaseExpression):
 
     @property
     def _subquery_fields_len(self):
-        if self.has_select_fields:
-            return sum(
-                len(self.model._meta.pk_fields) if field == "pk" else 1
-                for field in self.selected
-            )
-        return len(self.model._meta.pk_fields)
+        if not self.has_select_fields or not self.select:
+            return len(self.model._meta.pk_fields)
+        return len(self.select) + sum(
+            len(expr.targets) - 1
+            for expr in self.select
+            if isinstance(expr, ColPairs)
+        )
 
     def resolve_expression(self, query, *args, **kwargs):
         clone = self.clone()
