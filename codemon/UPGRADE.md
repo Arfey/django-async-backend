@@ -1,0 +1,3 @@
+1. lets generate_upgrade_plan
+2. lets upgrade #hash ....
+3. pyproject.toml change django version + package's version

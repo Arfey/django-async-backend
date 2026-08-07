@@ -16,6 +16,84 @@ commands:
           https://github.com/django/django.git "$REPO_DIR"
       fi
 
+  upgrade:
+    description: Pin Django to a commit, regenerate the ORM, and run coverage
+    depends:
+      - _django_repo
+    options: |
+      Usage: lets upgrade <hash>
+
+        Example:
+          lets upgrade c6e5cf926db949d72842a48b926da57a9593dbd1
+    cmd: |
+      set -euo pipefail
+      HASH="${LETSOPT_HASH:?usage: lets upgrade <hash>}"
+      REPO_DIR="${DJANGO_REPO:-$LETS_COMMAND_WORK_DIR/.django}"
+      ROOT="$(cd "$LETS_COMMAND_WORK_DIR/.." && pwd)"
+
+      FULL=$(git -C "$REPO_DIR" rev-parse --verify --quiet "$HASH^{commit}") || {
+        echo "❌ unknown Django commit: $HASH" >&2
+        exit 1
+      }
+
+      echo "📌 $(git -C "$REPO_DIR" log -1 --format='%h %cd %s' --date=short "$FULL")"
+      echo
+
+      PREV_DJANGO=$(poetry run pip freeze 2>/dev/null | grep -iE '^django[ =@]' | head -1)
+      PREV_VERSION=$(sed -n 's/^DJANGO_VERSION *= *"\(.*\)"/\1/p' "$LETS_COMMAND_WORK_DIR/__main__.py")
+      restored=0
+
+      GENERATED=$(sed -n 's|^pathname: *|django_async_backend/|p' \
+        "$LETS_COMMAND_WORK_DIR"/config/*.yaml | tr '\n' ' ')
+
+      rollback() {
+        [ "$restored" -eq 1 ] && return
+        restored=1
+        echo
+        echo "↩️  rolling back"
+
+        if [ -n "$PREV_VERSION" ]; then
+          sed "s/^DJANGO_VERSION = \".*\"/DJANGO_VERSION = \"$PREV_VERSION\"/" \
+            "$LETS_COMMAND_WORK_DIR/__main__.py" > "$LETS_COMMAND_WORK_DIR/__main__.py.tmp"
+          mv "$LETS_COMMAND_WORK_DIR/__main__.py.tmp" "$LETS_COMMAND_WORK_DIR/__main__.py"
+          echo "   DJANGO_VERSION restored to \"$PREV_VERSION\""
+        fi
+
+        (cd "$ROOT" && git restore $GENERATED 2>/dev/null) \
+          && echo "   generated ORM files restored"
+
+        if [ -n "$PREV_DJANGO" ]; then
+          poetry run pip install --quiet --disable-pip-version-check \
+            --force-reinstall --no-deps "$PREV_DJANGO" \
+            && echo "   django restored to $(poetry run python -c 'import django; print(django.get_version())')"
+        fi
+      }
+      trap 'rollback' ERR INT TERM
+      # -------------------------------------------------------------------
+
+      echo "📦 installing django@$FULL"
+      poetry run pip install --quiet --disable-pip-version-check --force-reinstall --no-deps \
+        "git+https://github.com/django/django.git@$FULL"
+      installed=$(poetry run python -c 'import django; print(django.get_version())')
+      echo "   installed django $installed"
+      echo
+
+      echo "✏️  pinning DJANGO_VERSION = \"$FULL\""
+      sed "s/^DJANGO_VERSION = \".*\"/DJANGO_VERSION = \"$FULL\"/" \
+        "$LETS_COMMAND_WORK_DIR/__main__.py" > "$LETS_COMMAND_WORK_DIR/__main__.py.tmp"
+      mv "$LETS_COMMAND_WORK_DIR/__main__.py.tmp" "$LETS_COMMAND_WORK_DIR/__main__.py"
+      grep -m1 '^DJANGO_VERSION' "$LETS_COMMAND_WORK_DIR/__main__.py" | sed 's/^/   /'
+      echo
+
+      echo "⚙️  regenerating ORM"
+      (cd "$ROOT" && lets -c "$ROOT/lets.yaml" generate)
+      echo
+
+      echo "🧪 running coverage"
+      cd "$ROOT/tests"
+      poetry run coverage run --rcfile=../pyproject.toml manage.py test
+      poetry run coverage report --rcfile=../pyproject.toml
+
   generate_upgrade_plan:
     description: Report Django commits touching the generated ORM files
     depends:
@@ -80,7 +158,7 @@ commands:
         # Escape pipes so a '|' in a commit subject cannot break the table.
         safe_subject=$(echo "$subject" | sed 's/|/\\|/g')
 
-        body="$body$(printf '| %d | %s | [`%s`](https://github.com/django/django/commit/%s) | %s | %s | `+%s/-%s` |' \
+        body="$body$(printf '| ❌ | %d | %s | [`%s`](https://github.com/django/django/commit/%s) | %s | %s | `+%s/-%s` |' \
           "$count" "$date" "${hash:0:12}" "$hash" \
           "$safe_subject" "$files_touched" "$add" "$del")"$'\n'
       done < <(git -C "$REPO_DIR" log --reverse --topo-order --no-merges \
@@ -128,8 +206,10 @@ commands:
         echo
         echo "## Commits"
         echo
-        echo "| # | Landed | Commit | Message | Files | Lines |"
-        echo "|---:|---|---|---|---|---|"
+        echo "Status starts at ❌ for every commit — mark them ✅ as you port them."
+        echo
+        echo "| Status | # | Landed | Commit | Message | Files | Lines |"
+        echo "|:---:|---:|---|---|---|---|---|"
         printf '%s' "$body"
       } > "$OUT"
 
