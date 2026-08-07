@@ -141,7 +141,7 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 | `Model.objects.union`               | ✅        |          |
 | `Model.objects.intersection`        | ✅        |          |
 | `Model.objects.difference`          | ✅        |          |
-| `Model.objects.select_related`      | ❌        |          |
+| `Model.objects.select_related`      | ✅        |          |
 | `Model.objects.select_for_update`   | ✅        |          |
 | `Model.objects.prefetch_related`    | ❌        |          |
 | `Model.objects.aaggregate`          | ❌        |          |
