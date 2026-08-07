@@ -89,6 +89,32 @@ commands:
       (cd "$ROOT" && lets -c "$ROOT/lets.yaml" generate)
       echo
 
+      # Every generated file gets a fresh "(based on django <hash>)" header, so
+      # files Django did not actually touch still show up as modified. Check
+      # those back out, leaving only the files with real changes to review.
+      echo "🧹 reverting files changed only by the version header"
+      reverted=0
+      kept=0
+      for f in $GENERATED; do
+        (cd "$ROOT" && git diff --quiet -- "$f") && continue
+
+        # Count changed lines that are not the header line.
+        real=$(cd "$ROOT" && git diff -U0 -- "$f" \
+          | grep -E '^[+-][^+-]' \
+          | grep -vc 'generated automatically' || true)
+
+        if [ "$real" -eq 0 ]; then
+          (cd "$ROOT" && git restore -- "$f")
+          echo "   ↩️  $f (header only)"
+          reverted=$((reverted + 1))
+        else
+          echo "   ✏️  $f ($real changed lines)"
+          kept=$((kept + 1))
+        fi
+      done
+      echo "   $kept file(s) with real changes, $reverted reverted"
+      echo
+
       echo "🧪 running coverage"
       cd "$ROOT/tests"
       poetry run coverage run --rcfile=../pyproject.toml manage.py test
