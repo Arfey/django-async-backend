@@ -209,3 +209,10 @@ __marimo__/
 .vscode
 
 .lets/
+
+codemon/.django/
+
+upgrade_plan.*.md
+
+# claude
+.claude/plans/
