@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 23b659402663dace32a04a0bf15dd13e5bfadc7e)
+# This file was generated automatically. Do not modify it manually. (based on django fd705912fff168d10c806568a222dfa25e3bb6a0)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -13,7 +13,6 @@ all about the internals of models in order to get the information it needs.
 import copy
 import difflib
 import functools
-import inspect
 import sys
 import warnings
 from collections import (
@@ -79,7 +78,10 @@ from django.db.models.sql.where import (
     NothingNode,
     WhereNode,
 )
-from django.utils.deprecation import RemovedInDjango70Warning
+from django.utils.deprecation import (
+    RemovedInDjango70Warning,
+    django_file_prefixes,
+)
 from django.utils.functional import cached_property
 from django.utils.regex_helper import _lazy_re_compile
 from django.utils.tree import Node
@@ -1302,15 +1304,10 @@ class Query(BaseExpression):
     def check_alias(self, alias):
         # RemovedInDjango70Warning: When the deprecation ends, remove.
         if "%" in alias:
-            if "aggregate" in {frame.function for frame in inspect.stack()}:
-                stacklevel = 5
-            else:
-                # annotate(), alias(), and values().
-                stacklevel = 6
             warnings.warn(
                 "Using percent signs in a column alias is deprecated.",
-                stacklevel=stacklevel,
                 category=RemovedInDjango70Warning,
+                skip_file_prefixes=django_file_prefixes(),
             )
         if FORBIDDEN_ALIAS_PATTERN.search(alias):
             raise ValueError(
