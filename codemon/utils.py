@@ -74,6 +74,9 @@ class Call(BaseModel):
 
 
 class ReturnBlock(BaseModel):
+    # Source of the returned expression this block applies to. A function can
+    # return in several places; an omitted ``match_raw`` matches them all.
+    match_raw: str | None = None
     replace_raw: str | None = None
     remove: bool = False
 

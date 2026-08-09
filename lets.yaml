@@ -1,5 +1,9 @@
 shell: bash
 
+mixins:
+  - codemon/lets.generator.yaml
+
+
 init: |
   [ -e ".lets/init" ] && exit 0
   echo ✅ install pre-commit

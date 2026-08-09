@@ -518,10 +518,6 @@ module:
         in_bulk:
           to_async: true
           rename: ain_bulk
-          comp_for_blocks:
-            - target:
-                name: obj
-              to_async: true
 
           calls:
             - func:
@@ -529,7 +525,16 @@ module:
               args:
                 - func:
                     attr: filter
-              replace_raw: 'tuple([i async for i in self.filter(**{filter_key: batch})])'
+              replace_raw: 'tuple([i async for i in qs.filter(**{filter_key: batch})])'
+
+          return_blocks:
+            - match_raw: '{get_key(obj): get_obj(obj) for obj in qs}'
+              replace_raw: |
+                (
+                    {get_key(obj): get_obj(obj) for obj in qs}
+                    if isinstance(qs, tuple)
+                    else {get_key(obj): get_obj(obj) async for obj in qs}
+                )
 
         delete:
           to_async: true

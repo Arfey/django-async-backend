@@ -29,7 +29,8 @@ commands:
       set -euo pipefail
       HASH="${LETSOPT_HASH:?usage: lets upgrade <hash>}"
       REPO_DIR="${DJANGO_REPO:-$LETS_COMMAND_WORK_DIR/.django}"
-      ROOT="$(cd "$LETS_COMMAND_WORK_DIR/.." && pwd)"
+      ROOT="$LETS_COMMAND_WORK_DIR"
+      CODEMON="$ROOT/codemon"
 
       FULL=$(git -C "$REPO_DIR" rev-parse --verify --quiet "$HASH^{commit}") || {
         echo "❌ unknown Django commit: $HASH" >&2
@@ -39,36 +40,26 @@ commands:
       echo "📌 $(git -C "$REPO_DIR" log -1 --format='%h %cd %s' --date=short "$FULL")"
       echo
 
-      PREV_DJANGO=$(poetry run pip freeze 2>/dev/null | grep -iE '^django[ =@]' | head -1)
-      PREV_VERSION=$(sed -n 's/^DJANGO_VERSION *= *"\(.*\)"/\1/p' "$LETS_COMMAND_WORK_DIR/__main__.py")
-      restored=0
-
       GENERATED=$(sed -n 's|^pathname: *|django_async_backend/|p' \
-        "$LETS_COMMAND_WORK_DIR"/config/*.yaml | tr '\n' ' ')
+        "$CODEMON"/config/*.yaml | tr '\n' ' ')
 
-      rollback() {
-        [ "$restored" -eq 1 ] && return
-        restored=1
+      # On failure the upgrade is deliberately left in place -- generated
+      # files, the DJANGO_VERSION pin, and the installed Django all stay as
+      # they are, so the codegen output can be fixed by hand and retried.
+      # Undo it with:  git restore <generated files>
+      reported=0
+      on_failure() {
+        [ "$reported" -eq 1 ] && return
+        reported=1
         echo
-        echo "↩️  rolling back"
-
-        if [ -n "$PREV_VERSION" ]; then
-          sed "s/^DJANGO_VERSION = \".*\"/DJANGO_VERSION = \"$PREV_VERSION\"/" \
-            "$LETS_COMMAND_WORK_DIR/__main__.py" > "$LETS_COMMAND_WORK_DIR/__main__.py.tmp"
-          mv "$LETS_COMMAND_WORK_DIR/__main__.py.tmp" "$LETS_COMMAND_WORK_DIR/__main__.py"
-          echo "   DJANGO_VERSION restored to \"$PREV_VERSION\""
-        fi
-
-        (cd "$ROOT" && git restore $GENERATED 2>/dev/null) \
-          && echo "   generated ORM files restored"
-
-        if [ -n "$PREV_DJANGO" ]; then
-          poetry run pip install --quiet --disable-pip-version-check \
-            --force-reinstall --no-deps "$PREV_DJANGO" \
-            && echo "   django restored to $(poetry run python -c 'import django; print(django.get_version())')"
-        fi
+        echo "⚠️  upgrade failed -- state left in place for manual fixing:"
+        echo "   DJANGO_VERSION = \"$FULL\""
+        echo "   django $(poetry run python -c 'import django; print(django.get_version())' 2>/dev/null || echo '?') installed"
+        echo "   generated files left modified"
+        echo
+        echo "   to undo: git restore $GENERATED"
       }
-      trap 'rollback' ERR INT TERM
+      trap 'on_failure' ERR INT TERM
       # -------------------------------------------------------------------
 
       echo "📦 installing django@$FULL"
@@ -80,9 +71,9 @@ commands:
 
       echo "✏️  pinning DJANGO_VERSION = \"$FULL\""
       sed "s/^DJANGO_VERSION = \".*\"/DJANGO_VERSION = \"$FULL\"/" \
-        "$LETS_COMMAND_WORK_DIR/__main__.py" > "$LETS_COMMAND_WORK_DIR/__main__.py.tmp"
-      mv "$LETS_COMMAND_WORK_DIR/__main__.py.tmp" "$LETS_COMMAND_WORK_DIR/__main__.py"
-      grep -m1 '^DJANGO_VERSION' "$LETS_COMMAND_WORK_DIR/__main__.py" | sed 's/^/   /'
+        "$CODEMON/__main__.py" > "$CODEMON/__main__.py.tmp"
+      mv "$CODEMON/__main__.py.tmp" "$CODEMON/__main__.py"
+      grep -m1 '^DJANGO_VERSION' "$CODEMON/__main__.py" | sed 's/^/   /'
       echo
 
       echo "⚙️  regenerating ORM"
@@ -133,20 +124,21 @@ commands:
       set -euo pipefail
       TO="${LETSOPT_TO_VERSION:?usage: lets generate_upgrade_plan <to-version>}"
       REPO_DIR="${DJANGO_REPO:-$LETS_COMMAND_WORK_DIR/.django}"
+      CODEMON="$LETS_COMMAND_WORK_DIR/codemon"
 
-      FROM=$(sed -n 's/^DJANGO_VERSION *= *"\(.*\)"/\1/p' __main__.py)
+      FROM=$(sed -n 's/^DJANGO_VERSION *= *"\(.*\)"/\1/p' "$CODEMON/__main__.py")
       [ -n "$FROM" ] || {
-        echo "❌ could not read DJANGO_VERSION from __main__.py" >&2
+        echo "❌ could not read DJANGO_VERSION from $CODEMON/__main__.py" >&2
         exit 1
       }
 
       FILES=()
       while IFS= read -r path; do
         FILES+=("$path")
-      done < <(sed -n 's|^pathname: *|django/|p' config/*.yaml)
+      done < <(sed -n 's|^pathname: *|django/|p' "$CODEMON"/config/*.yaml)
 
       [ "${#FILES[@]}" -gt 0 ] || {
-        echo "❌ no 'pathname:' entries found in config/*.yaml" >&2
+        echo "❌ no 'pathname:' entries found in $CODEMON/config/*.yaml" >&2
         exit 1
       }
 
@@ -157,7 +149,7 @@ commands:
         }
       done
 
-      OUT="$LETS_COMMAND_WORK_DIR/upgrade_plan.$TO.md"
+      OUT="$CODEMON/upgrade_plan.$TO.md"
 
       total_add=0
       total_del=0

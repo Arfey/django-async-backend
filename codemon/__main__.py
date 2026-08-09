@@ -24,7 +24,7 @@ from .utils import (
     write_ast,
 )
 
-DJANGO_VERSION = "748551fea0b4e37231203a063356572a47e09efb"
+DJANGO_VERSION = "1820d35b17f0a95f4ce888971b9ca0c7a3697c83"
 
 
 def attr_matcher(config: Attr) -> m.BaseMatcherNode:
@@ -417,13 +417,28 @@ def add_raw_bottom_to_function(updated_node, add_raw_top):
     )
 
 
+def returns_expression(node: cst.Return, source: str) -> bool:
+    """Whether ``node`` returns the expression written as ``source``."""
+    if node.value is None:
+        return False
+
+    expected = cst.parse_module(dedent(source)).body[0].body[0].value
+
+    return node.value.deep_equals(expected)
+
+
 def apply_return_blocks(original_node, updated_node, return_blocks):
     for return_config in return_blocks:
-        if m.matches(original_node, m.Return()):
-            updated_node = updated_node.visit(
-                return_transformer(return_config)
-            )
-            break
+        if not m.matches(original_node, m.Return()):
+            continue
+
+        if return_config.match_raw and not returns_expression(
+            original_node, return_config.match_raw
+        ):
+            continue
+
+        updated_node = updated_node.visit(return_transformer(return_config))
+        break
     return updated_node
 
 
@@ -482,7 +497,7 @@ def function_transformer(name: str, config: Function) -> cst.CSTTransformer:
 
         if config.to_async:
 
-            @m.leave(m.FunctionDef())
+            @m.leave(m.FunctionDef(name=m.Name(name)))
             def to_async(
                 self,
                 original_node: cst.FunctionDef,
@@ -638,7 +653,7 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
         if config.to_async:
 
-            @m.leave(m.FunctionDef())
+            @m.leave(m.FunctionDef(name=m.Name(name)))
             def to_async(
                 self,
                 original_node: cst.FunctionDef,

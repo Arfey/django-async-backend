@@ -115,7 +115,7 @@ exclude_dirs = [
   ".cache",
   "tests",
   ".mypy_cache",
-  "codemon/.django",
+  ".django",
   "django_async_backend/db/models/query.py",
   "django_async_backend/db/models/base.py",
   "django_async_backend/db/models/deletion.py",

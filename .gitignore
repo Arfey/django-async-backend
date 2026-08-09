@@ -210,7 +210,7 @@ __marimo__/
 
 .lets/
 
-codemon/.django/
+.django/
 
 upgrade_plan.*.md
 
