@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 02eed4f37879b2077496f86bb1378a076b981233)
+# This file was generated automatically. Do not modify it manually. (based on django e097e8a12f21a4e92594830f1ad1942b31916d0f)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -19,6 +19,7 @@ from itertools import (
     chain,
     islice,
 )
+from weakref import ref as weak_ref
 
 import django
 from asgiref.sync import sync_to_async
@@ -51,6 +52,7 @@ from django.db.models.expressions import (
     Value,
     When,
 )
+from django.db.models.fetch_modes import FETCH_ONE
 from django.db.models.functions import (
     Cast,
     Trunc,
@@ -135,10 +137,18 @@ class ModelIterable(BaseIterable):
             )
             for field, related_objs in queryset._known_related_objects.items()
         ]
+        fetch_mode = queryset._fetch_mode
+        peers = []
         for row in await compiler.results_iter(results):
             obj = model_cls.from_db(
-                db, init_list, row[model_fields_start:model_fields_end]
+                db,
+                init_list,
+                row[model_fields_start:model_fields_end],
+                fetch_mode=fetch_mode,
             )
+            if fetch_mode.track_peers:
+                peers.append(weak_ref(obj))
+                obj._state.peers = peers
             for rel_populator in related_populators:
                 rel_populator.populate(row, obj)
             if annotation_col_map:
@@ -207,12 +217,20 @@ class RawModelIterable(BaseIterable):
                 query_iterator = compiler.composite_fields_to_tuples(
                     query_iterator, cols
                 )
+            fetch_mode = self.queryset._fetch_mode
+            peers = []
             for values in query_iterator:
                 # Associate fields to values
                 model_init_values = [values[pos] for pos in model_init_pos]
                 instance = model_cls.from_db(
-                    db, model_init_names, model_init_values
+                    db,
+                    model_init_names,
+                    model_init_values,
+                    fetch_mode=fetch_mode,
                 )
+                if fetch_mode.track_peers:
+                    peers.append(weak_ref(instance))
+                    instance._state.peers = peers
                 if annotation_fields:
                     for column, pos in annotation_fields:
                         setattr(instance, column, values[pos])
@@ -333,6 +351,7 @@ class QuerySet(AltersData):
         self._prefetch_done = False
         self._known_related_objects = {}  # {rel_field: {pk: rel_obj}}
         self._iterable_class = ModelIterable
+        self._fetch_mode = FETCH_ONE
         self._fields = None
         self._defer_next_filter = False
         self._deferred_filter = None
@@ -1839,6 +1858,12 @@ class QuerySet(AltersData):
         clone._db = alias
         return clone
 
+    def fetch_mode(self, fetch_mode):
+        """Set the fetch mode for the QuerySet."""
+        clone = self._chain()
+        clone._fetch_mode = fetch_mode
+        return clone
+
     ###################################
     # PUBLIC INTROSPECTION ATTRIBUTES #
     ###################################
@@ -1983,6 +2008,7 @@ class QuerySet(AltersData):
         c._prefetch_related_lookups = self._prefetch_related_lookups[:]
         c._known_related_objects = self._known_related_objects
         c._iterable_class = self._iterable_class
+        c._fetch_mode = self._fetch_mode
         c._fields = self._fields
         return c
 
@@ -2132,6 +2158,7 @@ class RawQuerySet:
         translations=None,
         using=None,
         hints=None,
+        fetch_mode=FETCH_ONE,
     ):
         self.raw_query = raw_query
         self.model = model
@@ -2145,6 +2172,7 @@ class RawQuerySet:
         self._result_cache = None
         self._prefetch_related_lookups = ()
         self._prefetch_done = False
+        self._fetch_mode = fetch_mode
 
     def resolve_model_init_order(self):
         """Resolve the init field names and value positions."""
@@ -2247,6 +2275,7 @@ class RawQuerySet:
             params=self.params,
             translations=self.translations,
             using=alias,
+            fetch_mode=self._fetch_mode,
         )
 
     @cached_property
