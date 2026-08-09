@@ -24,7 +24,7 @@ from .utils import (
     write_ast,
 )
 
-DJANGO_VERSION = "e244d8bbb743eec413eb241139b6345885db39d9"
+DJANGO_VERSION = "0c487aa3a7b2417481bf48c1e5355c855873e210"
 
 
 def attr_matcher(config: Attr) -> m.BaseMatcherNode:
@@ -155,6 +155,17 @@ def apply_boolean_operations(
     return updated_node
 
 
+def assign_value_transformer(attrs: list[Attr]) -> cst.CSTTransformer:
+    class AssignValueTransformed(m.MatcherDecoratableTransformer):
+        @m.leave(m.Name())
+        def rename_references(
+            self, original_node: cst.Name, updated_node: cst.Name
+        ) -> cst.BaseExpression:
+            return apply_attrs(original_node, updated_node, attrs)
+
+    return AssignValueTransformed()
+
+
 def assignment_transformer(config: Assign) -> cst.CSTTransformer:
     class AssignmentTransformed(m.MatcherDecoratableTransformer):
         @m.leave(m.Assign())
@@ -166,7 +177,7 @@ def assignment_transformer(config: Assign) -> cst.CSTTransformer:
 
             matcher = attr_matcher(config.target)
 
-            return updated_node.with_changes(
+            updated_node = updated_node.with_changes(
                 targets=[
                     (
                         target.with_changes(
@@ -178,6 +189,15 @@ def assignment_transformer(config: Assign) -> cst.CSTTransformer:
                     for target in updated_node.targets
                 ]
             )
+
+            if config.attrs:
+                updated_node = updated_node.with_changes(
+                    value=updated_node.value.visit(
+                        assign_value_transformer(config.attrs)
+                    )
+                )
+
+            return updated_node
 
     return AssignmentTransformed()
 

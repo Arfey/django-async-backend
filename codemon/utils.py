@@ -85,6 +85,7 @@ class Assign(BaseModel):
     remove: bool = False
     # Matcher for the assignment target, and the operations applied to it.
     target: Attr
+    attrs: list[Attr] | None = None
 
 
 class Method(BaseModel):
