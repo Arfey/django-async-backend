@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 6.0)
+# This file was generated automatically. Do not modify it manually. (based on django 5d6c36d8349be277bbfab282a1b4aa98296d4842)
 import copy
 import inspect
 import warnings
@@ -500,8 +500,9 @@ class AsyncModelMixin:
         returning_fields,
     ):
         """
-        Try to update the model. Return True if the model was updated (if an
-        update query was done and a matching row was found in the DB).
+        Try to update the model. Return a list of updated fields if the model
+        was updated (if an update query was done and a matching row was
+        found in the DB).
         """
         filtered = base_qs.filter(pk=pk_val)
         if not values:
