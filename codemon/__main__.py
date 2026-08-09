@@ -24,7 +24,7 @@ from .utils import (
     write_ast,
 )
 
-DJANGO_VERSION = "5d6c36d8349be277bbfab282a1b4aa98296d4842"
+DJANGO_VERSION = "02eed4f37879b2077496f86bb1378a076b981233"
 
 
 def attr_matcher(config: Attr) -> m.BaseMatcherNode:

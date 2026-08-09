@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 8b241f84e25f679c459393dab2947c8354eb01a9)
+# This file was generated automatically. Do not modify it manually. (based on django 02eed4f37879b2077496f86bb1378a076b981233)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -2087,9 +2087,14 @@ class QuerySet(AltersData):
             )
 
     def _check_ordering_first_last_queryset_aggregation(self, method):
-        if isinstance(self.query.group_by, tuple) and not any(
-            col.output_field is self.model._meta.pk
-            for col in self.query.group_by
+        if (
+            isinstance(self.query.group_by, tuple)
+            # Raise if the pk fields are not in the group_by.
+            and self.model._meta.pk
+            not in {col.output_field for col in self.query.group_by}
+            and set(self.model._meta.pk_fields).difference(
+                {col.target for col in self.query.group_by}
+            )
         ):
             raise TypeError(
                 f"Cannot use QuerySet.{method}() on an unordered queryset performing "
