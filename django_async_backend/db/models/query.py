@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 1820d35b17f0a95f4ce888971b9ca0c7a3697c83)
+# This file was generated automatically. Do not modify it manually. (based on django 46bd92274c57fd6f138c067562696092732cec59)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -1114,6 +1114,8 @@ class QuerySet(AltersData):
         """
         if self.query.is_sliced:
             raise TypeError("Cannot use 'limit' or 'offset' with in_bulk().")
+        if id_list is not None and not id_list:
+            return {}
         opts = self.model._meta
         unique_fields = [
             constraint.fields[0]
@@ -1186,8 +1188,6 @@ class QuerySet(AltersData):
             )
 
         if id_list is not None:
-            if not id_list:
-                return {}
             filter_key = "{}__in".format(field_name)
             id_list = tuple(id_list)
             batch_size = connections[self.db].ops.bulk_batch_size(
