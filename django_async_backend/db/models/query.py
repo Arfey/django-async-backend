@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 46bd92274c57fd6f138c067562696092732cec59)
+# This file was generated automatically. Do not modify it manually. (based on django 8b241f84e25f679c459393dab2947c8354eb01a9)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -1407,6 +1407,18 @@ class QuerySet(AltersData):
                     "field."
                 )
             elif not fields:
+                # RemovedInDjango70Warning: When the deprecation ends, replace
+                # with:
+                # raise TypeError(
+                #     "'flat' is not valid when values_list is called with no "
+                #     "fields."
+                # )
+                warnings.warn(
+                    "Calling values_list() with no field name and flat=True "
+                    "is deprecated. Pass an explicit field name instead, like "
+                    "'pk'.",
+                    RemovedInDjango70Warning,
+                )
                 fields = [self.model._meta.concrete_fields[0].attname]
 
         field_names = {
