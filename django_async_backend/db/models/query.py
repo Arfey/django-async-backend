@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 6dc9b04018032dccbb5ad8347f7ddf4341316166)
+# This file was generated automatically. Do not modify it manually. (based on django e244d8bbb743eec413eb241139b6345885db39d9)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -637,6 +637,7 @@ class QuerySet(AltersData):
         obj = self.model(**kwargs)
         self._for_write = True
         await obj.async_save(force_insert=True, using=self.db)
+        obj._state.fetch_mode = self._fetch_mode
         return obj
 
     acreate.alters_data = True
