@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 23b659402663dace32a04a0bf15dd13e5bfadc7e)
+# This file was generated automatically. Do not modify it manually. (based on django f9a44cc0fac653f8e0c2ab1cdfb12b2cc5c63fc2)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -679,7 +679,7 @@ class QuerySet(AltersData):
                     "Unique fields that can trigger the upsert must be provided."
                 )
             # Updating primary keys and non-concrete fields is forbidden.
-            if any(not f.concrete or f.many_to_many for f in update_fields):
+            if any(not f.concrete for f in update_fields):
                 raise ValueError(
                     "bulk_create() can only be used with concrete fields in "
                     "update_fields."
@@ -690,9 +690,7 @@ class QuerySet(AltersData):
                     "update_fields."
                 )
             if unique_fields:
-                if any(
-                    not f.concrete or f.many_to_many for f in unique_fields
-                ):
+                if any(not f.concrete for f in unique_fields):
                     raise ValueError(
                         "bulk_create() can only be used with concrete fields "
                         "in unique_fields."
@@ -879,7 +877,7 @@ class QuerySet(AltersData):
             )
         opts = self.model._meta
         fields = [opts.get_field(name) for name in fields]
-        if any(not f.concrete or f.many_to_many for f in fields):
+        if any(not f.concrete for f in fields):
             raise ValueError(
                 "bulk_update() can only be used with concrete fields."
             )

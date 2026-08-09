@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 23b659402663dace32a04a0bf15dd13e5bfadc7e)
+# This file was generated automatically. Do not modify it manually. (based on django f9a44cc0fac653f8e0c2ab1cdfb12b2cc5c63fc2)
 from django_async_backend.db.models.sql.query import Query
 
 """
@@ -94,12 +94,10 @@ class UpdateQuery(Query):
                 raise FieldError(
                     "Composite primary key fields must be updated individually."
                 )
-            if not field.concrete or (
-                field.is_relation and field.many_to_many
-            ):
+            if not field.concrete:
                 raise FieldError(
-                    "Cannot update model field %r (only non-relations and "
-                    "foreign keys permitted)." % field
+                    "Cannot update model field %r (only concrete fields are permitted)."
+                    % field
                 )
             if model is not self.get_meta().concrete_model:
                 self.add_related_update(model, field, val)
