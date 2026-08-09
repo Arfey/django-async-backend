@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django fd705912fff168d10c806568a222dfa25e3bb6a0)
+# This file was generated automatically. Do not modify it manually. (based on django dce1b9c2de00a3385c029c02dca325f44e7697a4)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -1963,7 +1963,7 @@ class Query(BaseExpression):
                     available = sorted(
                         [
                             *get_field_names_from_opts(opts),
-                            *self.annotation_select,
+                            *self.annotations,
                             *self._filtered_relations,
                         ]
                     )
