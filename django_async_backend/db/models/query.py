@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 3c3f46357718166069948625354b8315a8505262)
+# This file was generated automatically. Do not modify it manually. (based on django 6d4d99b3cef4a6d931de02f89a493fb345dc438e)
 from django.db.models.query import PROHIBITED_FILTER_KWARGS
 
 from django_async_backend.db import async_connections
@@ -814,8 +814,7 @@ class QuerySet(AltersData):
                     for result, field in zip(
                         results, opts.db_returning_fields
                     ):
-                        if field != opts.pk:
-                            setattr(obj_with_pk, field.attname, result)
+                        setattr(obj_with_pk, field.attname, result)
                 for obj_with_pk in objs_with_pk:
                     obj_with_pk._state.adding = False
                     obj_with_pk._state.db = self.db
