@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 17d644c8e257c2ea5cc738fb7a9c47989e29bf09)
+# This file was generated automatically. Do not modify it manually. (based on django c68e4adea0703354508d51895b091771b1f6ac45)
 import collections
 import json
 import re
@@ -1773,9 +1773,12 @@ class SQLCompiler:
             cursor = await self.connection.cursor()
         try:
             await cursor.execute(sql, params)
-        except Exception:
+        except Exception as e:
             # Might fail for server-side cursors (e.g. connection closed)
-            await cursor.close()
+            try:
+                await cursor.close()
+            except DatabaseError:
+                raise e from None
             raise
 
         if result_type == ROW_COUNT:
