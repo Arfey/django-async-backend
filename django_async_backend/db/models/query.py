@@ -1,4 +1,6 @@
-# This file was generated automatically. Do not modify it manually. (based on django 4744e9939b65d168c531e5e23d1ac8a4445ac7f9)
+# This file was generated automatically. Do not modify it manually. (based on django 3c3f46357718166069948625354b8315a8505262)
+from django.db.models.query import PROHIBITED_FILTER_KWARGS
+
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -1595,6 +1597,13 @@ class QuerySet(AltersData):
         return clone
 
     def _filter_or_exclude_inplace(self, negate, args, kwargs):
+        if invalid_kwargs := PROHIBITED_FILTER_KWARGS.intersection(kwargs):
+            invalid_kwargs_str = ", ".join(
+                f"'{k}'" for k in sorted(invalid_kwargs)
+            )
+            raise TypeError(
+                f"The following kwargs are invalid: {invalid_kwargs_str}"
+            )
         if negate:
             self._query.add_q(~Q(*args, **kwargs))
         else:

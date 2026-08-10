@@ -38,6 +38,26 @@ class TestFilter(AsyncioTestCase):
                 )
             ]
 
+    async def test_filter_rejects_invalid_arguments(self):
+        obj = await TestModel.async_objects.aget(name="Test1")
+        msg = "The following kwargs are invalid: '_connector', '_negated'"
+
+        with self.assertRaises(TypeError) as ctx:
+            TestModel.async_objects.filter(
+                pk=obj.pk, _negated=True, _connector="evil"
+            )
+
+        self.assertEqual(str(ctx.exception), msg)
+
+    async def test_exclude_rejects_invalid_arguments(self):
+        obj = await TestModel.async_objects.aget(name="Test1")
+        msg = "The following kwargs are invalid: '_connector'"
+
+        with self.assertRaises(TypeError) as ctx:
+            TestModel.async_objects.exclude(pk=obj.pk, _connector="evil")
+
+        self.assertEqual(str(ctx.exception), msg)
+
     async def test_filter_multiple_conditions(self):
         results = [
             obj
