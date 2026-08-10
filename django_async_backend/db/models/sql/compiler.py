@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 3ff32c50d143d8a498f9a5dfef1a31b16a7456fe)
+# This file was generated automatically. Do not modify it manually. (based on django 787cc96ef6197d73c7d4ad96f25500910c399603)
 import collections
 import json
 import re
@@ -1852,8 +1852,8 @@ class SQLInsertCompiler(SQLCompiler):
             sql, params = "%s", [val]
 
         # The following hook is only used by Oracle Spatial, which sometimes
-        # needs to yield 'NULL' and [] as its placeholder and params instead
-        # of '%s' and [None]. The 'NULL' placeholder is produced earlier by
+        # needs to yield 'NULL' and () as its placeholder and params instead
+        # of '%s' and (None,). The 'NULL' placeholder is produced earlier by
         # OracleOperations.get_geom_placeholder(). The following line removes
         # the corresponding None parameter. See ticket #10888.
         params = self.connection.ops.modify_insert_params(sql, params)
