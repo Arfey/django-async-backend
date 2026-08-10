@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django e244d8bbb743eec413eb241139b6345885db39d9)
+# This file was generated automatically. Do not modify it manually. (based on django 4744e9939b65d168c531e5e23d1ac8a4445ac7f9)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -1294,6 +1294,8 @@ class QuerySet(AltersData):
             raise TypeError(
                 "Cannot update a query once a slice has been taken."
             )
+        if self.query.distinct_fields:
+            raise TypeError("Cannot call update() after .distinct(*fields).")
         self._for_write = True
         query = self.query.chain(async_sql.UpdateQuery)
         query.add_update_values(kwargs)

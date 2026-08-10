@@ -51,6 +51,12 @@ class TestAUpdate(AsyncioTestCase):
         with self.assertRaises(TypeError):
             await qs.aupdate(value=1)
 
+    async def test_distinct_fields_raises(self):
+        qs = TestModel.async_objects.distinct("name")
+
+        with self.assertRaises(TypeError):
+            await qs.aupdate(value=1)
+
 
 class TestAUpdateOrderBy(AsyncioTestCase):
     async def asyncSetUp(self):
