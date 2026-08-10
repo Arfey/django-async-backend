@@ -157,7 +157,12 @@ module:
           remove: true
 
         refresh_from_db:
-          remove: true
+          rename: async_refresh_from_db
+          to_async: true
+          attrs:
+            - name: _base_manager
+              rename:
+                name: _async_base_manager
 
         arefresh_from_db:
           remove: true
