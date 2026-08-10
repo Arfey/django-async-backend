@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 43933a1dca07047e95ec990d9289d0212668009e)
+# This file was generated automatically. Do not modify it manually. (based on django 2ce5cb0f7a4618dfdc5f5c10e53e2e9b9543d298)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -581,7 +581,8 @@ class Query(BaseExpression):
             # Queries with distinct_fields need ordering and when a limit is
             # applied we must take the slice from the ordered query. Otherwise
             # no need for ordering.
-            inner_query.clear_ordering(force=False)
+            if inner_query.orderby_issubset_groupby:
+                inner_query.clear_ordering(force=False)
             if not inner_query.distinct:
                 # If the inner query uses default select and it has some
                 # aggregate annotations, then we must make sure the inner
@@ -2499,6 +2500,33 @@ class Query(BaseExpression):
             self.order_by += ordering
         else:
             self.default_ordering = False
+
+    @property
+    def orderby_issubset_groupby(self):
+        if self.extra_order_by:
+            # Raw SQL from extra(order_by=...) can't be reliably compared
+            # against resolved OrderBy/Col expressions. Treat as not a subset.
+            return False
+        if self.group_by in (None, True):
+            # There is either no aggregation at all (None), or the group by
+            # is generated automatically from model fields (True), in which
+            # case the order by is necessarily a subset of them.
+            return True
+        if not self.order_by:
+            # Although an empty set is always a subset, there's no point in
+            # clearing ordering when there isn't any. Avoid the clone() below.
+            return True
+        # Don't pollute the original query (might disrupt joins).
+        q = self.clone()
+        order_by_set = {
+            (
+                order_by.resolve_expression(q)
+                if hasattr(order_by, "resolve_expression")
+                else F(order_by).resolve_expression(q)
+            )
+            for order_by in q.order_by
+        }
+        return order_by_set.issubset(self.group_by)
 
     def clear_ordering(self, force=False, clear_default=True):
         """
