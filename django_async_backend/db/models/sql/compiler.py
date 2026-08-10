@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 787cc96ef6197d73c7d4ad96f25500910c399603)
+# This file was generated automatically. Do not modify it manually. (based on django 17d644c8e257c2ea5cc738fb7a9c47989e29bf09)
 import collections
 import json
 import re
@@ -621,6 +621,14 @@ class SQLCompiler:
         for table names. This avoids problems with some SQL dialects that treat
         quoted strings specially (e.g. PostgreSQL).
         """
+        if (
+            self.connection.features.prohibits_dollar_signs_in_column_aliases
+            and "$" in name
+        ):
+            raise ValueError(
+                "Dollar signs are not permitted in column aliases on "
+                f"{self.connection.display_name}."
+            )
         if name in self.quote_cache:
             return self.quote_cache[name]
         if (
