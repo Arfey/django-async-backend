@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django ea3a71c2d09f8281d8a50ed20e40e1fb13db5cd9)
+# This file was generated automatically. Do not modify it manually. (based on django 43933a1dca07047e95ec990d9289d0212668009e)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -2508,15 +2508,7 @@ class Query(BaseExpression):
         query (not even the model's default).
         """
         if not force and (
-            self.is_sliced
-            or self.distinct_fields
-            or self.select_for_update
-            or (
-                isinstance(self.group_by, tuple)
-                and not {*self.order_by, *self.extra_order_by}.issubset(
-                    self.group_by
-                )
-            )
+            self.is_sliced or self.distinct_fields or self.select_for_update
         ):
             return
         self.order_by = ()
