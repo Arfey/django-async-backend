@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 087bb9e8f3478d53f12b1737af865992af17c5f2)
+# This file was generated automatically. Do not modify it manually. (based on django 6380e3f01e10f815de8c0223e3fd4bacb69f3808)
 from django.db.models.query import PROHIBITED_FILTER_KWARGS
 
 from django_async_backend.db import async_connections
@@ -1118,7 +1118,7 @@ class QuerySet(AltersData):
 
     async def afirst(self):
         """Return the first object of a query or None if no match is found."""
-        if self.ordered:
+        if self.ordered or not self.query.default_ordering:
             queryset = self
         else:
             self._check_ordering_first_last_queryset_aggregation(
@@ -1130,7 +1130,7 @@ class QuerySet(AltersData):
 
     async def alast(self):
         """Return the last object of a query or None if no match is found."""
-        if self.ordered:
+        if self.ordered or not self.query.default_ordering:
             queryset = self.reverse()
         else:
             self._check_ordering_first_last_queryset_aggregation(method="last")
