@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django c68e4adea0703354508d51895b091771b1f6ac45)
+# This file was generated automatically. Do not modify it manually. (based on django 9247410b4ba3b1f855567b8d84422d36345c690a)
 import collections
 import json
 import re
@@ -1973,10 +1973,13 @@ class SQLInsertCompiler(SQLCompiler):
             for field in list(fields):
                 field_prepare = partial(self.prepare_value, field)
                 field_pre_save = partial(self.pre_save_val, field)
-                field_values = [
-                    field_prepare(field_pre_save(obj))
-                    for obj in self.query.objs
-                ]
+
+                field_values = []
+                for obj in self.query.objs:
+                    value = field_pre_save(obj)
+                    if not isinstance(value, DatabaseDefault):
+                        value = field_prepare(value)
+                    field_values.append(value)
 
                 if not field.has_db_default():
                     value_cols.append(field_values)
