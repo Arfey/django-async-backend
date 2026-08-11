@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 2ce5cb0f7a4618dfdc5f5c10e53e2e9b9543d298)
+# This file was generated automatically. Do not modify it manually. (based on django 4ce4ed72a4ddc7d101df0fd31f1d0e449d8af501)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -1552,7 +1552,7 @@ class Query(BaseExpression):
         # DEFAULT_DB_ALIAS isn't nice but it's the best that can be done here.
         # A similar thing is done in is_nullable(), too.
         if (
-            lookup_name == "exact"
+            lookup_name in ("exact", "iexact")
             and lookup.rhs == ""
             and connections[
                 DEFAULT_DB_ALIAS
