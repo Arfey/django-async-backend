@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 9247410b4ba3b1f855567b8d84422d36345c690a)
+# This file was generated automatically. Do not modify it manually. (based on django 69065ca869b0970dff8fdd8fafb390bf8b3bf222)
 import collections
 import json
 import re
@@ -482,7 +482,7 @@ class SQLCompiler:
                 yield OrderBy(expr, descending=descending), False
                 continue
 
-            if "." in field:
+            if "." in field and field in self.query.extra_order_by:
                 # This came in through an extra(order_by=...) addition. Pass it
                 # on verbatim.
                 table, col = col.split(".", 1)
