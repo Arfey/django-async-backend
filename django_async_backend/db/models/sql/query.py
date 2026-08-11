@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 4ce4ed72a4ddc7d101df0fd31f1d0e449d8af501)
+# This file was generated automatically. Do not modify it manually. (based on django 0239e86f387127dace7273208c300b33a065e021)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -2749,10 +2749,17 @@ class Query(BaseExpression):
                         annotation_names.append(f)
                         selected[f] = f
                     elif f in self.annotations:
-                        raise FieldError(
-                            f"Cannot select the '{f}' alias. Use annotate() to "
-                            "promote it."
-                        )
+                        if self.annotation_select:
+                            raise FieldError(
+                                f"Cannot select the '{f}' alias. It was excluded "
+                                f"by a previous values() or values_list() call. "
+                                f"Include '{f}' in that call to select it."
+                            )
+                        else:
+                            raise FieldError(
+                                f"Cannot select the '{f}' alias. Use annotate() "
+                                f"to promote it."
+                            )
                     else:
                         # Call `names_to_path` to ensure a FieldError including
                         # annotations about to be masked as valid choices if
