@@ -536,3 +536,78 @@ class DatesModel(AsyncModelMixin, models.Model):
 
     class Meta:
         db_table = "dates_model"
+
+
+class TotalOrderingModel(AsyncModelMixin, models.Model):
+    """Every flavour of uniqueness that totally_ordered introspects: a
+    nullable unique field, a unique_together pair, a composite constraint
+    with a nullable member, and constraints that are only partially unique.
+    """
+
+    rank = models.IntegerField(unique=True, null=True)
+    headline = models.CharField(max_length=100)
+    slug = models.CharField(max_length=100, default="slug")
+    pub_date = models.DateField(null=True)
+    barcode = models.CharField(max_length=30, default="bar")
+
+    class Meta:
+        db_table = "total_ordering_model"
+        unique_together = (("headline", "slug"),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pub_date", "rank"],
+                name="unique_pub_date_rank",
+            ),
+            models.UniqueConstraint(
+                fields=["rank"],
+                condition=models.Q(rank__gt=0),
+                name="unique_rank_conditional",
+            ),
+            models.UniqueConstraint(
+                fields=["barcode"],
+                condition=models.Q(),
+                name="unique_barcode_empty_condition",
+            ),
+        ]
+
+
+class TotalOrderingCompositePkModel(AsyncModelMixin, models.Model):
+    """A CompositePrimaryKey is total only once every member is ordered by."""
+
+    pk = models.CompositePrimaryKey("tenant_id", "code")
+    tenant_id = models.IntegerField()
+    code = models.IntegerField()
+    label = models.CharField(max_length=100)
+
+    class Meta:
+        db_table = "total_ordering_composite_pk_model"
+
+
+class TotalOrderingRefModel(AsyncModelMixin, models.Model):
+    """OneToOne target, so ordering by the relation name differs from
+    ordering by its attname.
+    """
+
+    proof = models.OneToOneField(
+        TotalOrderingModel,
+        on_delete=models.CASCADE,
+        related_name="reference",
+    )
+
+    class Meta:
+        db_table = "total_ordering_ref_model"
+
+
+class TotalOrderingChildModel(AsyncModelMixin, models.Model):
+    """Related model used to check that traversing a relation in the
+    ordering does not count as a total ordering.
+    """
+
+    parent = models.ForeignKey(
+        TotalOrderingModel,
+        on_delete=models.CASCADE,
+        related_name="children",
+    )
+
+    class Meta:
+        db_table = "total_ordering_child_model"
