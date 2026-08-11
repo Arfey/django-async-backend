@@ -1,4 +1,10 @@
-from django.db.models import Count
+import re
+
+from django.db.models import (
+    Count,
+    FilteredRelation,
+    Q,
+)
 from test_app.models import TestModel
 
 from django_async_backend.test import AsyncioTestCase
@@ -53,6 +59,49 @@ class TestAnnotate(AsyncioTestCase):
         )
         self.assertEqual(results[0]["value"], 1, "Group value should be 1")
         self.assertEqual(results[0]["count"], 1, "Group count should be 1")
+
+    async def test_annotate_filtered_relation_period_forbidden(self):
+        """A period in the alias would be ambiguous with a qualified column
+        name, so add_filtered_relation() rejects it before anything else.
+        """
+        msg = (
+            "FilteredRelation doesn't support aliases with periods "
+            "(got 'relatives.test1')."
+        )
+
+        with self.assertRaisesRegex(ValueError, re.escape(msg)):
+            TestModel.async_objects.annotate(
+                **{
+                    "relatives.test1": FilteredRelation(
+                        "relatives",
+                        condition=Q(relatives__name__iexact="test1"),
+                    )
+                }
+            )
+
+    async def test_annotate_filtered_relation_without_period(self):
+        """An alias without a period passes the check and builds the join."""
+        parent = await TestModel.async_objects.aget(name="Test1")
+        child = TestModel(name="Child", value=4, relative=parent)
+        await child.async_save()
+
+        results = [
+            obj
+            async for obj in TestModel.async_objects.annotate(
+                matched=FilteredRelation(
+                    "relatives",
+                    condition=Q(relatives__name__iexact="child"),
+                )
+            )
+            .filter(matched__isnull=False)
+            .order_by("name")
+        ]
+
+        self.assertEqual(
+            [obj.name for obj in results],
+            ["Test1"],
+            "Only the parent of the matched relative should be returned",
+        )
 
     async def test_annotate_no_results(self):
         results = [

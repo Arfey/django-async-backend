@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django e891a84c7ef9962bfcc3b4685690219542f86a22)
+# This file was generated automatically. Do not modify it manually. (based on django 005d60d97c4dfb117503bdb6f2facfcaf9315d84)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -1858,6 +1858,11 @@ class Query(BaseExpression):
         return target_clause, needed_inner
 
     def add_filtered_relation(self, filtered_relation, alias):
+        if "." in alias:
+            raise ValueError(
+                "FilteredRelation doesn't support aliases with periods "
+                "(got %r)." % alias
+            )
         self.check_alias(alias)
         filtered_relation.alias = alias
         relation_lookup_parts, relation_field_parts, _ = (
