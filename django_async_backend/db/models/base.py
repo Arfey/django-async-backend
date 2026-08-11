@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 5d6c36d8349be277bbfab282a1b4aa98296d4842)
+# This file was generated automatically. Do not modify it manually. (based on django fe189dc43ab3eddbbceefb6834893b73ca60d5ed)
 import copy
 import inspect
 import warnings
@@ -465,7 +465,7 @@ class AsyncModelMixin:
                 value = (
                     getattr(self, field.attname)
                     if raw
-                    else field.pre_save(self, False)
+                    else field.pre_save(self, add=True)
                 )
                 if hasattr(value, "resolve_expression"):
                     if field not in returning_fields:
