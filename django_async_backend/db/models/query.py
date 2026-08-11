@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 08b4dfc5734f5d2fce685eabcd65385a6656db2f)
+# This file was generated automatically. Do not modify it manually. (based on django 8d8a8713432a88737c4400610eef11c5c8457b86)
 from django.db.models.query import PROHIBITED_FILTER_KWARGS
 
 from django_async_backend.db import async_connections
@@ -337,6 +337,28 @@ class FlatValuesListIterable(BaseIterable):
             yield row[0]
 
 
+class PreventQuerySetCloning:
+    """
+    Temporarily prevent the given QuerySet from creating new QuerySet instances
+    on each mutating operation (e.g: filter(), exclude() etc), instead
+    modifying the QuerySet in-place.
+
+    @contextlib.contextmanager is intentionally not used for performance
+    reasons.
+    """
+
+    __slots__ = ("queryset",)
+
+    def __init__(self, queryset):
+        self.queryset = queryset
+
+    def __enter__(self):
+        return self.queryset._disable_cloning()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.queryset._enable_cloning()
+
+
 class QuerySet(AltersData):
     """Represent a lazy database lookup for a set of objects."""
     def __iter__(self):
@@ -368,6 +390,7 @@ class QuerySet(AltersData):
         self._fields = None
         self._defer_next_filter = False
         self._deferred_filter = None
+        self._cloning_enabled = True
 
     @property
     def query(self):
@@ -2083,12 +2106,50 @@ class QuerySet(AltersData):
                 )
         return inserted_rows
 
+    def _disable_cloning(self):
+        """
+        Prevent calls to _chain() from creating a new QuerySet via _clone().
+        All subsequent QuerySet mutations will occur on this instance until
+        _enable_cloning() is used.
+        """
+        self._cloning_enabled = False
+        return self
+
+    def _enable_cloning(self):
+        """
+        Allow calls to _chain() to create a new QuerySet via _clone(). Restores
+        the default behavior where any QuerySet mutation will return a new
+        QuerySet instance. Necessary only when there has been a
+        _disable_cloning() call previously.
+        """
+        self._cloning_enabled = True
+        return self
+
+    def _avoid_cloning(self):
+        """
+        Temporarily prevent QuerySet _clone() operations, restoring the default
+        behavior on exit. For the duration of the context managed statement,
+        all operations (e.g. filter(), exclude(), etc.) will mutate the same
+        QuerySet instance.
+
+        @contextlib.contextmanager is intentionally not used for performance
+        reasons.
+        """
+        return PreventQuerySetCloning(self)
+
     def _chain(self):
         """
         Return a copy of the current QuerySet that's ready for another
         operation.
+
+        If the QuerySet has opted in to in-place mutations via
+        _disable_cloning() temporarily, the copy doesn't occur and instead the
+        same QuerySet instance will be modified.
         """
-        obj = self._clone()
+        if not self._cloning_enabled:
+            obj = self
+        else:
+            obj = self._clone()
         if obj._sticky_filter:
             obj.query.filter_is_sticky = True
             obj._sticky_filter = False
