@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 040bb3eba72eb45020dd025d3f83094a0fcaf22f)
+# This file was generated automatically. Do not modify it manually. (based on django 087bb9e8f3478d53f12b1737af865992af17c5f2)
 from django.db.models.query import PROHIBITED_FILTER_KWARGS
 
 from django_async_backend.db import async_connections
@@ -1638,6 +1638,7 @@ class QuerySet(AltersData):
         clone = self._chain()
         # Clear limits and ordering so they can be reapplied
         clone.query.clear_ordering(force=True)
+        clone.query.default_ordering = True
         clone.query.clear_limits()
         clone.query.combined_queries = (
             self.query,
