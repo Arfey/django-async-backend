@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 6d4d99b3cef4a6d931de02f89a493fb345dc438e)
+# This file was generated automatically. Do not modify it manually. (based on django 040bb3eba72eb45020dd025d3f83094a0fcaf22f)
 from django.db.models.query import PROHIBITED_FILTER_KWARGS
 
 from django_async_backend.db import async_connections
@@ -127,18 +127,15 @@ class ModelIterable(BaseIterable):
             (
                 field,
                 related_objs,
-                operator.attrgetter(
-                    *[
-                        (
-                            field.attname
-                            if from_field == "self"
-                            else queryset.model._meta.get_field(
-                                from_field
-                            ).attname
-                        )
-                        for from_field in field.from_fields
-                    ]
-                ),
+                attnames := [
+                    (
+                        field.attname
+                        if from_field == "self"
+                        else queryset.model._meta.get_field(from_field).attname
+                    )
+                    for from_field in field.from_fields
+                ],
+                operator.attrgetter(*attnames),
             )
             for field, related_objs in queryset._known_related_objects.items()
         ]
@@ -160,9 +157,20 @@ class ModelIterable(BaseIterable):
                     setattr(obj, attr_name, row[col_pos])
 
             # Add the known related objects to the model.
-            for field, rel_objs, rel_getter in known_related_objects:
+            for (
+                field,
+                rel_objs,
+                rel_attnames,
+                rel_getter,
+            ) in known_related_objects:
                 # Avoid overwriting objects loaded by, e.g., select_related().
                 if field.is_cached(obj):
+                    continue
+                # Avoid fetching potentially deferred attributes that would
+                # result in unexpected queries.
+                if any(
+                    attname not in obj.__dict__ for attname in rel_attnames
+                ):
                     continue
                 rel_obj_id = rel_getter(obj)
                 try:
