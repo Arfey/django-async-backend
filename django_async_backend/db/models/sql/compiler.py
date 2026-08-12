@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django c3a3ea7bed4d162ec8efa426b48d31ba9f37a82d)
+# This file was generated automatically. Do not modify it manually. (based on django 7f814ee937e0f870a20aa0c87e4cd62a5b69d587)
 import collections
 import json
 import re
@@ -520,7 +520,7 @@ class SQLCompiler:
             else:
                 if self.query.combinator and self.select:
                     # Don't use the first model's field because other
-                    # combinated queries might define it differently.
+                    # combined queries might define it differently.
                     yield OrderBy(F(col), descending=descending), False
                 else:
                     # 'col' is of the form 'field' or 'field1__field2' or
