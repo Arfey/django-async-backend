@@ -6,17 +6,11 @@ module:
     - "from django_async_backend.db.models import sql as async_sql"
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
-    - "from django.db.models.query import PROHIBITED_FILTER_KWARGS"
 
   import_aliases:
     # The async Collector lives in django_async_backend.db.models.deletion,
     # which imports this module, so adelete() imports it locally instead.
     - name: Collector
-      remove: true
-
-  assigns:
-    - target:
-        name: PROHIBITED_FILTER_KWARGS
       remove: true
 
   functions:

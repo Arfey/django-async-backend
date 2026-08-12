@@ -21,13 +21,19 @@ commands:
     depends:
       - _django_repo
     options: |
-      Usage: lets upgrade <hash>
+      Usage: lets upgrade <hash> [--skip-install]
+
+        Options:
+            --skip-install    reuse the installed Django instead of
+                              reinstalling it from the pinned commit
 
         Example:
           lets upgrade c6e5cf926db949d72842a48b926da57a9593dbd1
+          lets upgrade c6e5cf926db949d72842a48b926da57a9593dbd1 --skip-install
     cmd: |
       set -euo pipefail
       HASH="${LETSOPT_HASH:?usage: lets upgrade <hash>}"
+      SKIP_INSTALL="${LETSOPT_SKIP_INSTALL:-}"
       REPO_DIR="${DJANGO_REPO:-$LETS_COMMAND_WORK_DIR/.django}"
       ROOT="$LETS_COMMAND_WORK_DIR"
       CODEMON="$ROOT/codemon"
@@ -44,8 +50,9 @@ commands:
         "$CODEMON"/config/*.yaml | tr '\n' ' ')
 
       # On failure the upgrade is deliberately left in place -- generated
-      # files, the DJANGO_VERSION pin, and the installed Django all stay as
-      # they are, so the codegen output can be fixed by hand and retried.
+      # files, the DJANGO_VERSION pin, and whatever Django is installed all
+      # stay as they are, so the codegen output can be fixed by hand and
+      # retried.
       # Undo it with:  git restore <generated files>
       reported=0
       on_failure() {
@@ -54,7 +61,11 @@ commands:
         echo
         echo "⚠️  upgrade failed -- state left in place for manual fixing:"
         echo "   DJANGO_VERSION = \"$FULL\""
-        echo "   django $(poetry run python -c 'import django; print(django.get_version())' 2>/dev/null || echo '?') installed"
+        if [ -n "$SKIP_INSTALL" ]; then
+          echo "   django $(poetry run python -c 'import django; print(django.get_version())' 2>/dev/null || echo '?') left as-is (--skip-install)"
+        else
+          echo "   django $(poetry run python -c 'import django; print(django.get_version())' 2>/dev/null || echo '?') installed"
+        fi
         echo "   generated files left modified"
         echo
         echo "   to undo: git restore $GENERATED"
@@ -62,11 +73,17 @@ commands:
       trap 'on_failure' ERR INT TERM
       # -------------------------------------------------------------------
 
-      echo "📦 installing django@$FULL"
-      poetry run pip install --quiet --disable-pip-version-check --force-reinstall --no-deps \
-        "git+https://github.com/django/django.git@$FULL"
-      installed=$(poetry run python -c 'import django; print(django.get_version())')
-      echo "   installed django $installed"
+      if [ -n "$SKIP_INSTALL" ]; then
+        echo "⏭️  skipping django install (--skip-install)"
+        installed=$(poetry run python -c 'import django; print(django.get_version())')
+        echo "   using already installed django $installed"
+      else
+        echo "📦 installing django@$FULL"
+        poetry run pip install --quiet --disable-pip-version-check --force-reinstall --no-deps \
+          "git+https://github.com/django/django.git@$FULL"
+        installed=$(poetry run python -c 'import django; print(django.get_version())')
+        echo "   installed django $installed"
+      fi
       echo
 
       echo "✏️  pinning DJANGO_VERSION = \"$FULL\""

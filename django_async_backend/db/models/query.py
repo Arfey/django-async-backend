@@ -1,6 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 804607df0e174c524a3ea880b8ecbb555ecb4abb)
-from django.db.models.query import PROHIBITED_FILTER_KWARGS
-
+# This file was generated automatically. Do not modify it manually. (based on django 3b161e60964aff99eddcd2627a486d81c1836b3a)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -61,6 +59,7 @@ from django.db.models.functions import (
     Trunc,
 )
 from django.db.models.query_utils import (
+    PROHIBITED_FILTER_KWARGS,
     FilteredRelation,
     Q,
 )
