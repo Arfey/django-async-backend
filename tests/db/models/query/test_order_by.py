@@ -178,3 +178,82 @@ class TestOrderByIsSubsetGroupBy(AsyncioTestCase):
         query = self._grouped().order_by("value", "?").query.clone()
 
         self.assertFalse(query.orderby_issubset_groupby)
+
+
+class TestClearOrderingCombinedQueries(AsyncioTestCase):
+    """clear_ordering() recurses into combined_queries.
+
+    A combined query keeps its ordering on the parts rather than on the outer
+    query, so clearing only the outer one would leave the ORDER BY of each
+    part in place.
+    """
+
+    def _union_query(self, left=None, right=None):
+        if left is None:
+            left = TestModel.async_objects.order_by("name")
+        if right is None:
+            right = TestModel.async_objects.order_by("value")
+        return left.union(right).query.clone()
+
+    async def test_ordering_of_combined_queries_is_cleared(self):
+        query = self._union_query()
+        self.assertEqual(
+            [q.order_by for q in query.combined_queries],
+            [("name",), ("value",)],
+        )
+
+        query.clear_ordering(force=True)
+
+        self.assertEqual(
+            [q.order_by for q in query.combined_queries], [(), ()]
+        )
+
+    async def test_clear_default_is_propagated(self):
+        # clear_default reaches the parts, unlike force.
+        query = self._union_query()
+        for combined_query in query.combined_queries:
+            combined_query.default_ordering = True
+
+        query.clear_ordering(force=True, clear_default=True)
+
+        self.assertEqual(
+            [q.default_ordering for q in query.combined_queries],
+            [False, False],
+        )
+
+    async def test_default_ordering_of_parts_is_kept(self):
+        # The mirror case: clear_default=False leaves the parts' default
+        # ordering alone.
+        query = self._union_query()
+        for combined_query in query.combined_queries:
+            combined_query.default_ordering = True
+
+        query.clear_ordering(force=True, clear_default=False)
+
+        self.assertEqual(
+            [q.default_ordering for q in query.combined_queries],
+            [True, True],
+        )
+
+    async def test_force_is_not_propagated_to_combined_queries(self):
+        # The recursion always passes force=False, so a part that cannot be
+        # cleared safely keeps its ordering even when the outer call forces
+        # it. Slicing is what makes clearing unsafe here.
+        query = self._union_query(
+            left=TestModel.async_objects.order_by("name")[:2]
+        )
+
+        query.clear_ordering(force=True)
+
+        self.assertEqual(
+            [q.order_by for q in query.combined_queries], [("name",), ()]
+        )
+
+    async def test_plain_query_has_no_combined_queries(self):
+        # Without a combinator the loop body never runs.
+        query = TestModel.async_objects.order_by("name").query.clone()
+        self.assertEqual(query.combined_queries, ())
+
+        query.clear_ordering(force=True)
+
+        self.assertEqual(query.order_by, ())

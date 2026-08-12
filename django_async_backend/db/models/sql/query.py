@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django a284a49153f005f2a7af087025e5112ba06cbd5f)
+# This file was generated automatically. Do not modify it manually. (based on django 0e1d950fbb44878f6972a0e5730f69f98caf468e)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -2567,6 +2567,8 @@ class Query(BaseExpression):
         self.extra_order_by = ()
         if clear_default:
             self.default_ordering = False
+        for query in self.combined_queries:
+            query.clear_ordering(force=False, clear_default=clear_default)
 
     def set_group_by(self, allow_aliases=True):
         """
