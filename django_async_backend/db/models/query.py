@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django c3a3ea7bed4d162ec8efa426b48d31ba9f37a82d)
+# This file was generated automatically. Do not modify it manually. (based on django 1d20e124b3396ac38a32216f33d845b641e2e5e5)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -75,7 +75,7 @@ from django.db.models.utils import (
 from django.utils import timezone
 from django.utils.deprecation import (
     RemovedInDjango70Warning,
-    django_file_prefixes,
+    warn_about_external_use,
 )
 from django.utils.functional import cached_property
 
@@ -1744,11 +1744,11 @@ class QuerySet(AltersData):
         else:
             # RemovedInDjango70Warning: when the deprecation ends, raise a
             # TypeError instead.
-            warnings.warn(
+            warn_about_external_use(
                 "Calling select_related() with no arguments is deprecated. "
                 "Specify the fields to fetch instead.",
                 category=RemovedInDjango70Warning,
-                skip_file_prefixes=django_file_prefixes(),
+                skip_name_prefixes=("django.db.models",),
             )
             obj.query.select_related = True
         return obj
