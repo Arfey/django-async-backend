@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 1d20e124b3396ac38a32216f33d845b641e2e5e5)
+# This file was generated automatically. Do not modify it manually. (based on django c800c8a845866d194ec2782af25a8f2f5cd369e0)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -683,6 +683,9 @@ class QuerySet(AltersData):
     async def _prepare_for_bulk_create(self, objs):
         objs_with_pk, objs_without_pk = [], []
         for obj in objs:
+            await obj._async_prepare_related_fields_for_save(
+                operation_name="bulk_create"
+            )
             if isinstance(obj.pk, DatabaseDefault):
                 objs_without_pk.append(obj)
             elif obj._async_is_pk_set():
@@ -693,9 +696,6 @@ class QuerySet(AltersData):
                     objs_with_pk.append(obj)
                 else:
                     objs_without_pk.append(obj)
-            await obj._async_prepare_related_fields_for_save(
-                operation_name="bulk_create"
-            )
         return objs_with_pk, objs_without_pk
 
     def _check_bulk_create_options(
