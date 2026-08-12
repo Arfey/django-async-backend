@@ -15,7 +15,7 @@ class TestComplexFilter(AsyncioTestCase):
             obj
             async for obj in TestModel.async_objects.complex_filter(
                 {"value__gte": 2, "value__lte": 3}
-            )
+            ).order_by("value")
         ]
 
         self.assertEqual(
@@ -31,7 +31,9 @@ class TestComplexFilter(AsyncioTestCase):
             obj
             async for obj in TestModel.async_objects.complex_filter(
                 {"value__gte": 1}
-            ).exclude(name="Test1")
+            )
+            .exclude(name="Test1")
+            .order_by("name")
         ]
 
         self.assertEqual(
@@ -58,7 +60,7 @@ class TestComplexFilter(AsyncioTestCase):
             obj
             async for obj in TestModel.async_objects.complex_filter(
                 {"name__startswith": "Test", "value__in": [1, 3]}
-            )
+            ).order_by("name")
         ]
 
         self.assertEqual(

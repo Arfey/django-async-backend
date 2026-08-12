@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 005d60d97c4dfb117503bdb6f2facfcaf9315d84)
+# This file was generated automatically. Do not modify it manually. (based on django cec10f992be8eed5ed90506375ae5794cbb7069e)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -20,6 +20,7 @@ from collections import (
     namedtuple,
 )
 from collections.abc import (
+    Iterable,
     Iterator,
     Mapping,
 )
@@ -1774,7 +1775,17 @@ class Query(BaseExpression):
                     col = self._get_col(
                         targets[0], join_info.targets[0], alias
                     )
-                    clause.add(lookup_class(col, False), AND)
+                    # Use OR + IS NULL when RHS `in` values include None.
+                    if (
+                        lookup_type == "in"
+                        # Check containers (not strings or bytes).
+                        and isinstance(condition.rhs, Iterable)
+                        and not isinstance(condition.rhs, (str, bytes))
+                        and any(v is None for v in condition.rhs)
+                    ):
+                        clause.add(lookup_class(col, True), OR)
+                    else:
+                        clause.add(lookup_class(col, False), AND)
                 # If someval is a nullable column, someval IS NOT NULL is
                 # added.
                 if isinstance(value, Col) and self.is_nullable(value.target):
