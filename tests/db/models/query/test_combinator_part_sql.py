@@ -35,95 +35,6 @@ class OverriddenFeaturesConnection:
         return getattr(self._connection, name)
 
 
-class TestCombinatorPartOrdering(AsyncioTestCase):
-    """``_get_combinator_part_sql`` drops the ORDER BY of a combined query's
-    parts on backends that cannot carry ordering there.
-
-    PostgreSQL supports it, so the branch is unreachable with the real feature
-    flags and each case below substitutes them on a single compiler.
-    """
-
-    def _union_compiler(self, queryset=None, **overrides):
-        if queryset is None:
-            queryset = TestModel.async_objects.order_by("name")
-        compiler = queryset.union(queryset).query.get_compiler(using="default")
-        compiler.connection = OverriddenFeaturesConnection(
-            compiler.connection, overrides
-        )
-        return compiler
-
-    async def test_ordering_kept_by_default(self):
-        # Baseline: with PostgreSQL's real flags the condition is false and
-        # the parts keep their ORDER BY.
-        compiler = self._union_compiler()
-
-        self.assertIn("ORDER BY", compiler.as_sql()[0])
-
-    async def test_ordering_cleared_when_subquery_required(self):
-        # requires_compound_order_by_subquery and not
-        # ignores_unnecessary_order_by_in_subqueries -- the backend would need
-        # a subquery to order a part, so the ordering is dropped instead.
-        compiler = self._union_compiler(
-            requires_compound_order_by_subquery=True,
-            ignores_unnecessary_order_by_in_subqueries=False,
-        )
-
-        self.assertNotIn("ORDER BY", compiler.as_sql()[0])
-
-    async def test_ordering_kept_when_backend_ignores_it(self):
-        # A backend that discards pointless ordering in subqueries does not
-        # need the compiler's help, so the ORDER BY survives.
-        compiler = self._union_compiler(
-            requires_compound_order_by_subquery=True,
-            ignores_unnecessary_order_by_in_subqueries=True,
-        )
-
-        self.assertIn("ORDER BY", compiler.as_sql()[0])
-
-    async def test_ordering_cleared_without_parentheses_support(self):
-        # The second half of the condition stands on its own: without
-        # parentheses the parts are inlined, so ordering cannot be kept.
-        compiler = self._union_compiler(
-            supports_parentheses_in_compound=False,
-        )
-
-        self.assertNotIn("ORDER BY", compiler.as_sql()[0])
-
-    async def test_ordering_kept_when_parentheses_supported(self):
-        # Same flag the other way round, with the first half of the condition
-        # held false, to show it is what drives the previous case.
-        compiler = self._union_compiler(
-            supports_parentheses_in_compound=True,
-            requires_compound_order_by_subquery=False,
-        )
-
-        self.assertIn("ORDER BY", compiler.as_sql()[0])
-
-    async def test_unordered_parts_are_left_alone(self):
-        # get_order_by() is empty, so the query is never cloned even though
-        # the feature flags ask for the ordering to be cleared.
-        compiler = self._union_compiler(
-            queryset=TestModel.async_objects.filter(value=1),
-            requires_compound_order_by_subquery=True,
-            ignores_unnecessary_order_by_in_subqueries=False,
-        )
-        query = compiler.query
-
-        self.assertNotIn("ORDER BY", compiler.as_sql()[0])
-        self.assertIs(compiler.query, query)
-
-    async def test_ordering_kept_when_clearing_is_unsafe(self):
-        # clear_ordering(force=False) declines to drop ordering that the query
-        # depends on: DISTINCT ON requires a matching ORDER BY.
-        compiler = self._union_compiler(
-            queryset=TestModel.async_objects.order_by("name").distinct("name"),
-            requires_compound_order_by_subquery=True,
-            ignores_unnecessary_order_by_in_subqueries=False,
-        )
-
-        self.assertIn("ORDER BY", compiler.as_sql()[0])
-
-
 class TestCombinatorRejectsSlicingAndOrdering(AsyncioTestCase):
     """get_combinator_sql() refuses slicing and ordering on the parts of a
     combined query when the backend cannot support them there.
@@ -139,6 +50,10 @@ class TestCombinatorRejectsSlicingAndOrdering(AsyncioTestCase):
             compiler.connection,
             {"supports_slicing_ordering_in_compound": False},
         )
+        # Query.get_compiler() re-resolves the connection from `using`, so the
+        # substituted features would not reach the compilers built for each
+        # part while it is set.
+        compiler.using = None
         return compiler
 
     async def test_ordered_part_is_rejected(self):

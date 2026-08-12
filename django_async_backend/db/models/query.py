@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django f386d8ec7cbf42b350f5958b552cd3492a493d5b)
+# This file was generated automatically. Do not modify it manually. (based on django c3a3ea7bed4d162ec8efa426b48d31ba9f37a82d)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -1667,11 +1667,8 @@ class QuerySet(AltersData):
         # Clear limits and ordering so they can be reapplied
         clone.query.clear_ordering(force=True)
         clone.query.default_ordering = True
+        self._clear_ordering_in_combined_queries(clone.query, other_qs)
         clone.query.clear_limits()
-        clone.query.combined_queries = (
-            self.query,
-            *(qs.query for qs in other_qs),
-        )
         clone.query.combinator = combinator
         clone.query.combinator_all = all
         return clone
@@ -2301,6 +2298,14 @@ class QuerySet(AltersData):
                 f"Cannot use QuerySet.{method}() on an unordered queryset performing "
                 f"aggregation. Add an ordering with order_by()."
             )
+
+    def _clear_ordering_in_combined_queries(self, cloned_query, other_qs):
+        combined_queries = [self.query]
+        for qs in other_qs:
+            query = qs.query.clone()
+            query.clear_ordering(force=False, clear_default=False)
+            combined_queries.append(query)
+        cloned_query.combined_queries = tuple(combined_queries)
 
 
 class InstanceCheckMeta(type):

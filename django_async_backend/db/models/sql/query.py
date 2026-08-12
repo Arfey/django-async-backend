@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 0e1d950fbb44878f6972a0e5730f69f98caf468e)
+# This file was generated automatically. Do not modify it manually. (based on django c3a3ea7bed4d162ec8efa426b48d31ba9f37a82d)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -2567,6 +2567,9 @@ class Query(BaseExpression):
         self.extra_order_by = ()
         if clear_default:
             self.default_ordering = False
+        # Ordering is cleared on combined queries with clear_default=False
+        # when union() and analogues are called, so percolate any possible
+        # clear_default=True.
         for query in self.combined_queries:
             query.clear_ordering(force=False, clear_default=clear_default)
 

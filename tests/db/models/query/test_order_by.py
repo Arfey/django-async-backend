@@ -183,9 +183,10 @@ class TestOrderByIsSubsetGroupBy(AsyncioTestCase):
 class TestClearOrderingCombinedQueries(AsyncioTestCase):
     """clear_ordering() recurses into combined_queries.
 
-    A combined query keeps its ordering on the parts rather than on the outer
-    query, so clearing only the outer one would leave the ORDER BY of each
-    part in place.
+    union() keeps the ordering of its first operand on that part rather than
+    on the outer query -- the remaining operands are cleared as they are
+    combined -- so clearing only the outer query would leave that ORDER BY in
+    place.
     """
 
     def _union_query(self, left=None, right=None):
@@ -197,9 +198,10 @@ class TestClearOrderingCombinedQueries(AsyncioTestCase):
 
     async def test_ordering_of_combined_queries_is_cleared(self):
         query = self._union_query()
+        # Only the first operand still carries ordering at this point.
         self.assertEqual(
             [q.order_by for q in query.combined_queries],
-            [("name",), ("value",)],
+            [("name",), ()],
         )
 
         query.clear_ordering(force=True)
