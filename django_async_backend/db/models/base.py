@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django c3a3ea7bed4d162ec8efa426b48d31ba9f37a82d)
+# This file was generated automatically. Do not modify it manually. (based on django 1c6d4779ac61e199e8928a9f8d45050e45930dff)
 import copy
 import inspect
 import warnings
@@ -109,7 +109,7 @@ class AsyncModelMixin:
     def _async_is_pk_set(self, meta=None):
         pk_val = self._async_get_pk_val(meta)
 
-        def _is_set(value):
+        def _is_unset(value):
             return (
                 value is None
                 # Empty value when db_default is used.
@@ -117,8 +117,10 @@ class AsyncModelMixin:
             )
 
         return not (
-            _is_set(pk_val)
-            or (isinstance(pk_val, tuple) and any(_is_set(f) for f in pk_val))
+            _is_unset(pk_val)
+            or (
+                isinstance(pk_val, tuple) and any(_is_unset(f) for f in pk_val)
+            )
         )
 
     async def async_save(
