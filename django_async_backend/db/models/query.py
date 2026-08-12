@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 8d8a8713432a88737c4400610eef11c5c8457b86)
+# This file was generated automatically. Do not modify it manually. (based on django 804607df0e174c524a3ea880b8ecbb555ecb4abb)
 from django.db.models.query import PROHIBITED_FILTER_KWARGS
 
 from django_async_backend.db import async_connections
@@ -2883,7 +2883,7 @@ def prefetch_one_level(instances, prefetcher, lookup, level):
             else:
                 manager = getattr(obj, to_attr)
                 if leaf and lookup.queryset is not None:
-                    qs = manager._apply_rel_filters(lookup.queryset)
+                    qs = manager._apply_rel_filters(lookup.queryset._chain())
                 else:
                     qs = manager.get_queryset()
                 qs._result_cache = vals
