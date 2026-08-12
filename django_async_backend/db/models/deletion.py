@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 6.0)
+# This file was generated automatically. Do not modify it manually. (based on django 6.1)
 from collections import (
     Counter,
     defaultdict,
@@ -19,7 +19,9 @@ from django.db.models import (
     query_utils,
     signals,
 )
+from django.db.models.deletion import SKIP_COLLECTION as _SYNC_SKIP_COLLECTION
 from django.db.models.deletion import (
+    DatabaseOnDelete,
     ProtectedError,
     RestrictedError,
 )
@@ -99,6 +101,15 @@ async def _DO_NOTHING(collector, field, sub_objs, using):
     pass
 
 
+_DB_CASCADE = DatabaseOnDelete("CASCADE", "DB_CASCADE", _CASCADE)
+_DB_SET_DEFAULT = DatabaseOnDelete("SET DEFAULT", "DB_SET_DEFAULT")
+_DB_SET_NULL = DatabaseOnDelete("SET NULL", "DB_SET_NULL")
+
+_SKIP_COLLECTION = frozenset(
+    [_DO_NOTHING, _DB_CASCADE, _DB_SET_DEFAULT, _DB_SET_NULL]
+)
+
+
 def _get_candidate_relations_to_delete(opts):
     # The candidate relations are the ones that come from N-1 and 1-1
     # relations. N-N  (i.e., many-to-many) relations aren't candidates for
@@ -113,10 +124,12 @@ def _get_candidate_relations_to_delete(opts):
 
 
 class Collector:
-    def __init__(self, using, origin=None):
+    def __init__(self, using, origin=None, force_collection=False):
         self.using = using
         # A Model or QuerySet object.
         self.origin = origin
+        # Force collecting objects for deletion on the Python-level.
+        self.force_collection = force_collection
         # Initially, {model: {instances}}, later values become lists.
         self.data = defaultdict(set)
         # {(field, value): [instances, …]}
@@ -219,6 +232,8 @@ class Collector:
         skipping parent -> child -> parent chain preventing fast delete of
         the child.
         """
+        if self.force_collection:
+            return False
         if (
             from_field
             and from_field.remote_field.on_delete is not _SYNC_CASCADE
@@ -243,7 +258,7 @@ class Collector:
             and
             # Foreign keys pointing to this model.
             all(
-                related.field.remote_field.on_delete is _SYNC_DO_NOTHING
+                related.field.remote_field.on_delete in _SYNC_SKIP_COLLECTION
                 for related in _get_candidate_relations_to_delete(opts)
             )
             and (
@@ -352,8 +367,15 @@ class Collector:
                 continue
             field = related.field
             on_delete = _resolve_async_on_delete(field.remote_field.on_delete)
-            if on_delete == _DO_NOTHING:
-                continue
+            if on_delete in _SKIP_COLLECTION:
+                if self.force_collection and (
+                    forced_on_delete := getattr(
+                        on_delete, "forced_collector", None
+                    )
+                ):
+                    on_delete = forced_on_delete
+                else:
+                    continue
             related_model = related.related_model
             if self.can_fast_delete(related_model, from_field=field):
                 model_fast_deletes[related_model].append(field)
@@ -598,9 +620,6 @@ class Collector:
 _SYNC_CASCADE = django_deletion.CASCADE
 
 
-_SYNC_DO_NOTHING = django_deletion.DO_NOTHING
-
-
 _SYNC_TO_ASYNC_ON_DELETE = {
     django_deletion.CASCADE: _CASCADE,
     django_deletion.PROTECT: _PROTECT,
@@ -608,6 +627,9 @@ _SYNC_TO_ASYNC_ON_DELETE = {
     django_deletion.SET_NULL: _SET_NULL,
     django_deletion.SET_DEFAULT: _SET_DEFAULT,
     django_deletion.DO_NOTHING: _DO_NOTHING,
+    django_deletion.DB_CASCADE: _DB_CASCADE,
+    django_deletion.DB_SET_DEFAULT: _DB_SET_DEFAULT,
+    django_deletion.DB_SET_NULL: _DB_SET_NULL,
 }
 
 

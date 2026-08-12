@@ -74,6 +74,9 @@ class Call(BaseModel):
 
 
 class ReturnBlock(BaseModel):
+    # Source of the returned expression this block applies to. A function can
+    # return in several places; an omitted ``match_raw`` matches them all.
+    match_raw: str | None = None
     replace_raw: str | None = None
     remove: bool = False
 
@@ -82,6 +85,7 @@ class Assign(BaseModel):
     remove: bool = False
     # Matcher for the assignment target, and the operations applied to it.
     target: Attr
+    attrs: list[Attr] | None = None
 
 
 class Method(BaseModel):
@@ -141,9 +145,15 @@ class Config(BaseModel):
     module: Module
 
 
+def is_commit_hash(version: str) -> bool:
+    return len(version) >= 7 and all(c in "0123456789abcdef" for c in version)
+
+
 def load_file(*, config: Config, version: str):
+    ref = version if is_commit_hash(version) else f"refs/tags/{version}"
+
     response = requests.get(
-        f"https://raw.githubusercontent.com/django/django/refs/tags/{version}/django/{config.pathname}",  # noqa
+        f"https://raw.githubusercontent.com/django/django/{ref}/django/{config.pathname}",  # noqa
         timeout=10,
     )
     response.raise_for_status()

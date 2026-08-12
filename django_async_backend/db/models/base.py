@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 6.0)
+# This file was generated automatically. Do not modify it manually. (based on django 6.1)
 import copy
 import inspect
 import warnings
@@ -108,9 +108,19 @@ class AsyncModelMixin:
 
     def _async_is_pk_set(self, meta=None):
         pk_val = self._async_get_pk_val(meta)
+
+        def _is_unset(value):
+            return (
+                value is None
+                # Empty value when db_default is used.
+                or isinstance(value, DatabaseDefault)
+            )
+
         return not (
-            pk_val is None
-            or (isinstance(pk_val, tuple) and any(f is None for f in pk_val))
+            _is_unset(pk_val)
+            or (
+                isinstance(pk_val, tuple) and any(_is_unset(f) for f in pk_val)
+            )
         )
 
     async def async_save(
@@ -363,7 +373,9 @@ class AsyncModelMixin:
                 if f.name in update_fields or f.attname in update_fields
             ]
 
-        if not self._async_is_pk_set(meta):
+        if not self._async_is_pk_set(meta) and not isinstance(
+            getattr(self, meta.pk.attname), DatabaseDefault
+        ):
             pk_val = meta.pk.get_pk_value_on_save(self)
             setattr(self, meta.pk.attname, pk_val)
         pk_set = self._async_is_pk_set(meta)
@@ -465,7 +477,7 @@ class AsyncModelMixin:
                 value = (
                     getattr(self, field.attname)
                     if raw
-                    else field.pre_save(self, False)
+                    else field.pre_save(self, add=True)
                 )
                 if hasattr(value, "resolve_expression"):
                     if field not in returning_fields:
@@ -500,8 +512,9 @@ class AsyncModelMixin:
         returning_fields,
     ):
         """
-        Try to update the model. Return True if the model was updated (if an
-        update query was done and a matching row was found in the DB).
+        Try to update the model. Return a list of updated fields if the model
+        was updated (if an update query was done and a matching row was
+        found in the DB).
         """
         filtered = base_qs.filter(pk=pk_val)
         if not values:

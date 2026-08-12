@@ -1,0 +1,251 @@
+shell: bash
+
+commands:
+  _django_repo:
+    description: Clone Django, or fetch the latest into an existing clone
+    cmd: |
+      set -euo pipefail
+      REPO_DIR="${DJANGO_REPO:-$LETS_COMMAND_WORK_DIR/.django}"
+
+      if [ -d "$REPO_DIR/.git" ]; then
+        echo "⬇️  fetching latest into $REPO_DIR"
+        git -C "$REPO_DIR" fetch --tags --prune origin
+      else
+        echo "📦 cloning django into $REPO_DIR (this takes a minute)"
+        git clone --filter=blob:none \
+          https://github.com/django/django.git "$REPO_DIR"
+      fi
+
+  upgrade:
+    description: Pin Django to a commit, regenerate the ORM, and run coverage
+    depends:
+      - _django_repo
+    options: |
+      Usage: lets upgrade <hash> [--skip-install]
+
+        Options:
+            --skip-install    reuse the installed Django instead of
+                              reinstalling it from the pinned commit
+
+        Example:
+          lets upgrade c6e5cf926db949d72842a48b926da57a9593dbd1
+          lets upgrade c6e5cf926db949d72842a48b926da57a9593dbd1 --skip-install
+    cmd: |
+      set -euo pipefail
+      HASH="${LETSOPT_HASH:?usage: lets upgrade <hash>}"
+      SKIP_INSTALL="${LETSOPT_SKIP_INSTALL:-}"
+      REPO_DIR="${DJANGO_REPO:-$LETS_COMMAND_WORK_DIR/.django}"
+      ROOT="$LETS_COMMAND_WORK_DIR"
+      CODEMON="$ROOT/codemon"
+
+      FULL=$(git -C "$REPO_DIR" rev-parse --verify --quiet "$HASH^{commit}") || {
+        echo "❌ unknown Django commit: $HASH" >&2
+        exit 1
+      }
+
+      echo "📌 $(git -C "$REPO_DIR" log -1 --format='%h %cd %s' --date=short "$FULL")"
+      echo
+
+      GENERATED=$(sed -n 's|^pathname: *|django_async_backend/|p' \
+        "$CODEMON"/config/*.yaml | tr '\n' ' ')
+
+      # On failure the upgrade is deliberately left in place -- generated
+      # files, the DJANGO_VERSION pin, and whatever Django is installed all
+      # stay as they are, so the codegen output can be fixed by hand and
+      # retried.
+      # Undo it with:  git restore <generated files>
+      reported=0
+      on_failure() {
+        [ "$reported" -eq 1 ] && return
+        reported=1
+        echo
+        echo "⚠️  upgrade failed -- state left in place for manual fixing:"
+        echo "   DJANGO_VERSION = \"$FULL\""
+        if [ -n "$SKIP_INSTALL" ]; then
+          echo "   django $(poetry run python -c 'import django; print(django.get_version())' 2>/dev/null || echo '?') left as-is (--skip-install)"
+        else
+          echo "   django $(poetry run python -c 'import django; print(django.get_version())' 2>/dev/null || echo '?') installed"
+        fi
+        echo "   generated files left modified"
+        echo
+        echo "   to undo: git restore $GENERATED"
+      }
+      trap 'on_failure' ERR INT TERM
+      # -------------------------------------------------------------------
+
+      if [ -n "$SKIP_INSTALL" ]; then
+        echo "⏭️  skipping django install (--skip-install)"
+        installed=$(poetry run python -c 'import django; print(django.get_version())')
+        echo "   using already installed django $installed"
+      else
+        echo "📦 installing django@$FULL"
+        poetry run pip install --quiet --disable-pip-version-check --force-reinstall --no-deps \
+          "git+https://github.com/django/django.git@$FULL"
+        installed=$(poetry run python -c 'import django; print(django.get_version())')
+        echo "   installed django $installed"
+      fi
+      echo
+
+      echo "✏️  pinning DJANGO_VERSION = \"$FULL\""
+      sed "s/^DJANGO_VERSION = \".*\"/DJANGO_VERSION = \"$FULL\"/" \
+        "$CODEMON/__main__.py" > "$CODEMON/__main__.py.tmp"
+      mv "$CODEMON/__main__.py.tmp" "$CODEMON/__main__.py"
+      grep -m1 '^DJANGO_VERSION' "$CODEMON/__main__.py" | sed 's/^/   /'
+      echo
+
+      echo "⚙️  regenerating ORM"
+      (cd "$ROOT" && lets -c "$ROOT/lets.yaml" generate)
+      echo
+
+      # Every generated file gets a fresh "(based on django <hash>)" header, so
+      # files Django did not actually touch still show up as modified. Check
+      # those back out, leaving only the files with real changes to review.
+      echo "🧹 reverting files changed only by the version header"
+      reverted=0
+      kept=0
+      for f in $GENERATED; do
+        (cd "$ROOT" && git diff --quiet -- "$f") && continue
+
+        # Count changed lines that are not the header line.
+        real=$(cd "$ROOT" && git diff -U0 -- "$f" \
+          | grep -E '^[+-][^+-]' \
+          | grep -vc 'generated automatically' || true)
+
+        if [ "$real" -eq 0 ]; then
+          (cd "$ROOT" && git restore -- "$f")
+          echo "   ↩️  $f (header only)"
+          reverted=$((reverted + 1))
+        else
+          echo "   ✏️  $f ($real changed lines)"
+          kept=$((kept + 1))
+        fi
+      done
+      echo "   $kept file(s) with real changes, $reverted reverted"
+      echo
+
+      echo "🧪 running coverage"
+      cd "$ROOT/tests"
+      poetry run coverage run --rcfile=../pyproject.toml manage.py test
+      poetry run coverage report --rcfile=../pyproject.toml
+
+  generate_upgrade_plan:
+    description: Report Django commits touching the generated ORM files
+    depends:
+      - _django_repo
+    options: |
+      Usage: lets generate_upgrade_plan <to-version>
+
+        Example:
+          lets generate_upgrade_plan 6.1
+    cmd: |
+      set -euo pipefail
+      TO="${LETSOPT_TO_VERSION:?usage: lets generate_upgrade_plan <to-version>}"
+      REPO_DIR="${DJANGO_REPO:-$LETS_COMMAND_WORK_DIR/.django}"
+      CODEMON="$LETS_COMMAND_WORK_DIR/codemon"
+
+      FROM=$(sed -n 's/^DJANGO_VERSION *= *"\(.*\)"/\1/p' "$CODEMON/__main__.py")
+      [ -n "$FROM" ] || {
+        echo "❌ could not read DJANGO_VERSION from $CODEMON/__main__.py" >&2
+        exit 1
+      }
+
+      FILES=()
+      while IFS= read -r path; do
+        FILES+=("$path")
+      done < <(sed -n 's|^pathname: *|django/|p' "$CODEMON"/config/*.yaml)
+
+      [ "${#FILES[@]}" -gt 0 ] || {
+        echo "❌ no 'pathname:' entries found in $CODEMON/config/*.yaml" >&2
+        exit 1
+      }
+
+      for rev in "$FROM" "$TO"; do
+        git -C "$REPO_DIR" rev-parse --verify --quiet "$rev^{commit}" >/dev/null || {
+          echo "❌ unknown Django revision: $rev" >&2
+          exit 1
+        }
+      done
+
+      OUT="$CODEMON/upgrade_plan.$TO.md"
+
+      total_add=0
+      total_del=0
+      count=0
+
+
+      body=""
+
+      while IFS=$'\t' read -r hash date subject; do
+        count=$((count + 1))
+
+        # Scoped to the tracked paths, so a commit touching 40 files reports
+        # only the lines landing inside ours.
+        stats=$(git -C "$REPO_DIR" show --numstat --format= "$hash" -- "${FILES[@]}")
+        add=$(echo "$stats" | awk 'NF==3 {a+=$1} END {print a+0}')
+        del=$(echo "$stats" | awk 'NF==3 {d+=$2} END {print d+0}')
+        total_add=$((total_add + add))
+        total_del=$((total_del + del))
+
+        files_touched=$(echo "$stats" | awk 'NF==3 {
+          printf "%s`%s` <sub>+%s/-%s</sub>", (n++ ? "<br>" : ""), $3, $1, $2
+        }')
+
+        # Escape pipes so a '|' in a commit subject cannot break the table.
+        safe_subject=$(echo "$subject" | sed 's/|/\\|/g')
+
+        body="$body$(printf '| ❌ | %d | %s | [`%s`](https://github.com/django/django/commit/%s) | %s | %s | `+%s/-%s` |' \
+          "$count" "$date" "${hash:0:12}" "$hash" \
+          "$safe_subject" "$files_touched" "$add" "$del")"$'\n'
+      done < <(git -C "$REPO_DIR" log --reverse --topo-order --no-merges \
+                 --date=short --format='%H%x09%cd%x09%s' \
+                 "$FROM..$TO" -- "${FILES[@]}")
+
+      net=$(git -C "$REPO_DIR" diff --shortstat "$FROM" "$TO" -- "${FILES[@]}" \
+        | sed 's/^ *//')
+
+      {
+        echo "# Django upgrade plan: $FROM → $TO"
+        echo
+        echo "> Generated by \`lets generate_upgrade_plan $TO\` on $(date +%Y-%m-%d)."
+        echo "> Commits are listed in the order they landed on Django's branch —"
+        echo "> apply and review them top to bottom."
+        echo
+        echo "## Summary"
+        echo
+        echo "| | |"
+        echo "|---|---|"
+        echo "| **Commits to review** | $count |"
+        echo "| **Lines to review** | \`+$total_add/-$total_del\` ($((total_add + total_del)) touched) |"
+        echo "| **Net difference** | $net |"
+        echo
+        echo "Lines to review exceeds the net difference wherever a change was"
+        echo "later reverted or reworked inside the range — both numbers matter,"
+        echo "the first for effort, the second for the end state."
+        echo
+        echo "### Tracked files"
+        echo
+        echo "Taken from \`codemon/config/*.yaml\`. Per-file totals across the range:"
+        echo
+        echo "| File | Commits | Net |"
+        echo "|---|---:|---|"
+        for f in "${FILES[@]}"; do
+          n=$(git -C "$REPO_DIR" rev-list --count --no-merges "$FROM..$TO" -- "$f")
+          fnet=$(git -C "$REPO_DIR" diff --numstat "$FROM" "$TO" -- "$f" \
+            | awk 'NF==3 {printf "+%s/-%s", $1, $2} END {if (NR==0) printf "+0/-0"}')
+          # A file can carry commits yet show no net change, when edits inside
+          # the range cancel out. Flag it so it still gets reviewed.
+          note=""
+          [ "$n" -gt 0 ] && [ "$fnet" = "+0/-0" ] && note=" ⚠️ net-zero but touched"
+          printf '| `%s` | %s | `%s`%s |\n' "$f" "$n" "$fnet" "$note"
+        done
+        echo
+        echo "## Commits"
+        echo
+        echo "Status starts at ❌ for every commit — mark them ✅ as you port them."
+        echo
+        echo "| Status | # | Landed | Commit | Message | Files | Lines |"
+        echo "|:---:|---:|---|---|---|---|---|"
+        printf '%s' "$body"
+      } > "$OUT"
+
+      echo "✅ wrote $OUT ($count commits, +$total_add/-$total_del)"

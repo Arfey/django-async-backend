@@ -15,6 +15,12 @@ module:
       remove: true
     - name: Collector
       remove: true
+    - name: FETCH_ONE
+      remove: true
+    - name: DO_NOTHING
+      remove: true
+    - name: DatabaseOnDelete
+      remove: true
 
   assigns:
     - target:
@@ -52,6 +58,9 @@ module:
       remove: true
 
     ModelStateFieldsCacheDescriptor:
+      remove: true
+
+    ModelStateFetchModeDescriptor:
       remove: true
 
     ModelState:
@@ -472,6 +481,9 @@ module:
           remove: true
 
         _check_constraints:
+          remove: true
+
+        _check_related_fields:
           remove: true
 
 # Code review notes

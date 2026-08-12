@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 6.0)
+# This file was generated automatically. Do not modify it manually. (based on django 6.1)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -13,7 +13,6 @@ all about the internals of models in order to get the information it needs.
 import copy
 import difflib
 import functools
-import inspect
 import sys
 import warnings
 from collections import (
@@ -21,6 +20,7 @@ from collections import (
     namedtuple,
 )
 from collections.abc import (
+    Iterable,
     Iterator,
     Mapping,
 )
@@ -79,7 +79,10 @@ from django.db.models.sql.where import (
     NothingNode,
     WhereNode,
 )
-from django.utils.deprecation import RemovedInDjango70Warning
+from django.utils.deprecation import (
+    RemovedInDjango70Warning,
+    django_file_prefixes,
+)
 from django.utils.functional import cached_property
 from django.utils.regex_helper import _lazy_re_compile
 from django.utils.tree import Node
@@ -87,12 +90,17 @@ from django.utils.tree import Node
 __all__ = ["Query", "RawQuery"]
 
 # RemovedInDjango70Warning: When the deprecation ends, replace with:
-# Quotation marks ('"`[]), whitespace characters, semicolons, percent signs,
-# hashes, or inline SQL comments are forbidden in column aliases.
-# FORBIDDEN_ALIAS_PATTERN = _lazy_re_compile(r"['`\"\]\[;\s]|%|#|--|/\*|\*/")
-# Quotation marks ('"`[]), whitespace characters, semicolons, hashes, or inline
-# SQL comments are forbidden in column aliases.
-FORBIDDEN_ALIAS_PATTERN = _lazy_re_compile(r"['`\"\]\[;\s]|#|--|/\*|\*/")
+# Quotation marks ('"`[]), whitespace characters, control characters,
+# semicolons, percent signs, hashes, or inline SQL comments are
+# forbidden in column aliases.
+# FORBIDDEN_ALIAS_PATTERN = _lazy_re_compile(
+#   r"['`\"\]\[;\s\x00-\x1F\x7F-\x9F]|%|#|--|/\*|\*/"
+# )
+# Quotation marks ('"`[]), whitespace characters, control characters,
+# semicolons, hashes, or inline SQL comments are forbidden in column aliases.
+FORBIDDEN_ALIAS_PATTERN = _lazy_re_compile(
+    r"['`\"\]\[;\s\x00-\x1F\x7F-\x9F]|#|--|/\*|\*/"
+)
 
 # Inspired from
 # https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
@@ -579,7 +587,8 @@ class Query(BaseExpression):
             # Queries with distinct_fields need ordering and when a limit is
             # applied we must take the slice from the ordered query. Otherwise
             # no need for ordering.
-            inner_query.clear_ordering(force=False)
+            if inner_query.orderby_issubset_groupby:
+                inner_query.clear_ordering(force=False)
             if not inner_query.distinct:
                 # If the inner query uses default select and it has some
                 # aggregate annotations, then we must make sure the inner
@@ -1302,24 +1311,19 @@ class Query(BaseExpression):
     def check_alias(self, alias):
         # RemovedInDjango70Warning: When the deprecation ends, remove.
         if "%" in alias:
-            if "aggregate" in {frame.function for frame in inspect.stack()}:
-                stacklevel = 5
-            else:
-                # annotate(), alias(), and values().
-                stacklevel = 6
             warnings.warn(
                 "Using percent signs in a column alias is deprecated.",
-                stacklevel=stacklevel,
                 category=RemovedInDjango70Warning,
+                skip_file_prefixes=django_file_prefixes(),
             )
         if FORBIDDEN_ALIAS_PATTERN.search(alias):
             raise ValueError(
                 "Column aliases cannot contain whitespace characters, hashes, "
                 # RemovedInDjango70Warning: When the deprecation ends, replace
                 # with:
-                # "quotation marks, semicolons, percent signs, or SQL "
-                # "comments."
-                "quotation marks, semicolons, or SQL comments."
+                # "control characters, quotation marks, semicolons, percent "
+                # "signs, or SQL comments."
+                "control characters, quotation marks, semicolons, or SQL comments."
             )
 
     def add_annotation(self, annotation, alias, select=True):
@@ -1340,12 +1344,13 @@ class Query(BaseExpression):
 
     @property
     def _subquery_fields_len(self):
-        if self.has_select_fields:
-            return sum(
-                len(self.model._meta.pk_fields) if field == "pk" else 1
-                for field in self.selected
-            )
-        return len(self.model._meta.pk_fields)
+        if not self.has_select_fields or not self.select:
+            return len(self.model._meta.pk_fields)
+        return len(self.select) + sum(
+            len(expr.targets) - 1
+            for expr in self.select
+            if isinstance(expr, ColPairs)
+        )
 
     def resolve_expression(self, query, *args, **kwargs):
         clone = self.clone()
@@ -1553,7 +1558,7 @@ class Query(BaseExpression):
         # DEFAULT_DB_ALIAS isn't nice but it's the best that can be done here.
         # A similar thing is done in is_nullable(), too.
         if (
-            lookup_name == "exact"
+            lookup_name in ("exact", "iexact")
             and lookup.rhs == ""
             and connections[
                 DEFAULT_DB_ALIAS
@@ -1770,7 +1775,17 @@ class Query(BaseExpression):
                     col = self._get_col(
                         targets[0], join_info.targets[0], alias
                     )
-                    clause.add(lookup_class(col, False), AND)
+                    # Use OR + IS NULL when RHS `in` values include None.
+                    if (
+                        lookup_type == "in"
+                        # Check containers (not strings or bytes).
+                        and isinstance(condition.rhs, Iterable)
+                        and not isinstance(condition.rhs, (str, bytes))
+                        and any(v is None for v in condition.rhs)
+                    ):
+                        clause.add(lookup_class(col, True), OR)
+                    else:
+                        clause.add(lookup_class(col, False), AND)
                 # If someval is a nullable column, someval IS NOT NULL is
                 # added.
                 if isinstance(value, Col) and self.is_nullable(value.target):
@@ -1854,6 +1869,11 @@ class Query(BaseExpression):
         return target_clause, needed_inner
 
     def add_filtered_relation(self, filtered_relation, alias):
+        if "." in alias:
+            raise ValueError(
+                "FilteredRelation doesn't support aliases with periods "
+                "(got %r)." % alias
+            )
         self.check_alias(alias)
         filtered_relation.alias = alias
         relation_lookup_parts, relation_field_parts, _ = (
@@ -1966,7 +1986,7 @@ class Query(BaseExpression):
                     available = sorted(
                         [
                             *get_field_names_from_opts(opts),
-                            *self.annotation_select,
+                            *self.annotations,
                             *self._filtered_relations,
                         ]
                     )
@@ -2502,6 +2522,36 @@ class Query(BaseExpression):
         else:
             self.default_ordering = False
 
+    @property
+    def orderby_issubset_groupby(self):
+        if self.extra_order_by:
+            # Raw SQL from extra(order_by=...) can't be reliably compared
+            # against resolved OrderBy/Col expressions. Treat as not a subset.
+            return False
+        if self.group_by in (None, True):
+            # There is either no aggregation at all (None), or the group by
+            # is generated automatically from model fields (True), in which
+            # case the order by is necessarily a subset of them.
+            return True
+        if not self.order_by:
+            # Although an empty set is always a subset, there's no point in
+            # clearing ordering when there isn't any. Avoid the clone() below.
+            return True
+        # Don't pollute the original query (might disrupt joins).
+        q = self.clone()
+        order_by_set = set()
+        for order_by in q.order_by:
+            if hasattr(order_by, "resolve_expression"):
+                order_by_set.add(order_by.resolve_expression(q))
+            elif order_by == "?":
+                # Random ordering can't be compared against group by.
+                return False
+            else:
+                order_by_set.add(
+                    F(order_by.removeprefix("-")).resolve_expression(q)
+                )
+        return order_by_set.issubset(self.group_by)
+
     def clear_ordering(self, force=False, clear_default=True):
         """
         Remove any ordering settings if the current query allows it without
@@ -2517,6 +2567,11 @@ class Query(BaseExpression):
         self.extra_order_by = ()
         if clear_default:
             self.default_ordering = False
+        # Ordering is cleared on combined queries with clear_default=False
+        # when union() and analogues are called, so percolate any possible
+        # clear_default=True.
+        for query in self.combined_queries:
+            query.clear_ordering(force=False, clear_default=clear_default)
 
     def set_group_by(self, allow_aliases=True):
         """
@@ -2723,10 +2778,17 @@ class Query(BaseExpression):
                         annotation_names.append(f)
                         selected[f] = f
                     elif f in self.annotations:
-                        raise FieldError(
-                            f"Cannot select the '{f}' alias. Use annotate() to "
-                            "promote it."
-                        )
+                        if self.annotation_select:
+                            raise FieldError(
+                                f"Cannot select the '{f}' alias. It was excluded "
+                                f"by a previous values() or values_list() call. "
+                                f"Include '{f}' in that call to select it."
+                            )
+                        else:
+                            raise FieldError(
+                                f"Cannot select the '{f}' alias. Use annotate() "
+                                f"to promote it."
+                            )
                     else:
                         # Call `names_to_path` to ensure a FieldError including
                         # annotations about to be masked as valid choices if

@@ -1,5 +1,10 @@
+import re
+
 from django.core.exceptions import FieldError
-from django.db.models import Count
+from django.db.models import (
+    Count,
+    Value,
+)
 from test_app.models import TestModel
 
 from django_async_backend.test import AsyncioTestCase
@@ -83,6 +88,97 @@ class TestValues(AsyncioTestCase):
             [{"name": "Test1", "count": 1}, {"name": "Test2", "count": 1}],
             "Results should be ordered by 'name' and include correct counts",
         )
+
+    async def test_values_alias_requires_annotate(self):
+        """alias() keeps the expression out of annotation_select, so selecting
+        it by values() asks the user to promote it with annotate().
+        """
+        with self.assertRaisesRegex(
+            FieldError,
+            re.escape(
+                "Cannot select the 'total' alias. Use annotate() to "
+                "promote it."
+            ),
+        ):
+            TestModel.async_objects.alias(total=Count("name")).values("total")
+
+    async def test_values_masked_annotation_reports_previous_call(self):
+        """When a previous values() call masked the annotation out, but other
+        annotations are still selected, the error points at that call.
+        """
+        queryset = TestModel.async_objects.annotate(
+            total=Count("name"), one=Value(1)
+        ).values("one")
+
+        with self.assertRaisesRegex(
+            FieldError,
+            re.escape(
+                "Cannot select the 'total' alias. It was excluded by a "
+                "previous values() or values_list() call. Include 'total' "
+                "in that call to select it."
+            ),
+        ):
+            queryset.values("total")
+
+    async def test_values_list_masked_annotation_reports_previous_call(self):
+        queryset = TestModel.async_objects.annotate(
+            total=Count("name"), one=Value(1)
+        ).values_list("one")
+
+        with self.assertRaisesRegex(
+            FieldError,
+            re.escape(
+                "Cannot select the 'total' alias. It was excluded by a "
+                "previous values() or values_list() call. Include 'total' "
+                "in that call to select it."
+            ),
+        ):
+            queryset.values_list("total")
+
+    async def test_values_selects_extra(self):
+        """An extra() select is picked up by values() as a RawSQL column."""
+        results = [
+            obj
+            async for obj in TestModel.async_objects.extra(
+                select={"double_value": "value * 2"}
+            )
+            .order_by("name")
+            .values("name", "double_value")
+        ]
+
+        self.assertEqual(
+            results,
+            [
+                {"name": "Test1", "double_value": 2},
+                {"name": "Test2", "double_value": 4},
+            ],
+            "values() should select the extra() column",
+        )
+
+    async def test_values_field_alongside_annotation(self):
+        """A plain field selected while an annotation is in the mask goes
+        through names_to_path() before being added to the field names.
+        """
+        results = [
+            obj
+            async for obj in TestModel.async_objects.annotate(
+                total=Count("name")
+            )
+            .order_by("name")
+            .values("total", "value")
+        ]
+
+        self.assertEqual(
+            results,
+            [{"total": 1, "value": 1}, {"total": 1, "value": 2}],
+            "values() should select both the annotation and the field",
+        )
+
+    async def test_values_unresolvable_field_alongside_annotation(self):
+        queryset = TestModel.async_objects.annotate(total=Count("name"))
+
+        with self.assertRaises(FieldError):
+            queryset.values("total", "nonexistent_field")
 
     async def test_values_no_fields(self):
         results = [obj async for obj in TestModel.async_objects.values()]

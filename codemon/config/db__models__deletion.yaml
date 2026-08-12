@@ -4,8 +4,10 @@ module:
   new_imports:
     - "from inspect import iscoroutinefunction"
     - "from django.db.models import deletion as django_deletion"
+    - "from django.db.models.deletion import DatabaseOnDelete"
     - "from django.db.models.deletion import ProtectedError"
     - "from django.db.models.deletion import RestrictedError"
+    - "from django.db.models.deletion import SKIP_COLLECTION as _SYNC_SKIP_COLLECTION"
     - "from django_async_backend.db import async_connections"
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
@@ -15,7 +17,6 @@ module:
 
   add_raw_bottom:
     - "_SYNC_CASCADE = django_deletion.CASCADE"
-    - "_SYNC_DO_NOTHING = django_deletion.DO_NOTHING"
     - |
       _SYNC_TO_ASYNC_ON_DELETE = {
           django_deletion.CASCADE: _CASCADE,
@@ -24,6 +25,9 @@ module:
           django_deletion.SET_NULL: _SET_NULL,
           django_deletion.SET_DEFAULT: _SET_DEFAULT,
           django_deletion.DO_NOTHING: _DO_NOTHING,
+          django_deletion.DB_CASCADE: _DB_CASCADE,
+          django_deletion.DB_SET_DEFAULT: _DB_SET_DEFAULT,
+          django_deletion.DB_SET_NULL: _DB_SET_NULL,
       }
     - |
       def _resolve_async_on_delete(on_delete):
@@ -110,6 +114,43 @@ module:
         rename:
           value: _SET_NULL
 
+    - target:
+        name: DB_CASCADE
+        rename:
+          name: _DB_CASCADE
+      attrs:
+        - name: CASCADE
+          rename:
+            name: _CASCADE
+
+    - target:
+        name: DB_SET_DEFAULT
+        rename:
+          name: _DB_SET_DEFAULT
+
+    - target:
+        name: DB_SET_NULL
+        rename:
+          name: _DB_SET_NULL
+
+    - target:
+        name: SKIP_COLLECTION
+        rename:
+          name: _SKIP_COLLECTION
+      attrs:
+        - name: DO_NOTHING
+          rename:
+            name: _DO_NOTHING
+        - name: DB_CASCADE
+          rename:
+            name: _DB_CASCADE
+        - name: DB_SET_DEFAULT
+          rename:
+            name: _DB_SET_DEFAULT
+        - name: DB_SET_NULL
+          rename:
+            name: _DB_SET_NULL
+
   functions:
     CASCADE:
       rename: _CASCADE
@@ -170,6 +211,9 @@ module:
     RestrictedError:
       remove: true
 
+    DatabaseOnDelete:
+      remove: true
+
     Collector:
       methods:
         get_del_batches:
@@ -183,9 +227,9 @@ module:
             - name: CASCADE
               rename:
                 name: _SYNC_CASCADE
-            - name: DO_NOTHING
+            - name: SKIP_COLLECTION
               rename:
-                name: _SYNC_DO_NOTHING
+                name: _SYNC_SKIP_COLLECTION
           calls:
             - func:
                 name: get_candidate_relations_to_delete
@@ -211,9 +255,9 @@ module:
             - attr: on_delete
               parent_attr: remote_field
               wrap: _resolve_async_on_delete
-            - name: DO_NOTHING
+            - name: SKIP_COLLECTION
               rename:
-                name: _DO_NOTHING
+                name: _SKIP_COLLECTION
           boolean_operations:
             - operands:
                 - name: sub_objs
