@@ -2,7 +2,7 @@ from django.core.exceptions import FieldFetchBlocked
 from django.db.models.fetch_modes import (
     FETCH_ONE,
     FETCH_PEERS,
-    RAISE,
+    FETCH_RAISE,
 )
 from test_app.models import TestModel
 
@@ -43,18 +43,20 @@ class TestFetchMode(AsyncioTestCase):
         self.assertIs(queryset._fetch_mode, FETCH_PEERS)
 
     async def test_fetch_mode_applied_to_loaded_objects(self):
-        queryset = TestModel.async_objects.fetch_mode(RAISE).order_by("name")
+        queryset = TestModel.async_objects.fetch_mode(FETCH_RAISE).order_by(
+            "name"
+        )
 
         results = [obj async for obj in queryset]
 
         for obj in results:
-            self.assertIs(obj._state.fetch_mode, RAISE)
+            self.assertIs(obj._state.fetch_mode, FETCH_RAISE)
 
     async def test_fetch_mode_raise_blocks_related_fetch(self):
-        # RAISE is the observable consequence of the fetch mode reaching
+        # FETCH_RAISE is the observable consequence of the fetch mode reaching
         # from_db(): touching an unfetched related field is refused instead of
         # emitting a query.
-        queryset = TestModel.async_objects.fetch_mode(RAISE).filter(
+        queryset = TestModel.async_objects.fetch_mode(FETCH_RAISE).filter(
             name="Test1"
         )
         (obj,) = [obj async for obj in queryset]

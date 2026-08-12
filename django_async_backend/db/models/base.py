@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django c6e5cf926db949d72842a48b926da57a9593dbd1)
+# This file was generated automatically. Do not modify it manually. (based on django 6.1)
 import copy
 import inspect
 import warnings

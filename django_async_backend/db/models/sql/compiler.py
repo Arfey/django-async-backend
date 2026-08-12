@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 7f814ee937e0f870a20aa0c87e4cd62a5b69d587)
+# This file was generated automatically. Do not modify it manually. (based on django 6.1)
 import collections
 import json
 import re

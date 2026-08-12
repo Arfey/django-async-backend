@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django f9a44cc0fac653f8e0c2ab1cdfb12b2cc5c63fc2)
+# This file was generated automatically. Do not modify it manually. (based on django 6.1)
 from django_async_backend.db.models.sql.query import Query
 
 """

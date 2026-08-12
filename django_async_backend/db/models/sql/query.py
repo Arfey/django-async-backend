@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django c3a3ea7bed4d162ec8efa426b48d31ba9f37a82d)
+# This file was generated automatically. Do not modify it manually. (based on django 6.1)
 from django_async_backend.db import async_connections as connections
 
 """

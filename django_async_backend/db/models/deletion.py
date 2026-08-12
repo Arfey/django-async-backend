@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 0c487aa3a7b2417481bf48c1e5355c855873e210)
+# This file was generated automatically. Do not modify it manually. (based on django 6.1)
 from collections import (
     Counter,
     defaultdict,

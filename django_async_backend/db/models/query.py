@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django c800c8a845866d194ec2782af25a8f2f5cd369e0)
+# This file was generated automatically. Do not modify it manually. (based on django 6.1)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
