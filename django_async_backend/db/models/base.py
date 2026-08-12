@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 1c6d4779ac61e199e8928a9f8d45050e45930dff)
+# This file was generated automatically. Do not modify it manually. (based on django c6e5cf926db949d72842a48b926da57a9593dbd1)
 import copy
 import inspect
 import warnings
@@ -373,7 +373,9 @@ class AsyncModelMixin:
                 if f.name in update_fields or f.attname in update_fields
             ]
 
-        if not self._async_is_pk_set(meta):
+        if not self._async_is_pk_set(meta) and not isinstance(
+            getattr(self, meta.pk.attname), DatabaseDefault
+        ):
             pk_val = meta.pk.get_pk_value_on_save(self)
             setattr(self, meta.pk.attname, pk_val)
         pk_set = self._async_is_pk_set(meta)
