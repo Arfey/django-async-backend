@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 3b161e60964aff99eddcd2627a486d81c1836b3a)
+# This file was generated automatically. Do not modify it manually. (based on django 5cf9c7fde7cf18c1ab4d529d187f45fb0225bb58)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
 from django_async_backend.db.transaction import (
@@ -81,6 +81,8 @@ MAX_GET_RESULTS = 21
 
 # The maximum number of items to display in a QuerySet.__repr__
 REPR_OUTPUT_SIZE = 20
+
+DEFAULT_FETCH_MODE = FETCH_ONE
 
 
 class BaseIterable:
@@ -385,7 +387,7 @@ class QuerySet(AltersData):
         self._prefetch_done = False
         self._known_related_objects = {}  # {rel_field: {pk: rel_obj}}
         self._iterable_class = ModelIterable
-        self._fetch_mode = FETCH_ONE
+        self._fetch_mode = DEFAULT_FETCH_MODE
         self._fields = None
         self._defer_next_filter = False
         self._deferred_filter = None
@@ -2320,7 +2322,7 @@ class RawQuerySet:
         translations=None,
         using=None,
         hints=None,
-        fetch_mode=FETCH_ONE,
+        fetch_mode=DEFAULT_FETCH_MODE,
     ):
         self.raw_query = raw_query
         self.model = model
