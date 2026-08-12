@@ -1,6 +1,5 @@
 # This file was generated automatically. Do not modify it manually. (based on django 6.1)
 from django_async_backend.db.models.sql.query import Query
-
 """
 Query subclasses which provide extra functionality beyond simple data
 retrieval.
