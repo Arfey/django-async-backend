@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 2314cdf1ff860058a6579bb9f9bac1253fc9ab43)
+# This file was generated automatically. Do not modify it manually. (based on django 6bbe2656e1e89a03d1ae8f2cea7bdd2a027f0665)
 import collections
 import json
 import re
@@ -658,6 +658,10 @@ class SQLCompiler:
                 if compiler.query.is_sliced:
                     raise DatabaseError(
                         "LIMIT/OFFSET not allowed in subqueries of compound statements."
+                    )
+                if compiler.get_order_by():
+                    raise DatabaseError(
+                        "ORDER BY not allowed in subqueries of compound statements."
                     )
         parts = []
         empty_compiler = None
