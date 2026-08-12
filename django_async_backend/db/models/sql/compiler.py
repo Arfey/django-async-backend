@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django 1786cd881ff4ad9458d56180ae555d92c14e5af8)
+# This file was generated automatically. Do not modify it manually. (based on django 9c655e98006dec4f4fd47a84c254f36404d631e4)
 import collections
 import json
 import re
@@ -716,6 +716,15 @@ class SQLCompiler:
         if selected is not None and compiler.query.selected is None:
             compiler.query = compiler.query.clone()
             compiler.query.set_values(selected)
+        if (
+            (
+                features.requires_compound_order_by_subquery
+                and not features.ignores_unnecessary_order_by_in_subqueries
+            )
+            or not features.supports_parentheses_in_compound
+        ) and compiler.get_order_by():
+            compiler.query = compiler.query.clone()
+            compiler.query.clear_ordering(force=False)
         part_sql, part_args = compiler.as_sql(with_col_aliases=True)
         if compiler.query.combinator:
             # Wrap in a subquery if wrapping in parentheses isn't
