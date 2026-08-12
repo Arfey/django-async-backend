@@ -1,4 +1,4 @@
-# This file was generated automatically. Do not modify it manually. (based on django cec10f992be8eed5ed90506375ae5794cbb7069e)
+# This file was generated automatically. Do not modify it manually. (based on django a284a49153f005f2a7af087025e5112ba06cbd5f)
 from django_async_backend.db import async_connections as connections
 
 """
@@ -2539,14 +2539,17 @@ class Query(BaseExpression):
             return True
         # Don't pollute the original query (might disrupt joins).
         q = self.clone()
-        order_by_set = {
-            (
-                order_by.resolve_expression(q)
-                if hasattr(order_by, "resolve_expression")
-                else F(order_by).resolve_expression(q)
-            )
-            for order_by in q.order_by
-        }
+        order_by_set = set()
+        for order_by in q.order_by:
+            if hasattr(order_by, "resolve_expression"):
+                order_by_set.add(order_by.resolve_expression(q))
+            elif order_by == "?":
+                # Random ordering can't be compared against group by.
+                return False
+            else:
+                order_by_set.add(
+                    F(order_by.removeprefix("-")).resolve_expression(q)
+                )
         return order_by_set.issubset(self.group_by)
 
     def clear_ordering(self, force=False, clear_default=True):

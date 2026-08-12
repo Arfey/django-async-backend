@@ -151,14 +151,30 @@ class TestOrderByIsSubsetGroupBy(AsyncioTestCase):
 
         self.assertFalse(query.orderby_issubset_groupby)
 
-    async def test_descending_string_order_by_raises(self):
-        # Known upstream defect: the "-" prefix is passed to F() verbatim
-        # instead of being stripped, so a descending string ordering blows up
-        # rather than reporting whether it is a subset. Matches the behaviour
-        # of the identical property in Django itself.
+    async def test_descending_string_order_by_in_group_by(self):
+        # The "-" prefix is stripped before resolving, so "-value" compares
+        # against the same Col as "value" and is recognised as a subset.
         query = self._grouped().order_by("-value").query.clone()
 
-        with self.assertRaises(FieldError) as ctx:
-            query.orderby_issubset_groupby
+        self.assertTrue(query.orderby_issubset_groupby)
 
-        self.assertIn("Cannot resolve keyword '-value'", str(ctx.exception))
+    async def test_descending_string_order_by_not_in_group_by(self):
+        # Stripping the prefix must not make an ungrouped field look grouped:
+        # "-name" is still not covered by the GROUP BY.
+        query = self._grouped().order_by("-name").query.clone()
+
+        self.assertFalse(query.orderby_issubset_groupby)
+
+    async def test_random_order_by_is_not_a_subset(self):
+        # "?" has no column to compare against a GROUP BY entry, so it is
+        # conservatively reported as not a subset.
+        query = self._grouped().order_by("?").query.clone()
+
+        self.assertFalse(query.orderby_issubset_groupby)
+
+    async def test_random_order_by_after_grouped_field(self):
+        # A single "?" is enough to disqualify the whole ordering, even when
+        # every other entry is covered by the GROUP BY.
+        query = self._grouped().order_by("value", "?").query.clone()
+
+        self.assertFalse(query.orderby_issubset_groupby)
