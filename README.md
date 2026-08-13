@@ -45,12 +45,6 @@ INSTALLED_APPS = [
     ...
     "django_async_backend",
 ]
-
-# Required under ASGI so connections are released each request.
-MIDDLEWARE = [
-    "django_async_backend.middleware.close_async_connections",
-    ...
-]
 ```
 
 ```python

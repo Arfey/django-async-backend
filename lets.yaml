@@ -57,6 +57,10 @@ commands:
     description: Run all linters
     cmd: poetry run pre-commit run --all-files
 
+  psql:
+    description: psql shell
+    cmd: docker compose exec -it postgres psql -U postgres
+
   docs:
     group: Docs
     description: Build the documentation into docs/build/html

@@ -28,7 +28,7 @@ reliably across them. Connection pooling in particular is not supported there.
   - [Connection handler](connections.md#connection-handler)
   - [Cursors](connections.md#cursors)
   - [Connection pooling](connections.md#connection-pooling)
-  - [Middleware](setup.md#middleware)
+  - [Request signals](setup.md#request-signals)
 - ORM
   - [`AsyncModelMixin`](orm.md#asyncmodelmixin) — `async_save()` / `async_delete()`
   - [Managers](orm.md#managers) — the `async_objects` manager
@@ -80,12 +80,6 @@ DATABASES = {
 INSTALLED_APPS = [
     # ...
     "django_async_backend",
-]
-
-# Required under ASGI so connections are released each request.
-MIDDLEWARE = [
-    "django_async_backend.middleware.close_async_connections",
-    # ...
 ]
 ```
 

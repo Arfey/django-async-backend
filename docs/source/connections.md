@@ -88,6 +88,5 @@ state.
 To disable the warning, set `ASYNC_BACKEND_DISABLE_POOL_WARNING=True`.
 ```
 
-When running under ASGI, add the [connection-closing
-middleware](setup.md#middleware) so connections are returned to the pool at the
-end of each request.
+Under ASGI, connections are returned to the pool at the end of each request by
+the [request signals](setup.md#request-signals) the app connects on startup.
