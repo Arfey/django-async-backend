@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "django-async-backend"
-version = "6.1.0"
+version = "6.1.1"
 description = "True async Django ORM and PostgreSQL backend with connection pooling and async transactions"
 readme = "README.md"
 authors = ["Arfey <arfey@gmail.com>"]
