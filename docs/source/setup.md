@@ -55,30 +55,12 @@ INSTALLED_APPS = [
 ]
 ```
 
-### Middleware
-
-Finally, add `close_async_connections` to `MIDDLEWARE` so async connections are
-released at the end of each request:
-
-```python
-MIDDLEWARE = [
-    "django_async_backend.middleware.close_async_connections",
-    ...
-]
-```
-
-```{important}
-This step is not optional under ASGI. Django's `request_finished` signal only
-closes *sync* connections, so without this middleware every request leaks its
-async connection — and with [pooling](connections.md#connection-pooling)
-enabled the pool is eventually exhausted.
-```
-
 ### Request signals
 
 On startup the app connects `close_old_async_connections` to Django's
-`request_started` and `request_finished` signals, so stale async connections are
-dropped at the boundaries of every request.
+`request_started` and `request_finished` signals, so async connections are
+released at the boundaries of every request and returned to the
+[pool](connections.md#connection-pooling). No extra setup is required.
 
 ```{warning}
 To disable the `request_started` and `request_finished` signals, set
