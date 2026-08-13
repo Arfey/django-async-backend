@@ -11,6 +11,7 @@ class DjangoAsyncBackendConfig(AppConfig):
 
     def ready(self):
         from django_async_backend.db.models.patch import _patch_model
+
         _patch_model()
 
         if not getattr(
@@ -18,4 +19,3 @@ class DjangoAsyncBackendConfig(AppConfig):
         ):
             signals.request_started.connect(close_old_async_connections)
             signals.request_finished.connect(close_old_async_connections)
-
