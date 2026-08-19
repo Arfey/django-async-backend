@@ -42,7 +42,7 @@ reliably across them. Connection pooling in particular is not supported there.
   - [`AsyncioTransactionTestCase`](testing.md#asynciotransactiontestcase)
 - Implementation details
   - [Concurrency and parallelism](concurrency.md)
-  - [DEP 0009](concurrency.md#dep-0009)
+  - [Running queries in parallel](concurrency.md#running-queries-in-parallel)
 
 ## Installation
 

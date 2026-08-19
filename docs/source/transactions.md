@@ -45,29 +45,30 @@ async with async_atomic():
 
 ## Transactions and asyncio tasks
 
-An async connection is owned by the task that created it. Opening
-`async_atomic()` from a **different** task — one spawned with
-`asyncio.create_task()` or `asyncio.gather()` — is rejected:
+An async connection is owned by the task that created it. Using it from a
+**different** task — one spawned with `asyncio.create_task()`,
+`asyncio.gather()`, or `asyncio.TaskGroup` — is rejected. This applies to *every*
+operation on the connection, not just to opening a transaction: an ordinary
+query from a foreign task is rejected too.
 
 ```python
 async def writer():
-    async with async_atomic():        # different task
-        await Book.async_objects.acreate(name="fanout")
+    await Book.async_objects.acreate(name="fanout")   # different task
 
 await asyncio.create_task(writer())
 ```
 
-```text
-RuntimeError: Transactions cannot be used within nested tasks. Consider using
-a higher-level transaction that encompasses all nested tasks, or establish a
-separate connection for the task (e.g., _independent_connection).
-```
+This is a deliberate guard, not a limitation to work around. Child tasks inherit
+the parent's connection, so several of them issuing commands on it concurrently
+would interleave those commands on one physical connection — corrupting
+transaction state and silently losing writes.
 
-This is a deliberate guard, not a limitation to work around. Child tasks
-inherit the parent's connection, so several of them opening transactions on it
-concurrently would interleave `BEGIN`/`COMMIT` on one physical connection —
-corrupting transaction state and silently losing writes. The check runs before
-`BEGIN`, so nothing is written when it fires.
+The rule is the one SQLAlchemy states for `AsyncSession`: **one transaction per
+task**, just as `Session` is one per thread. A connection inside a transaction is
+a stateful, sequential object — commands are handled in the exact order they are
+emitted, and the transaction's state advances with them. A single database
+transaction that receives commands from several tasks at once has no analogue in
+a relational database.
 
 ### What works instead
 
@@ -81,32 +82,47 @@ async with async_atomic():
         await create_instance("inner")
 ```
 
-For fan-out, you have two options.
-
-**One transaction around the fan-out.** The parent owns the transaction and the
-child tasks just do queries inside it:
-
-```python
-async with async_atomic():
-    await asyncio.gather(*(writer(i) for i in range(10)))
-```
-
-**A separate connection per task.** Each task gets its own connection, so each
-can own its own transaction:
+For fan-out, give each task its own connection, so each can own its own
+transaction:
 
 ```python
 async def writer(i):
-    async with async_connections._independent_connection():
-        async with async_atomic():
-            await create_instance(f"i{i}")
+    async with async_atomic():
+        await create_instance(f"i{i}")
 
-await asyncio.gather(*(writer(i) for i in range(10)))
+await asyncio.gather(
+    *(async_new_connection(writer(i)) for i in range(10))
+)
 ```
 
-```{note}
-`_independent_connection()` is a concept and not ready for production usage —
-see [Concurrency and parallelism](concurrency.md#dep-0009). Where it fits, the
-first option is the safer choice.
+It also works as a context manager, for a block rather than a call:
+
+```python
+async with async_new_connection():
+    await create_instance("solo")
+```
+
+Each task gets an independent transaction: they commit and roll back
+separately, so one failing does not undo the others.
+
+```{danger}
+**`async_atomic()` does not extend over a fan-out.**
+
+    async with async_atomic():
+        await asyncio.gather(
+            *(async_new_connection(writer(i)) for i in range(10))
+        )
+
+One transaction cannot span several tasks. Do the work sequentially inside the
+block, or use `async_new_connection` above and accept independent transactions.
+```
+
+```{warning}
+Each `async_new_connection` call opens a **real** database connection for as
+long as it runs, so a wide fan-out inside a request multiplies your connection
+count and can exhaust the server's limit. Use it where a query genuinely needs
+its own transaction or real parallelism — not as a default wrapper. See
+[Running queries in parallel](concurrency.md#running-queries-in-parallel).
 ```
 
 ## Using `on_commit` with async transactions

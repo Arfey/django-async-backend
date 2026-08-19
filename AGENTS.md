@@ -7,12 +7,15 @@ things that are easy to get wrong.
 ## Remember this
 
 - **Async does not mean parallel.** Database queries are not run in parallel by
-  default. All async ORM and cursor calls within an async context share one
-  connection per alias, so concurrent queries — even under `asyncio.gather()` —
-  are serialized on that connection. To run queries in parallel you must opt in
-  explicitly with `async_connections._independent_connection()` (a concept, not
-  production-ready). Do not assume "django-async-backend" parallelizes queries
-  for you. See the README "Concurrency model" and "DEP 0009" sections.
+  default. A task gets one connection per alias and every ORM and cursor call
+  in that task takes turns on it, so awaiting queries in sequence costs the sum
+  of their times. Fanning them out does not help either: `asyncio.gather()` and
+  friends run each coroutine in its own task, which does not own the
+  connection, so those calls raise `RuntimeError`. To run queries in parallel
+  you must opt in explicitly with `async_new_connection`, which opens a real
+  connection per call — use it sparingly, since a wide fan-out can exhaust the
+  server's connection limit. Do not assume "django-async-backend" parallelizes
+  queries for you.
 
 - **Part of the ORM is generated, not hand-written.** Some ORM modules are
   produced from Django's source by the `codemon` tool and committed to git, so

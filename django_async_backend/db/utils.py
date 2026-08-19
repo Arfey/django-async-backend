@@ -1,6 +1,6 @@
 import asyncio
+from inspect import iscoroutinefunction
 
-from asgiref.sync import iscoroutinefunction
 from django.core.exceptions import ImproperlyConfigured
 from django.db import DEFAULT_DB_ALIAS
 from django.db.utils import ConnectionHandler
@@ -99,3 +99,6 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
         wrapper = backend.AsyncDatabaseWrapper(db, alias)
         wrapper._task = task
         return wrapper
+
+
+async_connections = AsyncConnectionHandler()
