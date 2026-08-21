@@ -28,8 +28,6 @@ class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
 
-        # Resolve through the MRO, not just vars(cls): a test method
-        # supplied by a mixin has no own attribute on the concrete class.
         for name in dir(cls):
             if not name.startswith("test"):
                 continue
@@ -95,11 +93,7 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
         # correct loop instance.
         self._asyncioRunner.get_loop()
         self._asyncioTestContext.run(self.setUp)
-        self._callAsync(
-            _refresh_connection_task_ownership_decorator(
-                self._init_transaction
-            )
-        )
+        self._callAsync(self._init_transaction)
         self._callAsync(
             _refresh_connection_task_ownership_decorator(self.asyncSetUp)
         )
