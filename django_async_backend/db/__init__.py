@@ -1,6 +1,11 @@
-from django_async_backend.db.utils import AsyncConnectionHandler
+from django_async_backend.db.new_connection import async_new_connection
+from django_async_backend.db.utils import async_connections
 
-async_connections = AsyncConnectionHandler()
+__all__ = [
+    "async_connections",
+    "async_new_connection",
+    "close_old_async_connections",
+]
 
 
 async def close_old_async_connections(**kwargs):

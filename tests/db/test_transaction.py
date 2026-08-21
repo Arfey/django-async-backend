@@ -9,7 +9,10 @@ from django.db import (
     transaction,
 )
 
-from django_async_backend.db import async_connections
+from django_async_backend.db import (
+    async_connections,
+    async_new_connection,
+)
 from django_async_backend.db.transaction import (
     async_atomic,
     async_mark_for_rollback_on_error,
@@ -549,44 +552,44 @@ class NonAsyncAutocommitTests(AsyncioTransactionTestCase):
         await create_instance(1)
 
 
-class IndependentConnectionTransaction(AsyncioTransactionTestCase):
+class NewConnectionTransaction(AsyncioTransactionTestCase):
     async def asyncSetUp(self):
         await create_table()
 
     async def asyncTearDown(self):
         await drop_table()
 
-    async def test_nested_independent_connection(self):
-        async with async_connections._independent_connection():
+    async def test_nested_new_connection(self):
+        async with async_new_connection():
             await create_instance(1)
 
             self.assertEqual(len(await get_all()), 1)
 
-            async with async_connections._independent_connection():
+            async with async_new_connection():
                 await create_instance(2)
 
                 self.assertEqual(len(await get_all()), 2)
 
-    async def test_nested_independent_connection_with_transaction(self):
-        async with async_connections._independent_connection():
+    async def test_nested_new_connection_with_transaction(self):
+        async with async_new_connection():
             async with async_atomic():
                 await create_instance(1)
 
                 self.assertEqual(len(await get_all()), 1)
 
-                async with async_connections._independent_connection():
+                async with async_new_connection():
                     await create_instance(2)
 
                     self.assertEqual(len(await get_all()), 1)
 
-    async def test_nested_independent_connection_with_nested_transaction(self):
-        async with async_connections._independent_connection():
+    async def test_nested_new_connection_with_nested_transaction(self):
+        async with async_new_connection():
             async with async_atomic():
                 await create_instance(1)
 
                 self.assertEqual(len(await get_all()), 1)
 
-                async with async_connections._independent_connection():
+                async with async_new_connection():
                     async with async_atomic():
                         await create_instance(2)
 
@@ -598,8 +601,7 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
     Child tasks that inherit a parent's connection via ContextVar can corrupt
     transaction state or silently lose writes when sharing the same psycopg
     async connection. validate_task_sharing, called on every
-    cursor/commit/rollback, rejects such sharing with a RuntimeError
-    (unless explicitly allowed via inc_task_sharing).
+    cursor/commit/rollback, rejects such sharing with a RuntimeError.
     """
 
     async def asyncSetUp(self):
@@ -669,8 +671,9 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
 
         self.assertEqual(len(await get_all()), 2)
 
-    async def test_parent_atomic_avoids_corruption(self):
-        """Single parent async_atomic wrapping gather() works."""
+    async def test_parent_atomic_fanout_rejected(self):
+        """Issue #77: a parent async_atomic around gather() is not a safe
+        fan-out. Each child is rejected before it can issue any SQL."""
         barrier = asyncio.Barrier(10)
 
         async def writer(task_id):
@@ -683,19 +686,70 @@ class ConcurrentAsyncAtomicTests(AsyncioTransactionTestCase):
                 *(writer(i) for i in range(10)), return_exceptions=True
             )
 
-        self.assertEqual([r for r in results if isinstance(r, Exception)], [])
-        self.assertEqual(len(await get_all()), 10)
+        self.assertEqual(
+            len([r for r in results if isinstance(r, RuntimeError)]),
+            10,
+            f"expected 10 RuntimeError, got {results!r}",
+        )
+        self.assertEqual(await get_all(), [])
 
-    async def test_independent_connection_avoids_corruption(self):
-        """_independent_connection() per task avoids corruption."""
+    async def test_plain_query_from_child_task_rejected(self):
+        """A plain query from a child task is rejected too. The old guard
+        lived only in AsyncAtomic.__aenter__, so this went unchecked."""
+
+        async def reader():
+            return await get_all()
+
+        with self.assertRaises(RuntimeError):
+            await asyncio.create_task(reader())
+
+    async def test_straggler_cannot_commit_past_rollback(self):
+        """Issue #77: gather() does not cancel siblings, so the slow writer
+        outlives __aexit__ and its INSERT would commit past the rollback."""
+
+        async def boom():
+            raise ValueError("fast failure")
+
+        async def slow():
+            await asyncio.sleep(0.1)
+            await create_instance("straggler")
+
+        with self.assertRaises(ValueError):
+            async with async_atomic():
+                await asyncio.gather(boom(), slow())
+
+        # Let any surviving straggler finish before we look.
+        await asyncio.sleep(0.2)
+
+        self.assertEqual(
+            await get_all(),
+            [],
+            "the straggler committed past the rollback",
+        )
+
+    async def test_close_from_foreign_task_allowed(self):
+        """close() is exempt from validation so cleanup paths that close via
+        asyncio.gather keep working."""
+        connection = async_connections[DEFAULT_DB_ALIAS]
+        await connection.ensure_connection()
+
+        async def closer():
+            await connection.close()
+
+        await asyncio.create_task(closer())
+
+        self.assertIsNone(connection.connection)
+
+    async def test_new_connection_avoids_corruption(self):
+        """async_new_connection() per task avoids corruption."""
         barrier = asyncio.Barrier(10)
 
+        @async_new_connection
         async def writer(task_id):
             await barrier.wait()
-            async with async_connections._independent_connection():
-                async with async_atomic():
-                    await create_instance(f"i{task_id}")
-                    await asyncio.sleep(0)
+            async with async_atomic():
+                await create_instance(f"i{task_id}")
+                await asyncio.sleep(0)
 
         results = await asyncio.gather(
             *(writer(i) for i in range(10)), return_exceptions=True

@@ -96,10 +96,17 @@ async with await connection.cursor() as cursor:
 ```
 
 > [!WARNING]
-> **Async does not mean parallel.** Within one async context, all ORM and
-> cursor calls share a single connection per database alias, so queries are
-> serialized even under `asyncio.gather()`. This mirrors Django's
-> [DEP 0009](https://github.com/django/deps/blob/main/accepted/0009-async.rst).
+> **Async does not mean parallel.** A task gets one connection per database
+> alias, and every ORM and cursor call in that task takes turns on it — so
+> awaiting several queries in a row does not make them run concurrently.
+>
+> The connection is owned by the task that created it, so you cannot fan out
+> onto it either: using it from another task — `asyncio.create_task()`,
+> `asyncio.gather()`, `asyncio.TaskGroup` — raises `RuntimeError`. Wrapping the
+> fan-out in a single `async_atomic()` block does **not** make it safe. To run
+> queries in parallel, give each task its own connection with
+> `async_new_connection` — sparingly, since each call opens a real connection
+> and a wide fan-out can exhaust the server's limit.
 
 ## Supported methods
 

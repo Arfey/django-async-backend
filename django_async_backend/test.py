@@ -18,6 +18,7 @@ def _refresh_connection_task_ownership_decorator(fn):
             connection._task = task
         return await fn(*args, **kwargs)
 
+    inner._refreshes_task_ownership = True
     return inner
 
 
@@ -27,13 +28,21 @@ class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
 
-        for name, method in list(vars(cls).items()):
-            if name.startswith("test") and callable(method):
-                setattr(
-                    cls,
-                    name,
-                    _refresh_connection_task_ownership_decorator(method),
-                )
+        for name in dir(cls):
+            if not name.startswith("test"):
+                continue
+
+            method = getattr(cls, name, None)
+            if not callable(method) or getattr(
+                method, "_refreshes_task_ownership", False
+            ):
+                continue
+
+            setattr(
+                cls,
+                name,
+                _refresh_connection_task_ownership_decorator(method),
+            )
 
     def _callSetUp(self):
         self._asyncioRunner.get_loop()
@@ -93,7 +102,11 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
         self._callAsync(
             _refresh_connection_task_ownership_decorator(self.asyncTearDown)
         )
-        self._callAsync(self._close_transaction)
+        self._callAsync(
+            _refresh_connection_task_ownership_decorator(
+                self._close_transaction
+            )
+        )
         self._asyncioTestContext.run(self.tearDown)
 
 

@@ -1,4 +1,3 @@
-import asyncio
 from contextlib import (
     AsyncContextDecorator,
     asynccontextmanager,
@@ -57,8 +56,6 @@ class AsyncAtomic(AsyncContextDecorator):
     example, it's possible to define `oa = atomic('other')` and use `@oa` or
     `with oa:` multiple times.
 
-    Since database connections are thread-local, this is thread-safe.
-
     An atomic block can be tagged as durable. In this case, a RuntimeError is
     raised if it's nested within another atomic block. This guarantees
     that database changes in a durable block are committed to the database when
@@ -80,14 +77,7 @@ class AsyncAtomic(AsyncContextDecorator):
 
     async def __aenter__(self):
         connection = await self.get_connection(self.using)
-
-        if connection._task is not asyncio.current_task():
-            raise RuntimeError(
-                "Transactions cannot be used within nested tasks. "
-                "Consider using a higher-level transaction that "
-                "encompasses all nested tasks, or establish a separate "
-                "connection for the task (e.g., _independent_connection)."
-            )
+        connection.validate_task_sharing()
 
         if (
             self.durable
