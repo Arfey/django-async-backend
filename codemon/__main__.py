@@ -914,6 +914,86 @@ def class_transformer(name: str, config: Class) -> cst.CSTTransformer:
     return ClassTransformed()
 
 
+DOCSTRING_LINE = m.SimpleStatementLine(
+    body=[m.Expr(value=m.SimpleString()), m.ZeroOrMore()]
+)
+
+STATEMENT = (
+    m.SimpleStatementLine()
+    | m.ClassDef()
+    | m.For()
+    | m.FunctionDef()
+    | m.If()
+    | m.Match()
+    | m.Try()
+    | m.TryStar()
+    | m.While()
+    | m.With()
+)
+
+
+HAS_DOCSTRING = m.FunctionDef(
+    body=m.IndentedBlock(body=[DOCSTRING_LINE, m.ZeroOrMore()])
+) | m.ClassDef(body=m.IndentedBlock(body=[DOCSTRING_LINE, m.ZeroOrMore()]))
+
+
+def docstring_transformer() -> cst.CSTTransformer:
+    """Drop every docstring."""
+
+    def inherit_leading_lines(body: list, docstring) -> list:
+        if not body or not m.matches(body[0], STATEMENT):
+            return body
+
+        return [
+            body[0].with_changes(
+                leading_lines=[
+                    *docstring.leading_lines,
+                    *body[0].leading_lines,
+                ]
+            ),
+            *body[1:],
+        ]
+
+    class DocstringRemover(m.MatcherDecoratableTransformer):
+        def _strip(self, updated_node):
+            if not m.matches(updated_node, HAS_DOCSTRING):
+                return updated_node
+
+            block = updated_node.body
+            body = inherit_leading_lines(list(block.body[1:]), block.body[0])
+
+            if not body:
+                body = [cst.SimpleStatementLine(body=[cst.Pass()])]
+
+            return updated_node.with_changes(
+                body=block.with_changes(body=body)
+            )
+
+        def leave_FunctionDef(
+            self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
+        ) -> cst.FunctionDef:
+            return self._strip(updated_node)
+
+        def leave_ClassDef(
+            self, original_node: cst.ClassDef, updated_node: cst.ClassDef
+        ) -> cst.ClassDef:
+            return self._strip(updated_node)
+
+        def leave_Module(
+            self, original_node: cst.Module, updated_node: cst.Module
+        ) -> cst.Module:
+            body = list(updated_node.body)
+
+            if not body or not m.matches(body[0], DOCSTRING_LINE):
+                return updated_node
+
+            return updated_node.with_changes(
+                body=inherit_leading_lines(body[1:], body[0])
+            )
+
+    return DocstringRemover()
+
+
 def module_transformer(config: Module) -> cst.CSTTransformer:
     class ModuleTransformed(m.MatcherDecoratableTransformer):
 
@@ -1090,5 +1170,6 @@ if __name__ == "__main__":
         ast = get_ast(config=config)
 
         ast = ast.visit(module_transformer(config.module))
+        ast = ast.visit(docstring_transformer())
 
         write_ast(ast, config=config, version=DJANGO_VERSION)

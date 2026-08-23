@@ -111,11 +111,6 @@ class SQLCompiler:
         self.col_count = len(self.select)
 
     def pre_sql_setup(self, with_col_aliases=False):
-        """
-        Do any necessary class setup immediately prior to producing SQL. This
-        is for things that can't necessarily be done in __init__ because we
-        might not have all the pieces in place at that time.
-        """
         self.setup_query(with_col_aliases=with_col_aliases)
         order_by = self.get_order_by()
         self.where, self.having, self.qualify = (
@@ -129,13 +124,6 @@ class SQLCompiler:
         return extra_select, order_by, group_by
 
     def get_group_by(self, select, order_by):
-        """
-        Return a list of 2-tuples of form (sql, params).
-
-        The logic of what exactly the GROUP BY clause contains is hard
-        to describe in other words than "if it passes the test suite,
-        then it is correct".
-        """
         # Some examples:
         #     SomeModel.objects.annotate(Count('somecol'))
         #     GROUP BY: all fields of the model
@@ -275,23 +263,6 @@ class SQLCompiler:
             cls.get_select_from_parent(ki)
 
     def get_select(self, with_col_aliases=False):
-        """
-        Return three values:
-        - a list of 3-tuples of (expression, (sql, params), alias)
-        - a klass_info structure,
-        - a dictionary of annotations
-
-        The (sql, params) is what the expression will produce, and alias is the
-        "AS alias" for the column (possibly None).
-
-        The klass_info structure contains the following information:
-        - The base model of the query.
-        - Which columns for that model are present in the query (by
-          position of the select clause).
-        - related_klass_infos: [f, klass_info] to descent into
-
-        The annotations is a dictionary of {'attname': column position} values.
-        """
         select = []
         klass_info = None
         annotations = {}
@@ -532,14 +503,6 @@ class SQLCompiler:
                     )
 
     def get_order_by(self):
-        """
-        Return a list of 2-tuples of the form (expr, (sql, params, is_ref)) for
-        the ORDER BY clause.
-
-        The order_by clause can alter the select clause (for example it can add
-        aliases to clauses that do not yet have one, or it can add totally new
-        select clauses).
-        """
         result = []
         seen = set()
         for expr, is_ref in self._order_by_pairs():
@@ -617,10 +580,6 @@ class SQLCompiler:
         return extra_select
 
     def quote_name(self, name):
-        """
-        A wrapper around connection.ops.quote_name that memoizes quoted
-        name values.
-        """
         if (quoted := self.quote_cache.get(name)) is not None:
             return quoted
         quoted = self.connection.ops.quote_name(name)
@@ -842,13 +801,6 @@ class SQLCompiler:
         return result, params
 
     def as_sql(self, with_limits=True, with_col_aliases=False):
-        """
-        Create the SQL for this query. Return the SQL string and list of
-        parameters.
-
-        If 'with_limits' is False, any limit/offset information is not included
-        in the query.
-        """
         refcounts_before = self.query.alias_refcount.copy()
         try:
             combinator = self.query.combinator
@@ -1091,17 +1043,6 @@ class SQLCompiler:
     def get_default_columns(
         self, select_mask, start_alias=None, opts=None, from_parent=None
     ):
-        """
-        Compute the default columns for selecting every field in the base
-        model. Will sometimes be called to pull in related models (e.g. via
-        select_related), in which case "opts" and "start_alias" will be given
-        to provide a starting point for the traversal.
-
-        Return a list of strings, quoted appropriately for use in SQL
-        directly, as well as a set of aliases used in the select statement (if
-        'as_pairs' is True, return a list of (alias, col_name) pairs instead
-        of strings as the first component and None as the second component).
-        """
         result = []
         if opts is None:
             if (opts := self.query.get_meta()) is None:
@@ -1143,12 +1084,6 @@ class SQLCompiler:
         return result
 
     def get_distinct(self):
-        """
-        Return a quoted list of fields to use in DISTINCT ON part of the query.
-
-        This method can alter the tables in the query, and thus it must be
-        called before get_from_clause().
-        """
         result = []
         params = []
         opts = self.query.get_meta()
@@ -1171,11 +1106,6 @@ class SQLCompiler:
     def find_ordering_name(
         self, name, opts, alias=None, default_order="ASC", already_seen=None
     ):
-        """
-        Return the table alias (the name might be ambiguous, the alias will
-        not be) and column name for ordering by the given 'name' parameter.
-        The 'name' is of the form 'field1__field2__...__fieldN'.
-        """
         name, order = get_order_dir(name, default_order)
         descending = order == "DESC"
         pieces = name.split(LOOKUP_SEP)
@@ -1238,13 +1168,6 @@ class SQLCompiler:
         ]
 
     def _setup_joins(self, pieces, opts, alias):
-        """
-        Helper method for get_order_by() and get_distinct().
-
-        get_ordering() and get_distinct() must produce same target columns on
-        same input, as the prefixes of get_ordering() and get_distinct() must
-        match. Executing SQL where this is not true is an error.
-        """
         alias = alias or self.query.get_initial_alias()
         field, targets, opts, joins, path, transform_function = (
             self.query.setup_joins(pieces, opts, alias)
@@ -1253,16 +1176,6 @@ class SQLCompiler:
         return field, targets, alias, joins, path, opts, transform_function
 
     def get_from_clause(self):
-        """
-        Return a list of strings that are joined together to go after the
-        "FROM" part of the query, as well as a list any extra parameters that
-        need to be included. Subclasses, can override this to create a
-        from-clause via a "select".
-
-        This should only be called after any SQL construction methods that
-        might change the tables that are needed. This means the select columns,
-        ordering, and distinct must be done first.
-        """
         result = []
         params = []
         # Copy alias_map to a tuple in case Join.as_sql() subclasses (objects
@@ -1296,12 +1209,6 @@ class SQLCompiler:
         requested=None,
         restricted=None,
     ):
-        """
-        Fill in the information needed for a select_related query. The current
-        depth is measured as the number of connections away from the root model
-        (for example, cur_depth=1 means we are looking at models with direct
-        connections to the root model).
-        """
 
         def _get_field_choices():
             direct_choices = (f.name for f in opts.fields if f.is_relation)
@@ -1533,10 +1440,6 @@ class SQLCompiler:
         return related_klass_infos
 
     def get_select_for_update_of_arguments(self):
-        """
-        Return a quoted list of arguments for the SELECT FOR UPDATE OF part of
-        the query.
-        """
 
         def _get_parent_klass_info(klass_info):
             concrete_model = klass_info["model"]._meta.concrete_model
@@ -1563,20 +1466,12 @@ class SQLCompiler:
                 }
 
         def _get_first_selected_col_from_model(klass_info):
-            """
-            Find the first selected column from a model. If it doesn't exist,
-            don't lock a model.
-
-            select_fields is filled recursively, so it also contains fields
-            from the parent models.
-            """
             concrete_model = klass_info["model"]._meta.concrete_model
             for select_index in klass_info["select_fields"]:
                 if self.select[select_index][0].target.model == concrete_model:
                     return self.select[select_index][0]
 
         def _get_field_choices():
-            """Yield all allowed field paths in breadth-first search order."""
             queue = collections.deque([(None, self.klass_info)])
             while queue:
                 parent_path, klass_info = queue.popleft()
@@ -1710,7 +1605,6 @@ class SQLCompiler:
         chunked_fetch=False,
         chunk_size=GET_ITERATOR_CHUNK_SIZE,
     ):
-        """Return an iterator over the results from executing this query."""
         if results is None:
             results = await self.execute_sql(
                 MULTI, chunked_fetch=chunked_fetch, chunk_size=chunk_size
@@ -1727,10 +1621,6 @@ class SQLCompiler:
         return rows
 
     async def has_results(self):
-        """
-        Backends (e.g. NoSQL) can override this in order to use optimized
-        versions of "query has any results."
-        """
         return bool(await self.execute_sql(SINGLE))
 
     async def execute_sql(
@@ -1739,18 +1629,6 @@ class SQLCompiler:
         chunked_fetch=False,
         chunk_size=GET_ITERATOR_CHUNK_SIZE,
     ):
-        """
-        Run the query against the database and return the result(s). The
-        return value depends on the value of result_type.
-
-        When result_type is:
-        - MULTI: Retrieves all rows using fetchmany(). Wraps in an iterator for
-           chunked reads when supported.
-        - SINGLE: Retrieves a single row using fetchone().
-        - ROW_COUNT: Retrieves the number of rows in the result.
-        - CURSOR: Runs the query, and returns the cursor object. It is the
-           caller's responsibility to close the cursor.
-        """
         result_type = result_type or NO_RESULTS
         try:
             sql, params = self.as_sql()
@@ -1834,15 +1712,6 @@ class SQLInsertCompiler(SQLCompiler):
     returning_params = ()
 
     def field_as_sql(self, field, get_placeholder_sql, val):
-        """
-        Take a field and a value intended to be saved on that field, and
-        return placeholder SQL and accompanying params. Check for raw values,
-        fields with get_placeholder_sql(), and compilable defined in that
-        order.
-
-        When field is None, consider the value raw and use it as the
-        placeholder, with no corresponding parameters returned.
-        """
         if field is None:
             # A field value of None means the value is raw.
             sql, params = val, []
@@ -1867,10 +1736,6 @@ class SQLInsertCompiler(SQLCompiler):
         return sql, params
 
     def prepare_value(self, field, value):
-        """
-        Prepare a value to be used in a query by resolving it if it is an
-        expression and otherwise calling the field's get_db_prep_save().
-        """
         if hasattr(value, "resolve_expression"):
             value = value.resolve_expression(
                 self.query, allow_joins=False, for_save=True
@@ -1897,26 +1762,11 @@ class SQLInsertCompiler(SQLCompiler):
         return field.get_db_prep_save(value, connection=self.connection)
 
     def pre_save_val(self, field, obj):
-        """
-        Get the given field's value off the given obj. pre_save() is used for
-        things like auto_now on DateTimeField. Skip it if this is a raw query.
-        """
         if self.query.raw:
             return getattr(obj, field.attname)
         return field.pre_save(obj, add=True)
 
     def assemble_as_sql(self, fields, value_rows):
-        """
-        Take a sequence of N fields and a sequence of M rows of values, and
-        generate placeholder SQL and parameters for each field and value.
-        Return a pair containing:
-         * a sequence of M rows of N SQL placeholder strings, and
-         * a sequence of M rows of corresponding parameter values.
-
-        Each placeholder string may contain any number of '%s' interpolation
-        strings, and each parameter row will contain exactly as many params
-        as the total number of '%s's in the corresponding placeholder row.
-        """
         if not value_rows:
             return [], []
 
@@ -2170,10 +2020,6 @@ class SQLDeleteCompiler(SQLCompiler):
         return f"{delete} WHERE {where}", tuple(params)
 
     def as_sql(self):
-        """
-        Create the SQL for this query. Return the SQL string and list of
-        parameters.
-        """
         if self.single_alias and (
             self.connection.features.delete_can_self_reference_subquery
             or not self.contains_self_reference_subquery
@@ -2201,10 +2047,6 @@ class SQLUpdateCompiler(SQLCompiler):
     returning_params = ()
 
     def as_sql(self):
-        """
-        Create the SQL for this query. Return the SQL string and list of
-        parameters.
-        """
         self.pre_sql_setup()
         if not self.query.values:
             return "", ()
@@ -2280,12 +2122,6 @@ class SQLUpdateCompiler(SQLCompiler):
         return " ".join(result), tuple(update_params + params)
 
     async def execute_sql(self, result_type):
-        """
-        Execute the specified update. Return the number of rows affected by
-        the primary update query. The "primary update query" is the first
-        non-empty query that is executed. Row counts for any subsequent,
-        related queries are not available.
-        """
 
         if self.query.related_updates:
             raise NotImplementedError(
@@ -2311,11 +2147,6 @@ class SQLUpdateCompiler(SQLCompiler):
         return row_count
 
     async def execute_returning_sql(self, returning_fields):
-        """
-        Execute the specified update and return rows of the returned columns
-        associated with the specified returning_field if the backend supports
-        it.
-        """
         if self.query.get_related_updates():
             raise NotImplementedError(
                 "Update returning is not implemented for queries with related updates."
@@ -2343,14 +2174,6 @@ class SQLUpdateCompiler(SQLCompiler):
         return list(rows)
 
     def pre_sql_setup(self):
-        """
-        If the update depends on results from other tables, munge the "where"
-        conditions to match the format required for (portable) SQL updates.
-
-        If multiple updates are required, pull out the id values to update at
-        this point so that they don't change as a result of the progressive
-        updates.
-        """
         refcounts_before = self.query.alias_refcount.copy()
         # Ensure base table is in the query
         self.query.get_initial_alias()
@@ -2411,10 +2234,6 @@ class SQLUpdateCompiler(SQLCompiler):
 
 class SQLAggregateCompiler(SQLCompiler):
     def as_sql(self):
-        """
-        Create the SQL for this query. Return the SQL string and list of
-        parameters.
-        """
         sql, params = [], []
         for annotation in self.query.annotation_select.values():
             ann_sql, ann_params = self.compile(annotation)
@@ -2439,10 +2258,6 @@ class SQLAggregateCompiler(SQLCompiler):
 
 
 async def cursor_iter(cursor, sentinel, col_count, itersize):
-    """
-    Yield blocks of rows from a cursor and ensure the cursor is closed when
-    done.
-    """
 
     async def fetchmany_iter():
         while True:

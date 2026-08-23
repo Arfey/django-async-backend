@@ -16,7 +16,6 @@ __all__ = ["DeleteQuery", "UpdateQuery", "InsertQuery", "AggregateQuery"]
 
 
 class DeleteQuery(Query):
-    """A DELETE SQL query."""
 
     compiler = "SQLDeleteCompiler"
 
@@ -26,12 +25,6 @@ class DeleteQuery(Query):
         return await self.get_compiler(using).execute_sql(ROW_COUNT)
 
     async def delete_batch(self, pk_list, using):
-        """
-        Set up and execute delete queries for all the objects in pk_list.
-
-        More than one physical query may be executed if there are a
-        lot of values in pk_list.
-        """
         # number of objects deleted
         num_deleted = 0
         field = self.get_meta().pk
@@ -48,7 +41,6 @@ class DeleteQuery(Query):
 
 
 class UpdateQuery(Query):
-    """An UPDATE SQL query."""
 
     compiler = "SQLUpdateCompiler"
 
@@ -57,10 +49,6 @@ class UpdateQuery(Query):
         self._setup_query()
 
     def _setup_query(self):
-        """
-        Run on initialization and at the end of chaining. Any attributes that
-        would normally be set in __init__() should go here instead.
-        """
         self.values = []
         self.related_ids = None
         self.related_updates = {}
@@ -80,11 +68,6 @@ class UpdateQuery(Query):
             await self.get_compiler(using).execute_sql(NO_RESULTS)
 
     def add_update_values(self, values):
-        """
-        Convert a dictionary of field name to value mappings into an update
-        query. This is the entry point for the public update() method on
-        querysets.
-        """
         values_seq = []
         for name, val in values.items():
             field = self.get_meta().get_field(name)
@@ -105,11 +88,6 @@ class UpdateQuery(Query):
         return self.add_update_fields(values_seq)
 
     def add_update_fields(self, values_seq):
-        """
-        Append a sequence of (field, model, value) triples to the internal list
-        that will be used to generate the UPDATE query. Might be more usefully
-        called add_update_targets() to hint at the extra information here.
-        """
         for field, model, val in values_seq:
             # Omit generated fields.
             if field.generated:
@@ -123,19 +101,9 @@ class UpdateQuery(Query):
             self.values.append((field, model, val))
 
     def add_related_update(self, model, field, value):
-        """
-        Add (name, value) to an update query for an ancestor model.
-
-        Update are coalesced so that only one update query per ancestor is run.
-        """
         self.related_updates.setdefault(model, []).append((field, None, value))
 
     def get_related_updates(self):
-        """
-        Return a list of query objects: one for each update required to an
-        ancestor model. Each query will have the same filtering conditions as
-        the current query but will only update a single table.
-        """
         if not self.related_updates:
             return []
         result = []
