@@ -131,14 +131,6 @@ class AsyncModelMixin:
         using=None,
         update_fields=None,
     ):
-        """
-        Save the current instance. Override this in a subclass if you want to
-        control the saving process.
-
-        The 'force_insert' and 'force_update' parameters can be used to insist
-        that the "save" must be an SQL insert or update (or equivalent for
-        non-SQL backends), respectively. Normally, they should not be set.
-        """
 
         await self._async_prepare_related_fields_for_save(
             operation_name="save"
@@ -229,15 +221,6 @@ class AsyncModelMixin:
         using=None,
         update_fields=None,
     ):
-        """
-        Handle the parts of saving which should be done only once per save,
-        yet need to be done in raw saves, too. This includes some sanity
-        checks and signal sending.
-
-        The 'raw' argument is telling save_base not to save any parent
-        models and not to do any changes to the values before save. This
-        is used by fixture loading.
-        """
         using = using or router.db_for_write(self.__class__, instance=self)
         assert not (force_insert and (force_update or update_fields))
         assert update_fields is None or update_fields
@@ -296,7 +279,6 @@ class AsyncModelMixin:
     async def _async_save_parents(
         self, cls, using, update_fields, force_insert, updated_parents=None
     ):
-        """Save all the parents of cls using values from self."""
         meta = cls._meta
         inserted = False
         if updated_parents is None:
@@ -354,10 +336,6 @@ class AsyncModelMixin:
         using=None,
         update_fields=None,
     ):
-        """
-        Do the heavy-lifting involved in saving. Update or insert the data
-        for a single table.
-        """
         meta = cls._meta
         pk_fields = meta.pk_fields
         non_pks_non_generated = [
@@ -511,11 +489,6 @@ class AsyncModelMixin:
         forced_update,
         returning_fields,
     ):
-        """
-        Try to update the model. Return a list of updated fields if the model
-        was updated (if an update query was done and a matching row was
-        found in the DB).
-        """
         filtered = base_qs.filter(pk=pk_val)
         if not values:
             # We can end up here when saving a model in inheritance chain where
@@ -544,10 +517,6 @@ class AsyncModelMixin:
     async def _async_do_insert(
         self, manager, using, fields, returning_fields, raw
     ):
-        """
-        Do an INSERT. If returning_fields is defined then this method should
-        return the newly created data for the model.
-        """
         return await manager._insert(
             [self],
             fields=fields,

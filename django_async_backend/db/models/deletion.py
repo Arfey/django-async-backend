@@ -148,13 +148,6 @@ class Collector:
         self.dependencies = defaultdict(set)  # {model: {models}}
 
     def add(self, objs, source=None, nullable=False, reverse_dependency=False):
-        """
-        Add 'objs' to the collection of objects to be deleted. If the call is
-        the result of a cascade, 'source' should be the model that caused it,
-        and 'nullable' should be set to True if the relation can be null.
-
-        Return a list of all objects that were not already collected.
-        """
         if not objs:
             return []
         new_objs = []
@@ -182,10 +175,6 @@ class Collector:
         self.data.setdefault(dependency, self.data.default_factory())
 
     def add_field_update(self, field, value, objs):
-        """
-        Schedule a field update. 'objs' must be a homogeneous iterable
-        collection of model instances (e.g. a QuerySet).
-        """
         self.field_updates[field, value].append(objs)
 
     def add_restricted_objects(self, field, objs):
@@ -222,16 +211,6 @@ class Collector:
         ) or signals.post_delete.has_listeners(model)
 
     def can_fast_delete(self, objs, from_field=None):
-        """
-        Determine if the objects in the given queryset-like or single object
-        can be fast-deleted. This can be done if there are no cascades, no
-        parents and no signal listeners for the object class.
-
-        The 'from_field' tells where we are coming from - we need this to
-        determine if the objects are in fact to be deleted. Allow also
-        skipping parent -> child -> parent chain preventing fast delete of
-        the child.
-        """
         if self.force_collection:
             return False
         if (
@@ -271,9 +250,6 @@ class Collector:
         )
 
     def get_del_batches(self, objs, fields):
-        """
-        Return the objs in suitably sized batches for the used connection.
-        """
         conn_batch_size = max(
             async_connections[self.using].ops.bulk_batch_size(fields, objs), 1
         )
@@ -296,29 +272,6 @@ class Collector:
         keep_parents=False,
         fail_on_restricted=True,
     ):
-        """
-        Add 'objs' to the collection of objects to be deleted as well as all
-        parent instances. 'objs' must be a homogeneous iterable collection of
-        model instances (e.g. a QuerySet). If 'collect_related' is True,
-        related objects will be handled by their respective on_delete handler.
-
-        If the call is the result of a cascade, 'source' should be the model
-        that caused it and 'nullable' should be set to True, if the relation
-        can be null.
-
-        If 'reverse_dependency' is True, 'source' will be deleted before the
-        current model, rather than after. (Needed for cascading to parent
-        models, the one case in which the cascade follows the forwards
-        direction of an FK rather than the reverse direction.)
-
-        If 'keep_parents' is True, data of parent model's will be not deleted.
-
-        If 'fail_on_restricted' is False, error won't be raised even if it's
-        prohibited to delete such objects due to RESTRICT, that defers
-        restricted object checking in recursive calls where the top-level call
-        may need to collect more objects to determine whether restricted ones
-        can be deleted.
-        """
         if self.can_fast_delete(objs):
             self.fast_deletes.append(objs)
             return
@@ -481,9 +434,6 @@ class Collector:
                     )
 
     def related_objects(self, related_model, related_fields, objs):
-        """
-        Get a QuerySet of the related model to objs via related fields.
-        """
         predicate = query_utils.Q.create(
             [
                 (f"{related_field.name}__in", objs)
@@ -676,16 +626,6 @@ async def _abulk_related_objects(field, objs, using):
 
 
 def _parent_chain_fields(opts):
-    """Field names that must stay loaded on a multi-table inheritance
-    child so its parent instances can be built from data already in
-    memory.
-
-    ``collect()`` reads parent instances with ``getattr(obj, ptr.name)``.
-    Django's ``ForwardOneToOneDescriptor`` answers that from the child's
-    own columns, but only while none of the parent's concrete fields is
-    deferred -- otherwise it falls back to a query per object, which is
-    synchronous and blows up in an async context.
-    """
     return {
         field.name
         for ptr in opts.concrete_model._meta.parents.values()
