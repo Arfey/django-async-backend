@@ -488,10 +488,6 @@ module:
 
 # Code review notes
 #
-# - The mixin shouldn't call external methods. Copy every private method it needs
-# into the mixin and add an _async prefix. We want 100% coverage so we can be
-# sure we haven't missed any sync operation (except _meta, _state, NotUpdated).
 # - 100% coverage.
-# - All methods should be private except async_save and async_objects.
 # - Don't use mocks in tests (if not accepted in test comment).
 # - Don't test private methods.
