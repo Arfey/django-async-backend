@@ -262,7 +262,7 @@ module:
         # only() is generated as a private _only(): the method itself is pure
         # sync, but the instances it returns carry deferred fields, and
         # Django's DeferredAttribute.__get__ falls back to the *sync*
-        # refresh_from_db (removed from the async Model), so reading one raises
+        # Model.refresh_from_db, which we do not replace, so reading one raises
         # SynchronousOnlyOperation. The async Collector only ever reads the FK
         # columns it asked for; users would not, hence no public only().
         # The leading underscore also keeps it off AsyncManager, since

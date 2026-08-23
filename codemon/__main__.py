@@ -413,7 +413,64 @@ def add_raw_top_to_function(updated_node, add_raw_top):
             *updated_node.body.body[1:],
         ]
     else:
+        # No docstring to sit under, so drop the leading separator rather than
+        # opening the body with a blank line.
+        if blocks and isinstance(blocks[0], cst.EmptyLine):
+            blocks = blocks[1:]
         body = [*blocks, *updated_node.body.body]
+    return updated_node.with_changes(
+        body=updated_node.body.with_changes(body=body)
+    )
+
+
+def remove_docstring_from_function(updated_node):
+    """Drop a leading docstring.
+
+    Docstrings are copied from Django verbatim, so a transform can leave one
+    describing behavior the generated method no longer has. Dropping it beats
+    shipping a wrong one.
+    """
+    if not m.matches(
+        updated_node,
+        m.FunctionDef(
+            body=m.IndentedBlock(
+                body=[
+                    m.SimpleStatementLine(
+                        body=[m.Expr(value=m.SimpleString()), m.ZeroOrMore()]
+                    ),
+                    m.ZeroOrMore(),
+                ]
+            )
+        ),
+    ):
+        return updated_node
+
+    body = list(updated_node.body.body[1:])
+
+    # Defensive: handler dispatch is libcst's reverse-alphabetical dir()
+    # order, which today runs add_raw_top after this. Don't rely on it.
+    while (
+        body and isinstance(body[0], cst.EmptyLine) and body[0].comment is None
+    ):
+        body.pop(0)
+
+    if not body:
+        return updated_node.with_changes(
+            body=updated_node.body.with_changes(
+                body=[cst.parse_statement("pass")]
+            )
+        )
+
+    if isinstance(body[0], cst.BaseStatement):
+        # Drop only the blanks the docstring left behind. Anything from the
+        # first comment onwards is content, blank separators included.
+        lines = list(body[0].leading_lines)
+        first_comment = next(
+            (i for i, line in enumerate(lines) if line.comment is not None),
+            len(lines),
+        )
+        body[0] = body[0].with_changes(leading_lines=lines[first_comment:])
+
     return updated_node.with_changes(
         body=updated_node.body.with_changes(body=body)
     )
@@ -759,7 +816,8 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
         if config.add_raw_top:
 
-            @m.leave(m.FunctionDef())
+            # Matched by name so a nested def is left alone.
+            @m.leave(m.FunctionDef(name=m.Name(name)))
             def add_raw_top(
                 self,
                 original_node: cst.FunctionDef,
@@ -771,7 +829,8 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
         if config.add_raw_bottom:
 
-            @m.leave(m.FunctionDef())
+            # Matched by name so a nested def is left alone.
+            @m.leave(m.FunctionDef(name=m.Name(name)))
             def add_raw_bottom(
                 self,
                 original_node: cst.FunctionDef,
@@ -780,6 +839,17 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
                 return add_raw_bottom_to_function(
                     updated_node, config.add_raw_bottom
                 )
+
+        if config.remove_docstring:
+
+            # Matched by name so a nested def keeps its own docstring.
+            @m.leave(m.FunctionDef(name=m.Name(name)))
+            def remove_docstring(
+                self,
+                original_node: cst.FunctionDef,
+                updated_node: cst.FunctionDef,
+            ) -> cst.FunctionDef:
+                return remove_docstring_from_function(updated_node)
 
         if config.for_statements:
 

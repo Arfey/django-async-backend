@@ -8,8 +8,8 @@ boilerplate:
 
 - an `async_objects` manager (an `AsyncManager`), so you don't have to declare
   one by hand;
-- `async_save()` and `async_delete()` methods for saving and deleting instances
-  asynchronously.
+- `async_save()`, `async_delete()` and `async_refresh_from_db()` methods for
+  saving, deleting and reloading instances asynchronously.
 
 ```python
 from django.db import models, DEFAULT_DB_ALIAS
@@ -54,6 +54,13 @@ behavior instead of silently changing underneath it — and it **guarantees the
 async path is genuinely async**: when you call `async_save()`, you know the
 query runs on the asyncio connection, with no threadpool and no hidden sync
 connection.
+
+The same rule applies to querysets, with a different mechanism: there the
+opt-in is the *manager*. `Book.objects.aget()` stays Django's `sync_to_async`
+wrapper; only `Book.async_objects.aget()` is genuinely async. An instance has
+no manager to switch, so the method name carries the opt-in instead. Either
+way nothing this library adds to `Model` replaces something Django already
+defines, which is why third-party code keeps working unchanged.
 :::
 
 ### `async_save()`
@@ -73,6 +80,50 @@ through related objects, sending `pre_delete` / `post_delete` along the way.
 `CASCADE`, `PROTECT`, `RESTRICT`, `SET_NULL`, `SET_DEFAULT`, `SET(...)` and
 `DO_NOTHING` all work. A custom **synchronous** `on_delete` callable is
 rejected with a `TypeError`, because it would run a blocking query.
+
+### `async_refresh_from_db()`
+
+Reloads the instance's field values from the database. Accepts the same
+keyword arguments as Django's `refresh_from_db()` (`using`, `fields`,
+`from_queryset`), drops cached related objects and prefetched results, and
+leaves fields the reloaded row did not select untouched.
+
+```python
+book = await Book.async_objects.aget(name="Django")
+await Book.async_objects.filter(pk=book.pk).aupdate(name="Django Async")
+
+await book.async_refresh_from_db()
+assert book.name == "Django Async"
+
+# reload a subset
+await book.async_refresh_from_db(fields=["name"])
+```
+
+`from_queryset` must be an async queryset or manager — passing `Model.objects`
+raises `TypeError`, because a sync queryset would read through Django's
+connection and a different transaction.
+
+One behavior does differ from Django's: with no `from_queryset`, the reload
+goes through `_async_base_manager`, which is always a plain `AsyncManager` and
+does not honor `Meta.base_manager_name`. Pass `from_queryset` explicitly if you
+need a specific manager.
+
+```{note}
+Unlike Django's `refresh_from_db()`, this is **not** what deferred field
+access falls back to. Reading a field left out of a deferred load still goes
+through Django's synchronous `refresh_from_db()` and raises
+`SynchronousOnlyOperation`, because attribute access cannot be awaited. Reload
+explicitly instead.
+```
+
+```{warning}
+Refresh instances that were loaded asynchronously. An instance fetched with
+`Model.objects.get()` and then reloaded with `async_refresh_from_db()` is read
+on the **async** connection, in a different transaction from the one it came
+from, and nothing detects it — `_state.db` records the alias, not which
+connection served it. For an instance that lives in the sync world, Django's
+own `arefresh_from_db()` is still the right call. See [Pitfalls](#pitfalls).
+```
 
 ## Managers
 
@@ -219,11 +270,14 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 
 ### Model methods
 
-| methods                  | supported | comments     |
-| ------------------------ | --------- | ------------ |
-| `Model.asave`            | ✅        | `async_save`   |
-| `Model.adelete`          | ✅        | `async_delete` |
-| `Model.arefresh_from_db` | ❌        |              |
+Django's own `a*` methods keep their existing behavior; the genuinely async
+equivalents are the names in the comments column.
+
+| methods                  | supported | comments                 |
+| ------------------------ | --------- | ------------------------ |
+| `Model.asave`            | ✅        | `async_save`             |
+| `Model.adelete`          | ✅        | `async_delete`           |
+| `Model.arefresh_from_db` | ✅        | `async_refresh_from_db`  |
 
 ### RawQuerySet
 
