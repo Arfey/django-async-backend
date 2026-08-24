@@ -114,6 +114,7 @@ exclude_dirs = [
   "env",
   ".cache",
   "tests",
+  "gauntlet",
   ".mypy_cache",
   ".django",
   "django_async_backend/db/models/query.py",

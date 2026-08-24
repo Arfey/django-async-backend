@@ -94,6 +94,13 @@ commands:
       - manage.py
       - test
 
+  gauntlet:
+    group: Tests
+    description: Run the ASGI connection-lifecycle gauntlet (docker postgres)
+    depends:
+      - _test_database
+    cmd: poetry run python gauntlet/run.py
+
   test_django:
     group: Tests
     description: Run Django's own test suite against the async backend (docker)

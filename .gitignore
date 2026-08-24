@@ -216,3 +216,6 @@ upgrade_plan.*.md
 
 # claude
 .claude/plans/
+
+# Local gauntlet arms for an out-of-tree driver.
+gauntlet/arms_local.py
