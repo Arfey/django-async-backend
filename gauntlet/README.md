@@ -17,7 +17,9 @@ unit-of-work boundary:
 - every open async alias is released, and an ordinary Django alias is
   left alone rather than being built;
 - after a release, the next task in the same context can open its own
-  connection — the case a worker or a mounted ASGI sub-app hits.
+  connection — the case a worker or a mounted ASGI sub-app hits;
+- requests in flight together are served correctly, and a pool queues
+  them rather than exceeding its size.
 
 ## Why it is not in `tests/`
 
@@ -44,6 +46,18 @@ poetry run python gauntlet/run.py
 Connection settings come from the usual `PG*` environment variables and
 default to the ones in `docker-compose.yml`. A non-zero exit status means
 an invariant broke; each line names which one.
+
+### Latency
+
+Database traffic is delayed by `LATENCY_MS` (2 by default), which widens
+the window in which two tasks can race for the same connection — where
+the bugs in this layer live. `LATENCY_MS=0` connects straight to
+Postgres.
+
+The delay comes from a small TCP proxy (`latency.py`), not from
+`tc`/netem: netem needs `NET_ADMIN`, and on loopback it would delay the
+driver's own HTTP as much as the database traffic. The proxy delays only
+what the application exchanges with Postgres, and needs no privileges.
 
 To point the gauntlet at a checkout other than the installed package —
 useful for confirming it still detects a regression you have a fix for:
@@ -86,7 +100,9 @@ a few things are deliberate:
 - **The server's output goes to a file, not a pipe.** A server that
   writes more than a pipe holds would block forever, which reads as a
   hang rather than a failure.
-- **The baseline is sampled until two reads agree**, because a pool fills
-  its minimum size in the background.
+- **The baseline is sampled until two reads agree**, and only after a
+  warm-up burst. A pool grows under load and keeps what it opened, so a
+  baseline read at `min_size` would see that growth later and call it a
+  leak.
 - **`--only` matching nothing, and a `--lib` without a package in it, are
   errors**, not silent successes.

@@ -24,6 +24,7 @@ the one in docker-compose.yml.
 """
 
 import argparse
+import concurrent.futures
 import json
 import os
 import pathlib
@@ -36,6 +37,9 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from contextlib import ExitStack
+
+from latency import LatencyProxy
 
 HERE = pathlib.Path(__file__).parent
 
@@ -65,6 +69,15 @@ try:
     MUST_REFUSE.update(getattr(arms_local, "MUST_REFUSE", {}))
 except ImportError:
     pass
+
+# Database latency, injected by a proxy in front of Postgres. A couple of
+# milliseconds is enough to widen the window in which two tasks race for
+# the same connection, and costs little; set 0 to connect directly.
+LATENCY_MS = float(os.environ.get("LATENCY_MS", "2"))
+
+# How many requests the concurrency scenario runs at once. Deliberately
+# more than the pooled arm's max_size, so the pool has to queue.
+CONCURRENCY = 8
 
 BOOT_TIMEOUT = 30.0
 PROBE_TIMEOUT = 2.0
@@ -209,6 +222,26 @@ def settle_backends(timeout=8.0):
     return previous
 
 
+def burst(count=None):
+    """Issue several requests at once and return their bodies."""
+    count = count or CONCURRENCY
+    with concurrent.futures.ThreadPoolExecutor(count) as pool:
+        return list(pool.map(lambda _: get("/"), range(count)))
+
+
+def warm_up():
+    """Drive the pool to its working size before the baseline is taken.
+
+    A pool grows under load and keeps what it opened, so a baseline read
+    while it is still at min_size would see that growth later and call it
+    a leak. Failures here are left to the scenarios to diagnose.
+    """
+    try:
+        burst()
+    except Failure:
+        pass
+
+
 def check(condition, message):
     if not condition:
         raise Failure(message)
@@ -330,8 +363,38 @@ def scenario_two_aliases(findings, env):
     )
 
 
+def scenario_concurrent(findings, env):
+    """Requests in flight together, more than a pool can serve at once.
+
+    Nothing else here makes two requests overlap, so this is the only
+    scenario that exercises the lock around acquiring a connection, and
+    the only one where a pool has to make callers wait.
+    """
+    bodies = burst()
+
+    for i, body in enumerate(bodies, start=1):
+        check(
+            body["ok"], f"concurrent request {i} failed: {body.get('detail')}"
+        )
+        check(
+            body["store_on_entry"] == [],
+            f"concurrent request {i} began with {body['store_on_entry']}",
+        )
+    pids = {body["pid"] for body in bodies}
+    findings[f"backends for {CONCURRENCY} at once"] = len(pids)
+    limit = env.get("POOL_MAX")
+    if limit:
+        # close() hands a pooled connection back rather than dropping it,
+        # so a burst cannot have touched more backends than the pool holds.
+        check(
+            len(pids) <= int(limit),
+            f"{len(pids)} backends for a pool of {limit}",
+        )
+
+
 SCENARIOS = [
     ("sequential", scenario_sequential),
+    ("concurrent", scenario_concurrent),
     ("request signals", scenario_signals),
     ("bare fan-out", scenario_fan_out_bare),
     ("opted-in fan-out", scenario_fan_out_opted_in),
@@ -377,6 +440,24 @@ def run_scenarios(findings, env):
     return None
 
 
+def database_env(stack):
+    """Where the app should look for Postgres.
+
+    With latency enabled that is a proxy in front of it, so only the
+    database traffic is delayed and no privileges are needed.
+    """
+    if not LATENCY_MS:
+        return {}
+    proxy = stack.enter_context(
+        LatencyProxy(
+            os.environ.get("PGHOST", "localhost"),
+            os.environ.get("PGPORT", "5432"),
+            LATENCY_MS / 1000.0,
+        )
+    )
+    return {"PGHOST": "127.0.0.1", "PGPORT": str(proxy.local_port)}
+
+
 def run_arm(name, env, lib):
     global _base
     findings = {}
@@ -393,7 +474,9 @@ def run_arm(name, env, lib):
     nonce = f"gauntlet-{uuid.uuid4().hex[:12]}"
     port = free_port()
     _base = f"http://127.0.0.1:{port}"
-    with tempfile.TemporaryDirectory() as workspace:
+    with ExitStack() as stack:
+        env = dict(env, **database_env(stack))
+        workspace = stack.enter_context(tempfile.TemporaryDirectory())
         log_path = pathlib.Path(workspace) / "server.log"
         with log_path.open("w") as log:
             process = start(env, lib, port, nonce, log)
@@ -409,6 +492,7 @@ def run_arm(name, env, lib):
             if expected:
                 return refusal(expected)
 
+            warm_up()
             baseline = settle_backends()
             broken = run_scenarios(findings, env)
             if broken:
