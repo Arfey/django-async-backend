@@ -145,3 +145,24 @@ class AsyncNewConnectionTests(AsyncioTransactionTestCase):
         self.assertIs(after, before)
         self.assertIsNotNone(after.connection)
         self.assertEqual(await names(), ["inner"])
+
+    async def test_ignores_an_alias_that_is_not_an_async_backend(self):
+        """A project adopting this library can keep an ordinary Django
+        alias alongside an async one. No async wrapper can be built for
+        such an alias, so the scope must not try to swap a connection for
+        it just because it is configured.
+        """
+        async_connections.settings["legacy"] = dict(
+            async_connections.settings[DEFAULT_DB_ALIAS],
+            ENGINE="django.db.backends.sqlite3",
+        )
+        try:
+
+            async def writer():
+                await TestModel.async_objects.acreate(name="mixed")
+                return await names()
+
+            self.assertEqual(await async_new_connection(writer()), ["mixed"])
+        finally:
+            # Before teardown, which walks every configured alias.
+            async_connections.settings.pop("legacy")

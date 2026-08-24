@@ -15,8 +15,16 @@ async def _new_connection_scope():
     The previous connections are restored rather than dropped: the caller
     may already be using one, and orphaning it would silently open a
     second connection on its next query.
+
+    Only the aliases the caller actually opened are swapped.
+    ``all()`` without ``initialized_only`` would build a wrapper for every
+    configured alias -- and raise outright for one whose backend has no
+    async wrapper, which is any ordinary Django alias -- to swap
+    connections nothing in the block is going to use. An alias the block
+    opens for the first time gets its own connection anyway, because
+    there is nothing in the store for it to inherit.
     """
-    previous = async_connections.all()
+    previous = async_connections.all(initialized_only=True)
 
     for conn in previous:
         async_connections[conn.alias] = async_connections.create_connection(
@@ -26,7 +34,7 @@ async def _new_connection_scope():
     try:
         yield
     finally:
-        opened = async_connections.all()
+        opened = async_connections.all(initialized_only=True)
 
         close_task = asyncio.gather(*[conn.close() for conn in opened])
 
