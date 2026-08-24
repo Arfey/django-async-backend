@@ -96,9 +96,7 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
                 "Cannot create an async connection without a running "
                 "event loop."
             )
-        wrapper = backend.AsyncDatabaseWrapper(db, alias)
-        wrapper._task = task
-        return wrapper
+        return backend.AsyncDatabaseWrapper(db, alias)
 
 
 async_connections = AsyncConnectionHandler()
