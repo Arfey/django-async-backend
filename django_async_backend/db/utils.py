@@ -77,6 +77,20 @@ class AsyncConnectionHandler(BaseAsyncConnectionHandler):
                 test_settings.setdefault(key, value)
         return databases
 
+    def all(self, initialized_only=False):
+        connections = []
+
+        for alias in self:
+            if initialized_only and not hasattr(self._connections, alias):
+                continue
+
+            try:
+                connections.append(self[alias])
+            except self.exception_class:
+                continue
+
+        return connections
+
     def create_connection(self, alias):
         db = self.settings[alias]
         backend = load_backend(db["ENGINE"])

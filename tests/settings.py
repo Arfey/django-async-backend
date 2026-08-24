@@ -14,7 +14,11 @@ DATABASES = {
         "PASSWORD": "postgres",
         "HOST": "localhost",
         "PORT": 5432,
-    }
+    },
+    "legacy": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": ":memory:",
+    },
 }
 
 INSTALLED_APPS = [

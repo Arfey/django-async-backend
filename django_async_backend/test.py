@@ -15,8 +15,7 @@ def _refresh_connection_task_ownership_decorator(fn):
     @wraps(fn)
     async def inner(*args, **kwargs):
         task = asyncio.current_task()
-        for name in async_connections.settings.keys():
-            connection = async_connections[name]
+        for connection in async_connections.all():
             connection._task = task
         return await fn(*args, **kwargs)
 
@@ -73,8 +72,8 @@ class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
         )
 
     async def _close_connection(self):
-        for name in async_connections.settings.keys():
-            await async_connections[name].close()
+        for connection in async_connections.all():
+            await connection.close()
 
     def _callTearDown(self):
         self._callAsync(
@@ -95,15 +94,14 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
         self.atomic_cms = {}
         self.atomics = {}
 
-        for name in async_connections.settings.keys():
-            connection = async_connections[name]
+        for connection in async_connections.all():
+            name = connection.alias
             self.connections[name] = connection
             self.atomic_cms[name] = async_atomic(name)
             self.atomics[name] = await self.atomic_cms[name].__aenter__()
 
     async def _close_transaction(self):
-        for name in async_connections.settings.keys():
-            connection = async_connections[name]
+        for name, connection in self.connections.items():
             connection.set_rollback(True)
             await self.atomic_cms[name].__aexit__(None, None, None)
             await connection.close()

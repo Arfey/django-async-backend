@@ -33,9 +33,9 @@ class ASGIRequestSignalTaskOwnershipTest(
     async_request_factory = AsyncRequestFactory()
 
     async def _drop_test_owned_connections(self):
-        for alias in async_connections.settings:
-            await async_connections[alias].close()
-            del async_connections[alias]
+        for connection in async_connections.all():
+            await connection.close()
+            del async_connections[connection.alias]
 
     async def test_request_does_not_trip_task_ownership(self):
         await self._drop_test_owned_connections()
