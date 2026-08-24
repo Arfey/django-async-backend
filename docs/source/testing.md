@@ -44,6 +44,35 @@ class MyTransactionTests(AsyncioTransactionTestCase):
 
 Both test cases close every configured async connection during teardown.
 
+## Overriding settings
+
+Django's `@override_settings` only accepts `SimpleTestCase` subclasses, so it
+raises `ValueError` on the async test cases. Import it from
+`django_async_backend.test` instead — same API, and it also works on Django's
+own test cases, so a module can use the one import for both:
+
+```python
+from django_async_backend.test import AsyncioTestCase, override_settings
+
+
+@override_settings(SOME_SETTING="value")
+class MyAsyncTests(AsyncioTestCase):
+    async def test_something(self):
+        ...
+```
+
+`modify_settings` is available from the same place.
+
+To override a setting for part of a test only, use `self.settings()` or
+`self.modify_settings()` as a context manager:
+
+```python
+class MyAsyncTests(AsyncioTestCase):
+    async def test_something(self):
+        with self.settings(SOME_SETTING="value"):
+            ...
+```
+
 ## Running the test suite
 
 See [Contributing](contribute.md) for running this project's own tests.
