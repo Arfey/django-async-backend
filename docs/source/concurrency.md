@@ -18,7 +18,7 @@ await Publisher.async_objects.acount()
 ```
 
 Nor can you fan the work out onto that connection to speed it up. It is owned
-by the task that created it, so handing it to another task — via
+by the task that first used it, so handing it to another task — via
 `asyncio.gather()`, `asyncio.create_task()` or `asyncio.TaskGroup` — raises
 `RuntimeError` rather than quietly interleaving commands on it:
 

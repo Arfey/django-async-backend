@@ -45,7 +45,7 @@ async with async_atomic():
 
 ## Transactions and asyncio tasks
 
-An async connection is owned by the task that created it. Using it from a
+An async connection is owned by the task that first used it. Using it from a
 **different** task — one spawned with `asyncio.create_task()`,
 `asyncio.gather()`, or `asyncio.TaskGroup` — is rejected. This applies to *every*
 operation on the connection, not just to opening a transaction: an ordinary

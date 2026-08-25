@@ -31,3 +31,12 @@ class CloseOldAsyncConnectionsTest(SimpleTestCase):
             await close_old_async_connections(
                 sender=object(), signal=object(), environ={}
             )
+
+    async def test_skips_sync_only_alias(self):
+        self.assertIn("legacy", async_connections.settings)
+
+        await close_old_async_connections()
+
+        self.assertNotIn(
+            "legacy", [conn.alias for conn in async_connections.all()]
+        )

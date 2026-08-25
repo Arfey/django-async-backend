@@ -100,7 +100,7 @@ async with await connection.cursor() as cursor:
 > alias, and every ORM and cursor call in that task takes turns on it — so
 > awaiting several queries in a row does not make them run concurrently.
 >
-> The connection is owned by the task that created it, so you cannot fan out
+> The connection is owned by the task that first used it, so you cannot fan out
 > onto it either: using it from another task — `asyncio.create_task()`,
 > `asyncio.gather()`, `asyncio.TaskGroup` — raises `RuntimeError`. Wrapping the
 > fan-out in a single `async_atomic()` block does **not** make it safe. To run

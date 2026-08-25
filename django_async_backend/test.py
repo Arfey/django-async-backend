@@ -4,6 +4,8 @@ from unittest import IsolatedAsyncioTestCase
 
 from django.core.signals import request_started
 from django.db import reset_queries
+from django.test.utils import modify_settings as _modify_settings
+from django.test.utils import override_settings as _override_settings
 
 from django_async_backend.db import async_connections
 from django_async_backend.db.transaction import async_atomic
@@ -13,8 +15,7 @@ def _refresh_connection_task_ownership_decorator(fn):
     @wraps(fn)
     async def inner(*args, **kwargs):
         task = asyncio.current_task()
-        for name in async_connections.settings.keys():
-            connection = async_connections[name]
+        for connection in async_connections.all():
             connection._task = task
         return await fn(*args, **kwargs)
 
@@ -24,6 +25,19 @@ def _refresh_connection_task_ownership_decorator(fn):
 
 class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
     databases = "__all__"
+
+    _overridden_settings = None
+    _modified_settings = None
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if cls._overridden_settings:
+            cls.enterClassContext(
+                _override_settings(**cls._overridden_settings)
+            )
+        if cls._modified_settings:
+            cls.enterClassContext(_modify_settings(cls._modified_settings))
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -44,6 +58,12 @@ class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
                 _refresh_connection_task_ownership_decorator(method),
             )
 
+    def settings(self, **kwargs):
+        return override_settings(**kwargs)
+
+    def modify_settings(self, **kwargs):
+        return modify_settings(**kwargs)
+
     def _callSetUp(self):
         self._asyncioRunner.get_loop()
         self._asyncioTestContext.run(self.setUp)
@@ -52,8 +72,8 @@ class AsyncioTransactionTestCase(IsolatedAsyncioTestCase):
         )
 
     async def _close_connection(self):
-        for name in async_connections.settings.keys():
-            await async_connections[name].close()
+        for connection in async_connections.all():
+            await connection.close()
 
     def _callTearDown(self):
         self._callAsync(
@@ -74,15 +94,14 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
         self.atomic_cms = {}
         self.atomics = {}
 
-        for name in async_connections.settings.keys():
-            connection = async_connections[name]
+        for connection in async_connections.all():
+            name = connection.alias
             self.connections[name] = connection
             self.atomic_cms[name] = async_atomic(name)
             self.atomics[name] = await self.atomic_cms[name].__aenter__()
 
     async def _close_transaction(self):
-        for name in async_connections.settings.keys():
-            connection = async_connections[name]
+        for name, connection in self.connections.items():
             connection.set_rollback(True)
             await self.atomic_cms[name].__aexit__(None, None, None)
             await connection.close()
@@ -108,6 +127,29 @@ class AsyncioTestCase(AsyncioTransactionTestCase):
             )
         )
         self._asyncioTestContext.run(self.tearDown)
+
+
+def _save_options_for_supported_class(decorator, cls):
+    from django.test import SimpleTestCase
+
+    if not issubclass(cls, (SimpleTestCase, AsyncioTransactionTestCase)):
+        raise ValueError(
+            "Only subclasses of Django SimpleTestCase or "
+            "AsyncioTransactionTestCase can be decorated with %s"
+            % type(decorator).__name__
+        )
+    decorator.save_options(cls)
+    return cls
+
+
+class override_settings(_override_settings):
+    def decorate_class(self, cls):
+        return _save_options_for_supported_class(self, cls)
+
+
+class modify_settings(_modify_settings):
+    def decorate_class(self, cls):
+        return _save_options_for_supported_class(self, cls)
 
 
 class AsyncCaptureQueriesContext:
