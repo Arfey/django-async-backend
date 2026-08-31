@@ -611,3 +611,48 @@ class TotalOrderingChildModel(AsyncModelMixin, models.Model):
 
     class Meta:
         db_table = "total_ordering_child_model"
+
+
+class SelectRelatedAuthorModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "select_related_author_model"
+
+
+class SelectRelatedProfileModel(AsyncModelMixin, models.Model):
+    author = models.OneToOneField(
+        SelectRelatedAuthorModel,
+        on_delete=models.CASCADE,
+        related_name="profile",
+    )
+    bio = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = "select_related_profile_model"
+
+
+class SelectRelatedPublisherModel(AsyncModelMixin, models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "select_related_publisher_model"
+
+
+class SelectRelatedBookModel(AsyncModelMixin, models.Model):
+    title = models.CharField(max_length=255, unique=True)
+    author = models.ForeignKey(
+        SelectRelatedAuthorModel,
+        on_delete=models.CASCADE,
+        related_name="books",
+    )
+    publisher = models.ForeignKey(
+        SelectRelatedPublisherModel,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="books",
+    )
+
+    class Meta:
+        db_table = "select_related_book_model"

@@ -6,6 +6,7 @@ module:
     - "from django_async_backend.db.models import sql as async_sql"
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
+    - "from django_async_backend.db.models.prefetch import prefetch_one_level"
 
   import_aliases:
     # The async Collector lives in django_async_backend.db.models.deletion,
@@ -16,12 +17,44 @@ module:
   functions:
     prefetch_related_objects:
       to_async: true
+      calls:
+        - func:
+            name: prefetch_one_level
+          to_await: true
 
-    # todo:
-    # aprefetch_related_objects:
-    #   remove: true
+    # The async prefetch_one_level() lives in
+    # django_async_backend.db.models.prefetch, because it has to build and
+    # evaluate the related querysets asynchronously.
+    prefetch_one_level:
+      remove: true
+
+    # Replaced by an alias of the async prefetch_related_objects() below.
+    aprefetch_related_objects:
+      remove: true
+
+  add_raw_bottom:
+    - |
+      aprefetch_related_objects = prefetch_related_objects
 
   classes:
+    Prefetch:
+      methods:
+        __init__:
+          add_raw_top:
+            - |
+              if not isinstance(lookup, str):
+                  raise TypeError(
+                      "Prefetch lookups must be strings. Use "
+                      "django_async_backend.db.models.query.Prefetch instead of "
+                      "django.db.models.Prefetch."
+                  )
+            - |
+              if queryset is not None and not isinstance(queryset, QuerySet):
+                  raise ValueError(
+                      "Prefetch querysets must be async querysets. "
+                      "Use Model.async_objects instead of Model.objects."
+                  )
+
     QuerySet:
       add_raw_top:
         - |
@@ -104,6 +137,18 @@ module:
           remove: true
 
       methods:
+        prefetch_related:
+          add_raw_top:
+            - |
+              if any(
+                  lookup is not None and not isinstance(lookup, (str, Prefetch))
+                  for lookup in lookups
+              ):
+                  raise TypeError(
+                      "prefetch_related() lookups must be strings or "
+                      "django_async_backend.db.models.query.Prefetch instances."
+                  )
+
         __init__:
           calls:
             - func:
@@ -206,9 +251,6 @@ module:
           remove: true
 
         raw:
-          remove: true
-
-        prefetch_related:
           remove: true
 
         ain_bulk:
