@@ -23,7 +23,8 @@ things that are easy to get wrong.
   automatically. Do not modify it manually.` header. Do not hand-edit those
   files — your changes will be lost on the next regeneration. Edit the config
   under `codemon/config/*.yaml` and run `lets generate` (not a bare
-  `python -m codemon`) instead. See the README "Code generation" section.
+  `python -m codemon`) instead. See the README "How this package is built"
+  section and the docs' "Code generation" page.
 
 - **Generated code is committed.** Because the generated modules are checked in,
   a diff can look like ordinary handwritten code. If you touch the ORM layer,
