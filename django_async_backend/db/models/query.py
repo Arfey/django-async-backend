@@ -1,6 +1,7 @@
 # This file was generated automatically. Do not modify it manually. (based on django 6.1)
 from django_async_backend.db import async_connections
 from django_async_backend.db.models import sql as async_sql
+from django_async_backend.db.models.prefetch import prefetch_one_level
 from django_async_backend.db.transaction import (
     async_atomic,
     async_mark_for_rollback_on_error,
@@ -1591,6 +1592,35 @@ class QuerySet(AltersData):
             obj.query.select_related = True
         return obj
 
+    def prefetch_related(self, *lookups):
+
+        if any(
+            lookup is not None and not isinstance(lookup, (str, Prefetch))
+            for lookup in lookups
+        ):
+            raise TypeError(
+                "prefetch_related() lookups must be strings or "
+                "django_async_backend.db.models.query.Prefetch instances."
+            )
+
+        self._not_support_combined_queries("prefetch_related")
+        clone = self._chain()
+        if lookups == (None,):
+            clone._prefetch_related_lookups = ()
+        else:
+            for lookup in lookups:
+                if isinstance(lookup, Prefetch):
+                    lookup = lookup.prefetch_to
+                lookup = lookup.split(LOOKUP_SEP, 1)[0]
+                if lookup in self.query._filtered_relations:
+                    raise ValueError(
+                        "prefetch_related() is not supported with FilteredRelation."
+                    )
+            clone._prefetch_related_lookups = (
+                clone._prefetch_related_lookups + lookups
+            )
+        return clone
+
     def annotate(self, *args, **kwargs):
         self._not_support_combined_queries("annotate")
         return self._annotate(args, kwargs, select=True)
@@ -2215,6 +2245,20 @@ class RawQuerySet:
 
 class Prefetch:
     def __init__(self, lookup, queryset=None, to_attr=None):
+
+        if not isinstance(lookup, str):
+            raise TypeError(
+                "Prefetch lookups must be strings. Use "
+                "django_async_backend.db.models.query.Prefetch instead of "
+                "django.db.models.Prefetch."
+            )
+
+        if queryset is not None and not isinstance(queryset, QuerySet):
+            raise ValueError(
+                "Prefetch querysets must be async querysets. "
+                "Use Model.async_objects instead of Model.objects."
+            )
+
         # `prefetch_through` is the path we traverse to perform the prefetch.
         self.prefetch_through = lookup
         # `prefetch_to` is the path to the attribute that stores the result.
@@ -2387,7 +2431,7 @@ async def prefetch_related_objects(model_instances, *related_lookups):
                 obj_to_fetch = [obj for obj in obj_list if not is_fetched(obj)]
 
             if obj_to_fetch:
-                obj_list, additional_lookups = prefetch_one_level(
+                obj_list, additional_lookups = await prefetch_one_level(
                     obj_to_fetch,
                     prefetcher,
                     lookup,
@@ -2442,12 +2486,6 @@ async def prefetch_related_objects(model_instances, *related_lookups):
                     else:
                         new_obj_list.append(new_obj)
                 obj_list = new_obj_list
-
-
-async def aprefetch_related_objects(model_instances, *related_lookups):
-    return await sync_to_async(prefetch_related_objects)(
-        model_instances, *related_lookups
-    )
 
 
 def get_prefetcher(instance, through_attr, to_attr):
@@ -2505,109 +2543,6 @@ def get_prefetcher(instance, through_attr, to_attr):
 
                     is_fetched = in_prefetched_cache
     return prefetcher, rel_obj_descriptor, attr_found, is_fetched
-
-
-def prefetch_one_level(instances, prefetcher, lookup, level):
-    # prefetcher must have a method get_prefetch_querysets() which takes a list
-    # of instances, and returns a tuple:
-
-    # (queryset of instances of self.model that are related to passed in
-    #  instances,
-    #  callable that gets value to be matched for returned instances,
-    #  callable that gets value to be matched for passed in instances,
-    #  boolean that is True for singly related objects,
-    #  cache or field name to assign to,
-    #  boolean that is True when the previous argument is a cache name vs a
-    #  field name).
-
-    # The 'values to be matched' must be hashable as they will be used
-    # in a dictionary.
-    (
-        rel_qs,
-        rel_obj_attr,
-        instance_attr,
-        single,
-        cache_name,
-        is_descriptor,
-    ) = prefetcher.get_prefetch_querysets(
-        instances, lookup.get_current_querysets(level)
-    )
-    # We have to handle the possibility that the QuerySet we just got back
-    # contains some prefetch_related lookups. We don't want to trigger the
-    # prefetch_related functionality by evaluating the query. Rather, we need
-    # to merge in the prefetch_related lookups.
-    # Copy the lookups in case it is a Prefetch object which could be reused
-    # later (happens in nested prefetch_related).
-    additional_lookups = [
-        copy.copy(additional_lookup)
-        for additional_lookup in getattr(
-            rel_qs, "_prefetch_related_lookups", ()
-        )
-    ]
-    if additional_lookups:
-        # Don't need to clone because the manager should have given us a fresh
-        # instance, so we access an internal instead of using public interface
-        # for performance reasons.
-        rel_qs._prefetch_related_lookups = ()
-
-    all_related_objects = list(rel_qs)
-
-    rel_obj_cache = {}
-    for rel_obj in all_related_objects:
-        rel_attr_val = rel_obj_attr(rel_obj)
-        rel_obj_cache.setdefault(rel_attr_val, []).append(rel_obj)
-
-    to_attr, as_attr = lookup.get_current_to_attr(level)
-    # Make sure `to_attr` does not conflict with a field.
-    if as_attr and instances:
-        # We assume that objects retrieved are homogeneous (which is the
-        # premise of prefetch_related), so what applies to first object applies
-        # to all.
-        model = instances[0].__class__
-        try:
-            model._meta.get_field(to_attr)
-        except exceptions.FieldDoesNotExist:
-            pass
-        else:
-            msg = "to_attr={} conflicts with a field on the {} model."
-            raise ValueError(msg.format(to_attr, model.__name__))
-
-    # Whether or not we're prefetching the last part of the lookup.
-    leaf = len(lookup.prefetch_through.split(LOOKUP_SEP)) - 1 == level
-
-    for obj in instances:
-        instance_attr_val = instance_attr(obj)
-        vals = rel_obj_cache.get(instance_attr_val, [])
-
-        if single:
-            val = vals[0] if vals else None
-            if as_attr:
-                # A to_attr has been given for the prefetch.
-                setattr(obj, to_attr, val)
-            elif is_descriptor:
-                # cache_name points to a field name in obj.
-                # This field is a descriptor for a related object.
-                setattr(obj, cache_name, val)
-            else:
-                # No to_attr has been given for this prefetch operation and the
-                # cache_name does not point to a descriptor. Store the value of
-                # the field in the object's field cache.
-                obj._state.fields_cache[cache_name] = val
-        else:
-            if as_attr:
-                setattr(obj, to_attr, vals)
-            else:
-                manager = getattr(obj, to_attr)
-                if leaf and lookup.queryset is not None:
-                    qs = manager._apply_rel_filters(lookup.queryset._chain())
-                else:
-                    qs = manager.get_queryset()
-                qs._result_cache = vals
-                # We don't want the individual qs doing prefetch_related now,
-                # since we have merged this into the current work.
-                qs._prefetch_done = True
-                obj._prefetched_objects_cache[cache_name] = qs
-    return all_related_objects, additional_lookups
 
 
 class RelatedPopulator:
@@ -2706,3 +2641,6 @@ def get_related_populators(klass_info, select, db, fetch_mode):
         rel_cls = RelatedPopulator(rel_klass_info, select, db, fetch_mode)
         iterators.append(rel_cls)
     return iterators
+
+
+aprefetch_related_objects = prefetch_related_objects
