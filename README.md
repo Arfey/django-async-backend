@@ -178,7 +178,7 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 | `Model.objects.select_related`      | ✅        |          |
 | `Model.objects.select_for_update`   | ✅        |          |
 | `Model.objects.prefetch_related`    | ❌        |          |
-| `Model.objects.aaggregate`          | ❌        |          |
+| `Model.objects.aaggregate`          | ✅        |          |
 | `Model.objects.annotate`            | ✅        |          |
 | `Model.objects.order_by`            | ✅        |          |
 | `Model.objects.distinct`            | ✅        |          |

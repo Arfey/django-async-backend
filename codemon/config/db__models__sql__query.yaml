@@ -8,12 +8,19 @@ module:
   import_aliases:
     - name: connections
       remove: true
+    - name: AggregateQuery
+      remove: true
 
   classes:
     Query:
       methods:
         get_aggregation:
           to_async: true
+          add_raw_top:
+            - |
+              from django_async_backend.db.models.sql.subqueries import (
+                  AggregateQuery,
+              )
           calls:
             - func:
                 attr: execute_sql
