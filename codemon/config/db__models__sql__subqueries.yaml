@@ -32,6 +32,3 @@ module:
             - func:
                 attr: execute_sql
               to_await: true
-
-    AggregateQuery:
-      remove: true

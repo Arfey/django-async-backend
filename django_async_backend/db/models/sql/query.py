@@ -474,6 +474,11 @@ class Query(BaseExpression):
         return target.get_col(alias, field)
 
     async def get_aggregation(self, using, aggregate_exprs):
+
+        from django_async_backend.db.models.sql.subqueries import (
+            AggregateQuery,
+        )
+
         if not aggregate_exprs:
             return {}
         # Store annotation mask prior to temporarily adding aggregations for
@@ -546,7 +551,6 @@ class Query(BaseExpression):
             or self.combinator
             or set_returning_annotations
         ):
-            from django.db.models.sql.subqueries import AggregateQuery
 
             inner_query = self.clone()
             inner_query.subquery = True
