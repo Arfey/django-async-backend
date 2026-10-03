@@ -759,7 +759,6 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
         if config.add_raw_top:
 
-            # Matched by name so a nested def is left alone.
             @m.leave(m.FunctionDef(name=m.Name(name)))
             def add_raw_top(
                 self,
@@ -772,7 +771,6 @@ def method_transformer(name: str, config: Method) -> cst.CSTTransformer:
 
         if config.add_raw_bottom:
 
-            # Matched by name so a nested def is left alone.
             @m.leave(m.FunctionDef(name=m.Name(name)))
             def add_raw_bottom(
                 self,

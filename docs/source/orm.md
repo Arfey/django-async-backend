@@ -83,10 +83,15 @@ rejected with a `TypeError`, because it would run a blocking query.
 
 ### `async_refresh_from_db()`
 
-Reloads the instance's field values from the database. Accepts the same
-keyword arguments as Django's `refresh_from_db()` (`using`, `fields`,
-`from_queryset`), drops cached related objects and prefetched results, and
-leaves fields the reloaded row did not select untouched.
+Reloads the instance from the database. It is meant as a test helper, so it
+is deliberately simpler than Django's `refresh_from_db()`:
+
+- every concrete field is reloaded, including fields left out by a deferred
+  load;
+- every cached relation is dropped — `select_related()` results, forward and
+  reverse one-to-one caches, generic foreign keys — along with prefetched
+  results;
+- if the row was deleted, `DoesNotExist` is raised.
 
 ```python
 book = await Book.async_objects.aget(name="Django")
@@ -94,35 +99,6 @@ await Book.async_objects.filter(pk=book.pk).aupdate(name="Django Async")
 
 await book.async_refresh_from_db()
 assert book.name == "Django Async"
-
-# reload a subset
-await book.async_refresh_from_db(fields=["name"])
-```
-
-`from_queryset` must be an async queryset or manager — passing `Model.objects`
-raises `TypeError`, because a sync queryset would read through Django's
-connection and a different transaction.
-
-One behavior does differ from Django's: with no `from_queryset`, the reload
-goes through `_async_base_manager`, which is always a plain `AsyncManager` and
-does not honor `Meta.base_manager_name`. Pass `from_queryset` explicitly if you
-need a specific manager.
-
-```{note}
-Unlike Django's `refresh_from_db()`, this is **not** what deferred field
-access falls back to. Reading a field left out of a deferred load still goes
-through Django's synchronous `refresh_from_db()` and raises
-`SynchronousOnlyOperation`, because attribute access cannot be awaited. Reload
-explicitly instead.
-```
-
-```{warning}
-Refresh instances that were loaded asynchronously. An instance fetched with
-`Model.objects.get()` and then reloaded with `async_refresh_from_db()` is read
-on the **async** connection, in a different transaction from the one it came
-from, and nothing detects it — `_state.db` records the alias, not which
-connection served it. For an instance that lives in the sync world, Django's
-own `arefresh_from_db()` is still the right call. See [Pitfalls](#pitfalls).
 ```
 
 ## Managers
