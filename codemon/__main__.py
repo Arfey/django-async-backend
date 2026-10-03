@@ -835,8 +835,10 @@ def class_transformer(name: str, config: Class) -> cst.CSTTransformer:
                 self, original_node: cst.ClassDef, updated_node: cst.ClassDef
             ) -> cst.ClassDef:
                 blocks = [
-                    cst.parse_module(dedent(code)).body[0]
-                    for code in config.add_raw_top
+                    cst.parse_module(dedent(code))
+                    .body[0]
+                    .with_changes(leading_lines=[cst.EmptyLine()] if i else [])
+                    for i, code in enumerate(config.add_raw_top)
                 ]
                 body = list(updated_node.body.body)
                 # Keep a leading docstring first, if there is one.
