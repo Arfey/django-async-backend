@@ -1,0 +1,21 @@
+"""Extra gauntlet arms for a driver that lives outside this repository.
+
+Copy to ``arms_local.py`` (untracked) and edit. Each arm is a name and the
+environment the app is started with. ``ENGINE`` selects the backend;
+``REQUIRES`` names a module that must be importable for the arm to run,
+so it is skipped rather than failed when the driver is absent.
+"""
+
+ARMS = [
+    (
+        "some-other-driver",
+        {
+            "ENGINE": "some_package.django_backend",
+            "REQUIRES": "some_package",
+        },
+    ),
+]
+
+# Arms whose configuration the driver is expected to reject, mapped to the
+# exception name it should raise.
+MUST_REFUSE = {}
