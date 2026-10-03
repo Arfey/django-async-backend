@@ -342,11 +342,13 @@ class QuerySet(AltersData):
             f"{self.__class__.__name__} is not iterable synchronously. "
             "Use `async for obj in qs` or `[obj async for obj in qs]`."
         )
+
     def __len__(self):
         raise TypeError(
             f"len() is not supported on {self.__class__.__name__}. "
             "Use `await qs.acount()`."
         )
+
     def __repr__(self):
         return "<%s [%s]>" % (self.__class__.__name__, self.query)
 

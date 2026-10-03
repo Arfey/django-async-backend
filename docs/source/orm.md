@@ -8,8 +8,8 @@ boilerplate:
 
 - an `async_objects` manager (an `AsyncManager`), so you don't have to declare
   one by hand;
-- `async_save()` and `async_delete()` methods for saving and deleting instances
-  asynchronously.
+- `async_save()`, `async_delete()` and `async_refresh_from_db()` methods for
+  saving, deleting and reloading instances asynchronously.
 
 ```python
 from django.db import models, DEFAULT_DB_ALIAS
@@ -54,6 +54,13 @@ behavior instead of silently changing underneath it — and it **guarantees the
 async path is genuinely async**: when you call `async_save()`, you know the
 query runs on the asyncio connection, with no threadpool and no hidden sync
 connection.
+
+The same rule applies to querysets, with a different mechanism: there the
+opt-in is the *manager*. `Book.objects.aget()` stays Django's `sync_to_async`
+wrapper; only `Book.async_objects.aget()` is genuinely async. An instance has
+no manager to switch, so the method name carries the opt-in instead. Either
+way nothing this library adds to `Model` replaces something Django already
+defines, which is why third-party code keeps working unchanged.
 :::
 
 ### `async_save()`
@@ -73,6 +80,26 @@ through related objects, sending `pre_delete` / `post_delete` along the way.
 `CASCADE`, `PROTECT`, `RESTRICT`, `SET_NULL`, `SET_DEFAULT`, `SET(...)` and
 `DO_NOTHING` all work. A custom **synchronous** `on_delete` callable is
 rejected with a `TypeError`, because it would run a blocking query.
+
+### `async_refresh_from_db()`
+
+Reloads the instance from the database. It is meant as a test helper, so it
+is deliberately simpler than Django's `refresh_from_db()`:
+
+- every concrete field is reloaded, including fields left out by a deferred
+  load;
+- every cached relation is dropped — `select_related()` results, forward and
+  reverse one-to-one caches, generic foreign keys — along with prefetched
+  results;
+- if the row was deleted, `DoesNotExist` is raised.
+
+```python
+book = await Book.async_objects.aget(name="Django")
+await Book.async_objects.filter(pk=book.pk).aupdate(name="Django Async")
+
+await book.async_refresh_from_db()
+assert book.name == "Django Async"
+```
 
 ## Managers
 
@@ -219,11 +246,14 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 
 ### Model methods
 
-| methods                  | supported | comments     |
-| ------------------------ | --------- | ------------ |
-| `Model.asave`            | ✅        | `async_save`   |
-| `Model.adelete`          | ✅        | `async_delete` |
-| `Model.arefresh_from_db` | ❌        |              |
+Django's own `a*` methods keep their existing behavior; the genuinely async
+equivalents are the names in the comments column.
+
+| methods                  | supported | comments                 |
+| ------------------------ | --------- | ------------------------ |
+| `Model.asave`            | ✅        | `async_save`             |
+| `Model.adelete`          | ✅        | `async_delete`           |
+| `Model.arefresh_from_db` | ✅        | `async_refresh_from_db`  |
 
 ### RawQuerySet
 
