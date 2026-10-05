@@ -157,9 +157,6 @@ module:
         _iterator:
           remove: True
 
-        aiterator:
-          remove: True
-
         aget:
           remove: true
 
@@ -655,10 +652,12 @@ module:
         __iter__:
           rename: __aiter__
           to_async: true
+          for_statements:
+            - target: row
+              to_async: true
           calls:
             - func:
                 attr: results_iter
-              to_await: true
             - func:
                 attr: execute_sql
               to_await: true
@@ -674,10 +673,12 @@ module:
         __iter__:
           rename: __aiter__
           to_async: true
+          for_statements:
+            - target: row
+              to_async: true
           calls:
             - func:
                 attr: results_iter
-              to_await: true
 
     ValuesListIterable:
       methods:
@@ -688,7 +689,7 @@ module:
             - remove: true
           add_raw_bottom:
             - |
-                for i in await compiler.results_iter(
+                async for i in compiler.results_iter(
                     tuple_expected=True,
                     chunked_fetch=self.chunked_fetch,
                     chunk_size=self.chunk_size,
@@ -714,7 +715,9 @@ module:
         __iter__:
           rename: __aiter__
           to_async: true
+          for_statements:
+            - target: row
+              to_async: true
           calls:
             - func:
                 attr: results_iter
-              to_await: true

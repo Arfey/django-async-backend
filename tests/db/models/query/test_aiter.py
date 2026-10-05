@@ -1,9 +1,12 @@
+from contextlib import aclosing
+
 from django.db import DEFAULT_DB_ALIAS
 from django.db.models import F
 from django.test import TestCase
 from test_app.models import TestModel
 
 from django_async_backend.db import async_connections
+from django_async_backend.db.models.query import QuerySet
 from django_async_backend.test import (
     AsyncCaptureQueriesContext,
     AsyncioTestCase,
@@ -55,6 +58,88 @@ class TestAIter(AsyncioTestCase):
         self.assertEqual(
             results[0].name, "Test1", "First object name should be 'Test1'"
         )
+
+
+class TestAIterator(AsyncioTestCase):
+    async def asyncSetUp(self):
+        for name in ("First", "Second", "Third"):
+            await TestModel(name=name).async_save()
+
+    async def test_aiterator_streams_model_instances(self):
+        queryset = TestModel.async_objects.order_by("name")
+
+        results = [obj async for obj in queryset.aiterator(chunk_size=1)]
+
+        self.assertEqual(
+            [obj.name for obj in results], ["First", "Second", "Third"]
+        )
+        self.assertIsNone(queryset._result_cache)
+
+    async def test_aiterator_streams_values(self):
+        results = [
+            row
+            async for row in TestModel.async_objects.order_by("name")
+            .values("name")
+            .aiterator(chunk_size=2)
+        ]
+
+        self.assertEqual(
+            results,
+            [{"name": "First"}, {"name": "Second"}, {"name": "Third"}],
+        )
+
+    async def test_aiterator_streams_values_list(self):
+        results = [
+            row
+            async for row in TestModel.async_objects.order_by("name")
+            .values_list("id", "name")
+            .aiterator(chunk_size=2)
+        ]
+
+        self.assertEqual(
+            [row[1] for row in results], ["First", "Second", "Third"]
+        )
+
+    async def test_aiterator_streams_flat_values_list(self):
+        results = [
+            row
+            async for row in TestModel.async_objects.order_by("name")
+            .values_list("name", flat=True)
+            .aiterator(chunk_size=2)
+        ]
+
+        self.assertEqual(results, ["First", "Second", "Third"])
+
+    async def test_aiterator_rejects_non_positive_chunk_size(self):
+        for chunk_size in (0, -1):
+            with self.assertRaisesMessage(
+                ValueError, "Chunk size must be strictly positive."
+            ):
+                async for _ in TestModel.async_objects.aiterator(chunk_size):
+                    pass
+
+    async def test_aiterator_closes_iterable_when_explicitly_closed(self):
+        closed = []
+
+        class ClosingIterable:
+            def __init__(self, queryset, chunked_fetch, chunk_size):
+                pass
+
+            async def __aiter__(self):
+                try:
+                    yield "first"
+                    yield "second"
+                finally:
+                    closed.append(True)
+
+        queryset = QuerySet(model=None, using="default")
+        queryset._iterable_class = ClosingIterable
+
+        async with aclosing(queryset.aiterator()) as iterator:
+            async for _ in iterator:
+                break
+
+        self.assertEqual(closed, [True])
 
 
 class TestAIterKnownRelatedObjects(AsyncioTestCase):
