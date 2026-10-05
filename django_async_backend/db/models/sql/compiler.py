@@ -3,6 +3,7 @@ import collections
 import json
 import re
 import warnings
+from contextlib import aclosing
 from functools import partial
 from itertools import chain
 
@@ -92,9 +93,10 @@ class SQLCompiler:
                 yield row
 
         if hasattr(results, "__aiter__"):
-            async for chunk in results:
-                async for row in yield_rows(chunk):
-                    yield row
+            async with aclosing(results) as chunks:
+                async for chunk in chunks:
+                    async for row in yield_rows(chunk):
+                        yield row
         else:
             async for row in yield_rows(chain.from_iterable(results)):
                 yield row

@@ -1,6 +1,9 @@
 pathname: db/models/sql/compiler.py
 
 module:
+  new_imports:
+    - "from contextlib import aclosing"
+
   functions:
     cursor_iter:
       to_async: true
@@ -53,9 +56,12 @@ module:
                         yield row
 
                 if hasattr(results, "__aiter__"):
-                    async for chunk in results:
-                        async for row in yield_rows(chunk):
-                            yield row
+                    try:
+                        async for chunk in results:
+                            async for row in yield_rows(chunk):
+                                yield row
+                    finally:
+                        await results.aclose()
                 else:
                     async for row in yield_rows(chain.from_iterable(results)):
                         yield row

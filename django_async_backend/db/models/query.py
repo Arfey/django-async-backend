@@ -13,7 +13,10 @@ The main QuerySet implementation. This provides the public API for the ORM.
 import copy
 import operator
 import warnings
-from contextlib import nullcontext
+from contextlib import (
+    aclosing,
+    nullcontext,
+)
 from functools import reduce
 from itertools import (
     chain,
@@ -144,47 +147,50 @@ class ModelIterable(BaseIterable):
             for field, related_objs in queryset._known_related_objects.items()
         ]
         peers = []
-        async for row in compiler.results_iter(results):
-            obj = model_cls.from_db(
-                db,
-                init_list,
-                row[model_fields_start:model_fields_end],
-                fetch_mode=fetch_mode,
-            )
-            if fetch_mode.track_peers:
-                peers.append(weak_ref(obj))
-                obj._state.peers = peers
-            for rel_populator in related_populators:
-                rel_populator.populate(row, obj)
-            if annotation_col_map:
-                for attr_name, col_pos in annotation_col_map.items():
-                    setattr(obj, attr_name, row[col_pos])
+        row_iterator = compiler.results_iter(results)
+        async with aclosing(row_iterator) as rows:
+            async for row in rows:
+                obj = model_cls.from_db(
+                    db,
+                    init_list,
+                    row[model_fields_start:model_fields_end],
+                    fetch_mode=fetch_mode,
+                )
+                if fetch_mode.track_peers:
+                    peers.append(weak_ref(obj))
+                    obj._state.peers = peers
+                for rel_populator in related_populators:
+                    rel_populator.populate(row, obj)
+                if annotation_col_map:
+                    for attr_name, col_pos in annotation_col_map.items():
+                        setattr(obj, attr_name, row[col_pos])
 
-            # Add the known related objects to the model.
-            for (
-                field,
-                rel_objs,
-                rel_attnames,
-                rel_getter,
-            ) in known_related_objects:
-                # Avoid overwriting objects loaded by, e.g., select_related().
-                if field.is_cached(obj):
-                    continue
-                # Avoid fetching potentially deferred attributes that would
-                # result in unexpected queries.
-                if any(
-                    attname not in obj.__dict__ for attname in rel_attnames
-                ):
-                    continue
-                rel_obj_id = rel_getter(obj)
-                try:
-                    rel_obj = rel_objs[rel_obj_id]
-                except KeyError:
-                    pass  # May happen in qs1 | qs2 scenarios.
-                else:
-                    setattr(obj, field.name, rel_obj)
+                # Add the known related objects to the model.
+                for (
+                    field,
+                    rel_objs,
+                    rel_attnames,
+                    rel_getter,
+                ) in known_related_objects:
+                    # Avoid overwriting objects loaded by, e.g., select_related().
+                    if field.is_cached(obj):
+                        continue
+                    # Avoid fetching potentially deferred attributes that would
+                    # result in unexpected queries.
+                    if any(
+                        attname not in obj.__dict__
+                        for attname in rel_attnames
+                    ):
+                        continue
+                    rel_obj_id = rel_getter(obj)
+                    try:
+                        rel_obj = rel_objs[rel_obj_id]
+                    except KeyError:
+                        pass  # May happen in qs1 | qs2 scenarios.
+                    else:
+                        setattr(obj, field.name, rel_obj)
 
-            yield obj
+                yield obj
 
 
 class RawModelIterable(BaseIterable):
@@ -271,10 +277,12 @@ class ValuesIterable(BaseIterable):
                 *query.annotation_select,
             ]
         indexes = range(len(names))
-        async for row in compiler.results_iter(
+        row_iterator = compiler.results_iter(
             chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
-        ):
-            yield {names[i]: row[i] for i in indexes}
+        )
+        async with aclosing(row_iterator) as rows:
+            async for row in rows:
+                yield {names[i]: row[i] for i in indexes}
 
 
 class ValuesListIterable(BaseIterable):
@@ -284,12 +292,14 @@ class ValuesListIterable(BaseIterable):
         query = queryset.query
         compiler = query.get_compiler(queryset.db)
 
-        async for i in compiler.results_iter(
+        row_iterator = compiler.results_iter(
             tuple_expected=True,
             chunked_fetch=self.chunked_fetch,
             chunk_size=self.chunk_size,
-        ):
-            yield i
+        )
+        async with aclosing(row_iterator) as rows:
+            async for i in rows:
+                yield i
 
 
 class NamedValuesListIterable(ValuesListIterable):
@@ -316,10 +326,12 @@ class FlatValuesListIterable(BaseIterable):
     async def __aiter__(self):
         queryset = self.queryset
         compiler = queryset.query.get_compiler(queryset.db)
-        async for row in compiler.results_iter(
+        row_iterator = compiler.results_iter(
             chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
-        ):
-            yield row[0]
+        )
+        async with aclosing(row_iterator) as rows:
+            async for row in rows:
+                yield row[0]
 
 
 class PreventQuerySetCloning:
@@ -1230,28 +1242,29 @@ class QuerySet(AltersData):
         iterable = self._iterable_class(
             self, chunked_fetch=use_chunked_fetch, chunk_size=chunk_size
         )
-        if self._prefetch_related_lookups:
-            results = []
+        async with aclosing(iterable.__aiter__()) as iterator:
+            if self._prefetch_related_lookups:
+                results = []
 
-            async for item in iterable:
-                results.append(item)
-                if len(results) >= chunk_size:
+                async for item in iterator:
+                    results.append(item)
+                    if len(results) >= chunk_size:
+                        await aprefetch_related_objects(
+                            results, *self._prefetch_related_lookups
+                        )
+                        for result in results:
+                            yield result
+                        results.clear()
+
+                if results:
                     await aprefetch_related_objects(
                         results, *self._prefetch_related_lookups
                     )
                     for result in results:
                         yield result
-                    results.clear()
-
-            if results:
-                await aprefetch_related_objects(
-                    results, *self._prefetch_related_lookups
-                )
-                for result in results:
-                    yield result
-        else:
-            async for item in iterable:
-                yield item
+            else:
+                async for item in iterator:
+                    yield item
 
     async def _raw_delete(self, using):
         query = self.query.clone()
