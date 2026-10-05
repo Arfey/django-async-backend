@@ -144,7 +144,7 @@ class ModelIterable(BaseIterable):
             for field, related_objs in queryset._known_related_objects.items()
         ]
         peers = []
-        for row in await compiler.results_iter(results):
+        async for row in compiler.results_iter(results):
             obj = model_cls.from_db(
                 db,
                 init_list,
@@ -271,7 +271,7 @@ class ValuesIterable(BaseIterable):
                 *query.annotation_select,
             ]
         indexes = range(len(names))
-        for row in await compiler.results_iter(
+        async for row in compiler.results_iter(
             chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
         ):
             yield {names[i]: row[i] for i in indexes}
@@ -284,7 +284,7 @@ class ValuesListIterable(BaseIterable):
         query = queryset.query
         compiler = query.get_compiler(queryset.db)
 
-        for i in await compiler.results_iter(
+        async for i in compiler.results_iter(
             tuple_expected=True,
             chunked_fetch=self.chunked_fetch,
             chunk_size=self.chunk_size,
@@ -316,7 +316,7 @@ class FlatValuesListIterable(BaseIterable):
     async def __aiter__(self):
         queryset = self.queryset
         compiler = queryset.query.get_compiler(queryset.db)
-        for row in await compiler.results_iter(
+        async for row in compiler.results_iter(
             chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
         ):
             yield row[0]
@@ -1216,6 +1216,42 @@ class QuerySet(AltersData):
 
     adelete.alters_data = True
     adelete.queryset_only = True
+
+    async def aiterator(self, chunk_size=2000):
+        """
+        An asynchronous iterator over the results from applying this QuerySet
+        to the database.
+        """
+        if chunk_size <= 0:
+            raise ValueError("Chunk size must be strictly positive.")
+        use_chunked_fetch = not connections[self.db].settings_dict.get(
+            "DISABLE_SERVER_SIDE_CURSORS"
+        )
+        iterable = self._iterable_class(
+            self, chunked_fetch=use_chunked_fetch, chunk_size=chunk_size
+        )
+        if self._prefetch_related_lookups:
+            results = []
+
+            async for item in iterable:
+                results.append(item)
+                if len(results) >= chunk_size:
+                    await aprefetch_related_objects(
+                        results, *self._prefetch_related_lookups
+                    )
+                    for result in results:
+                        yield result
+                    results.clear()
+
+            if results:
+                await aprefetch_related_objects(
+                    results, *self._prefetch_related_lookups
+                )
+                for result in results:
+                    yield result
+        else:
+            async for item in iterable:
+                yield item
 
     async def _raw_delete(self, using):
         query = self.query.clone()

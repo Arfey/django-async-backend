@@ -57,6 +57,40 @@ class TestAIter(AsyncioTestCase):
         )
 
 
+class TestAIterator(AsyncioTestCase):
+    async def asyncSetUp(self):
+        for name in ("First", "Second", "Third"):
+            await TestModel(name=name).async_save()
+
+    async def test_aiterator_streams_model_instances(self):
+        queryset = TestModel.async_objects.order_by("name")
+
+        results = [obj async for obj in queryset.aiterator(chunk_size=1)]
+
+        self.assertEqual(
+            [obj.name for obj in results], ["First", "Second", "Third"]
+        )
+        self.assertIsNone(queryset._result_cache)
+
+    async def test_aiterator_streams_values(self):
+        results = [
+            row
+            async for row in TestModel.async_objects.order_by("name")
+            .values_list("name", flat=True)
+            .aiterator(chunk_size=2)
+        ]
+
+        self.assertEqual(results, ["First", "Second", "Third"])
+
+    async def test_aiterator_rejects_non_positive_chunk_size(self):
+        for chunk_size in (0, -1):
+            with self.assertRaisesMessage(
+                ValueError, "Chunk size must be strictly positive."
+            ):
+                async for _ in TestModel.async_objects.aiterator(chunk_size):
+                    pass
+
+
 class TestAIterKnownRelatedObjects(AsyncioTestCase):
     """Iterating populates the fields listed in _known_related_objects.
 
