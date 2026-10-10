@@ -27,4 +27,8 @@ INSTALLED_APPS = [
     "test_app",
 ]
 
+MIDDLEWARE = [
+    "django_async_backend.middleware.close_async_connections",
+]
+
 USE_TZ = False

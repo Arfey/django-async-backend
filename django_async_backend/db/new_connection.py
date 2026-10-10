@@ -132,9 +132,6 @@ async def async_acquire(using=DEFAULT_DB_ALIAS, allow_outside_atomic=False):
         previous = None
         conn = async_connections[using]
 
-    # Claim it up front so nested async_acquire() calls reuse it.
-    conn._task = task
-
     try:
         yield conn
     finally:

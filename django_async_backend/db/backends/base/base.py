@@ -57,8 +57,9 @@ class BaseAsyncDatabaseWrapper:
 
     queries_limit = 9000
 
-    # The asyncio task that owns this connection, claimed on first use by
-    # validate_task_sharing(). None means unowned.
+    # The asyncio task that owns this connection. Set to the creating task
+    # by async_connections.create_connection(); a wrapper built directly
+    # is claimed on first use by validate_task_sharing().
     _task = None
 
     def __init__(self, settings_dict, alias=DEFAULT_DB_ALIAS):
@@ -648,8 +649,9 @@ class BaseAsyncDatabaseWrapper:
     def validate_task_sharing(self):
         """
         Validate that the connection isn't accessed by an asyncio task other
-        than the one which first used it. Raise an exception if the
-        validation fails.
+        than the one which owns it (the task that created it, or for a
+        wrapper built directly, the first one to use it). Raise an exception
+        if the validation fails.
 
         There is no opt-out: a task that needs its own transaction must get
         its own connection via `async_new_connection()`.
@@ -667,7 +669,7 @@ class BaseAsyncDatabaseWrapper:
         if self._task is not current_task:
             raise RuntimeError(
                 "An async connection can only be used by the task that "
-                "first used it. The connection with alias '%s' is owned by "
+                "owns it. The connection with alias '%s' is owned by "
                 "another task. Either do this work in the owning task, or "
                 "wrap it in async_new_connection() to give it a separate "
                 "connection." % self.alias

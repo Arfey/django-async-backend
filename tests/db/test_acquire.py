@@ -83,26 +83,37 @@ class AsyncAcquireTests(AsyncioTransactionTestCase):
 
         self.assertEqual(await names(), ["t0", "t1", "t2"])
 
-    async def test_unclaimed_parent_connection_not_claimed_by_child(self):
-        """An unclaimed connection inherited from the parent stays unclaimed.
-
-        Otherwise the first child to use it would claim it and the parent's
-        next query would fail.
+    async def test_reuses_unused_connection_created_by_current_task(self):
+        """A connection created but never used in this task (as left by the
+        close_async_connections middleware) is still owned by it and gets
+        reused, while child tasks get their own.
         """
-        parent = async_connections[DEFAULT_DB_ALIAS]
-        # As left by the request_started signal: created, never used.
-        parent._task = None
+        seen = {}
 
-        async def writer(i):
+        async def request():
+            parent = async_connections[DEFAULT_DB_ALIAS]
+            seen["parent"] = parent
+
             async with async_acquire() as conn:
-                self.assertIsNot(conn, parent)
-                await TestModel.async_objects.acreate(name=f"u{i}")
+                seen["reused"] = conn
 
-        await asyncio.gather(*(writer(i) for i in range(2)))
+            async def writer(i):
+                async with async_acquire() as conn:
+                    seen.setdefault("children", []).append(conn)
+                    await TestModel.async_objects.acreate(name=f"u{i}")
 
-        self.assertIs(async_connections[DEFAULT_DB_ALIAS], parent)
-        self.assertIsNone(parent._task)
-        self.assertEqual(await names(), ["u0", "u1"])
+            await asyncio.gather(*(writer(i) for i in range(2)))
+            seen["names"] = await names()
+            await parent.close()
+
+        await asyncio.get_running_loop().create_task(
+            request(), context=contextvars.Context()
+        )
+
+        self.assertIs(seen["reused"], seen["parent"])
+        for conn in seen["children"]:
+            self.assertIsNot(conn, seen["parent"])
+        self.assertEqual(seen["names"], ["u0", "u1"])
 
     async def test_nested_in_child_reuses_new_connection(self):
         seen = []
@@ -138,6 +149,7 @@ class AsyncAcquireTests(AsyncioTransactionTestCase):
         self.assertEqual(await names(), ["fresh"])
 
     async def test_new_connection_closed_on_exception(self):
+        parent = async_connections[DEFAULT_DB_ALIAS]
         seen = {}
 
         async def writer():
@@ -150,7 +162,7 @@ class AsyncAcquireTests(AsyncioTransactionTestCase):
             await asyncio.create_task(writer())
 
         self.assertIsNone(seen["conn"].connection)
-        self.assertIsNotNone(async_connections[DEFAULT_DB_ALIAS])
+        self.assertIs(async_connections[DEFAULT_DB_ALIAS], parent)
 
     async def test_refuses_to_escape_parent_transaction(self):
         """Forking off a connection inside the parent's atomic block would

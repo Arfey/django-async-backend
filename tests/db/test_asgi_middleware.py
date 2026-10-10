@@ -23,8 +23,12 @@ async def index(request):
 urlpatterns = [path("", index)]
 
 
-@override_settings(ROOT_URLCONF=__name__, ALLOWED_HOSTS=["testserver"])
-class ASGIRequestSignalTaskOwnershipTest(
+@override_settings(
+    ROOT_URLCONF=__name__,
+    ALLOWED_HOSTS=["testserver"],
+    MIDDLEWARE=["django_async_backend.middleware.close_async_connections"],
+)
+class ASGIMiddlewareTaskOwnershipTest(
     # Not AsyncioTestCase: that wraps each test in an atomic block per alias,
     # and this test closes and drops those connections so the request opens
     # its own, which leaves _close_transaction() with no atomic block to exit.
@@ -65,6 +69,6 @@ class ASGIRequestSignalTaskOwnershipTest(
         )
         self.assertEqual(body["body"], b"ok")
 
-        # request_finished is emitted after the body; it must not blow up
-        # either.
+        # The middleware's post-response close runs after the body; it must
+        # not blow up either.
         await communicator.wait(timeout=5)
