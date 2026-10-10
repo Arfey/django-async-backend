@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 from functools import wraps
 from inspect import iscoroutinefunction
 
+from django.db import DEFAULT_DB_ALIAS
+
 from django_async_backend.db.utils import async_connections
 
 
@@ -86,3 +88,58 @@ def async_new_connection(arg=None):
 async def _run_coroutine(coro):
     async with _new_connection_scope():
         return await coro
+
+
+@asynccontextmanager
+async def async_acquire(using=DEFAULT_DB_ALIAS, allow_outside_atomic=False):
+    """
+    Yield a connection for ``using``, opening one only when needed.
+
+    Reuses the current task's connection. If there is none, or it belongs
+    to another task (e.g. inside ``asyncio.gather()``), opens a new one and
+    closes it on exit::
+
+        async with async_acquire() as conn:
+            await Book.async_objects.acreate(title="Dune")
+
+    Raises if the new connection would escape the parent's atomic block,
+    unless ``allow_outside_atomic=True``.
+    """
+    task = asyncio.current_task()
+    initialized = hasattr(async_connections._connections, using)
+
+    if initialized:
+        previous = async_connections[using]
+
+        if previous._task is task:
+            yield previous
+            return
+
+        # A new connection runs in its own transaction and can't see the
+        # parent's uncommitted data. That's rarely intended, so require an
+        # explicit opt-in.
+        if previous.in_atomic_block and not allow_outside_atomic:
+            raise RuntimeError(
+                "async_acquire() would open a new connection for alias "
+                "'%s' outside the parent task's transaction, so it couldn't "
+                "see that transaction's uncommitted data. If that's "
+                "intended, pass allow_outside_atomic=True." % using
+            )
+
+        conn = async_connections.create_connection(using)
+        async_connections[using] = conn
+    else:
+        previous = None
+        conn = async_connections[using]
+
+    # Claim it up front so nested async_acquire() calls reuse it.
+    conn._task = task
+
+    try:
+        yield conn
+    finally:
+        if previous is None:
+            del async_connections[using]
+        else:
+            async_connections[using] = previous
+        await conn.close()

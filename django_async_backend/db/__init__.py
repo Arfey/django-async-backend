@@ -1,7 +1,11 @@
-from django_async_backend.db.new_connection import async_new_connection
+from django_async_backend.db.new_connection import (
+    async_acquire,
+    async_new_connection,
+)
 from django_async_backend.db.utils import async_connections
 
 __all__ = [
+    "async_acquire",
     "async_connections",
     "async_new_connection",
     "close_old_async_connections",
