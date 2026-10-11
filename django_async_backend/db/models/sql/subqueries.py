@@ -138,3 +138,12 @@ class InsertQuery(Query):
         self.fields = fields
         self.objs = objs
         self.raw = raw
+
+
+class AggregateQuery(Query):
+
+    compiler = "SQLAggregateCompiler"
+
+    def __init__(self, model, inner_query):
+        self.inner_query = inner_query
+        super().__init__(model)

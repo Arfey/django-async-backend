@@ -8,9 +8,42 @@
 
 Async Django ORM and PostgreSQL database backend.
 
+Django's `a`-prefixed ORM methods (`aget`, `acreate`, …) are thin
+`sync_to_async` wrappers: the query still runs on a threadpool, on a
+synchronous connection. **django-async-backend** replaces the database layer
+itself, so queries are issued on a real asyncio connection through
+[psycopg](https://www.psycopg.org/psycopg3/) 3, with async transactions, async
+cursors and optional connection pooling — no thread emulation.
+
+The project is **production ready**: the API is stable, and each release is
+pinned to the Django feature release it was generated against, so upgrades stay
+predictable.
+
 📖 **[Read the documentation](https://django-async-backend.readthedocs.io/en/latest/)**
 
 ---
+
+## Compatibility
+
+The package tracks Django's major and minor version, so the release you install
+is pinned to the Django feature release it was generated against.
+
+| django-async-backend | Django  |
+| -------------------- | ------- |
+| `6.1.3`              | `6.1.0` |
+
+Part of the ORM layer is generated from Django's own source, so a Django feature
+release gets a matching django-async-backend feature release rather than a
+loosened version range. Patch releases within a line are ordinary bugfix
+releases and are safe to upgrade to.
+
+> [!IMPORTANT]
+> **Run this under ASGI.** django-async-backend is developed for ASGI, and that
+> is the only mode it is supported in. Under WSGI — including the Django
+> development server — it behaves inconsistently, because WSGI creates a new
+> event loop for each request and the async connection state cannot be managed
+> reliably across them. Connection pooling in particular is not supported
+> there.
 
 ## Installation
 
@@ -142,10 +175,10 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 | `Model.objects.union`               | ✅        |          |
 | `Model.objects.intersection`        | ✅        |          |
 | `Model.objects.difference`          | ✅        |          |
-| `Model.objects.select_related`      | ❌        |          |
+| `Model.objects.select_related`      | ✅        |          |
 | `Model.objects.select_for_update`   | ✅        |          |
 | `Model.objects.prefetch_related`    | ✅        | Includes `GenericForeignKey` and `GenericRelation` |
-| `Model.objects.aaggregate`          | ❌        |          |
+| `Model.objects.aaggregate`          | ✅        |          |
 | `Model.objects.annotate`            | ✅        |          |
 | `Model.objects.order_by`            | ✅        |          |
 | `Model.objects.distinct`            | ✅        |          |
@@ -185,11 +218,14 @@ asynchronously. For custom prefetches, use
 
 ### Model methods
 
-| methods                  | supported | comments     |
-| ------------------------ | --------- | ------------ |
-| `Model.asave`            | ✅        | `async_save`   |
-| `Model.adelete`          | ✅        | `async_delete` |
-| `Model.arefresh_from_db` | ❌        |              |
+Django's own `a*` methods keep their existing behavior; the genuinely async
+equivalents are the names in the comments column.
+
+| methods                  | supported | comments                 |
+| ------------------------ | --------- | ------------------------ |
+| `Model.asave`            | ✅        | `async_save`             |
+| `Model.adelete`          | ✅        | `async_delete`           |
+| `Model.arefresh_from_db` | ✅        | `async_refresh_from_db`  |
 
 ### RawQuerySet
 

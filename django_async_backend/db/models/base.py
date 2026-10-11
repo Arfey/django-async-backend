@@ -91,6 +91,7 @@ class AsyncModelMixin:
             manager.model = cls
             cls._async_objects_cache = manager
         return manager
+
     @classproperty
     def _async_base_manager(cls):
         manager = cls.__dict__.get("_async_base_manager_cache")
@@ -101,6 +102,29 @@ class AsyncModelMixin:
             manager.auto_created = True
             cls._async_base_manager_cache = manager
         return manager
+
+    async def async_refresh_from_db(
+        self, using=None, fields=None, from_queryset=None
+    ):
+        for name, value in (
+            ("fields", fields),
+            ("from_queryset", from_queryset),
+        ):
+            if value is not None:
+                raise NotImplementedError(
+                    "async_refresh_from_db() always reloads every "
+                    f"concrete field; '{name}' is not supported."
+                )
+
+        manager = self.__class__._async_base_manager.db_manager(
+            using, hints={"instance": self}
+        )
+        db_instance = await manager.filter(pk=self._async_get_pk_val()).aget()
+        for field in self._meta.concrete_fields:
+            setattr(self, field.attname, getattr(db_instance, field.attname))
+        self._state.fields_cache = {}
+        self._prefetched_objects_cache = {}
+        self._state.db = db_instance._state.db
 
     def _async_get_pk_val(self, meta=None):
         meta = meta or self._meta
