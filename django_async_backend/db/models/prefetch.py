@@ -13,14 +13,18 @@ callback that performs the cache bookkeeping the sync code did while
 iterating. ``prefetch_one_level()`` then evaluates the queryset with ``async
 for`` and runs that callback.
 
-Relations whose prefetch cannot be expressed this way (generic foreign keys,
-generic relations, custom descriptors) raise ``NotSupportedError``.
+Generic foreign keys resolve ContentTypes asynchronously and evaluate one
+queryset per target model. Generic relations warm Django's ContentType cache
+before constructing the related manager. Custom descriptors remain unsupported.
 """
 
 import copy
+from collections import defaultdict
 
+from django.apps import apps
 from django.core import exceptions
 from django.db import NotSupportedError
+from django.db.models import Q
 from django.db.models.expressions import ColPairs
 from django.db.models.fields.related_descriptors import (
     ForwardManyToOneDescriptor,
@@ -28,8 +32,42 @@ from django.db.models.fields.related_descriptors import (
     _filter_prefetch_queryset,
 )
 from django.db.models.fields.tuple_lookups import TupleIn
+from django.db.models.query import get_prefetcher as django_get_prefetcher
+
+from django_async_backend.utils.contenttypes import (
+    aget_for_id,
+    aget_for_model,
+)
 
 RELATED_DESCRIPTORS_MODULE = "django.db.models.fields.related_descriptors"
+CONTENTTYPES_MODULE = "django.contrib.contenttypes.fields"
+
+
+async def get_prefetcher(instance, through_attr, to_attr):
+    """Django's discovery with async preparation for generic managers."""
+    await _prepare_generic_relation(instance, through_attr)
+    return django_get_prefetcher(instance, through_attr, to_attr)
+
+
+async def _prepare_generic_relation(instance, through_attr):
+    """Resolve ContentType before Django constructs a generic manager.
+
+    Its synchronous constructor then uses the shared ContentType cache.
+    Import lazily so prefetching doesn't require the contenttypes app.
+    """
+    if not apps.is_installed("django.contrib.contenttypes"):
+        return
+    from django.contrib.contenttypes.fields import (
+        ReverseGenericManyToOneDescriptor,
+    )
+
+    descriptor = getattr(type(instance), through_attr, None)
+    if isinstance(descriptor, ReverseGenericManyToOneDescriptor):
+        await aget_for_model(
+            type(instance),
+            using=instance._state.db,
+            for_concrete_model=descriptor.rel.field.for_concrete_model,
+        )
 
 
 def _async_queryset(model, using=None, hints=None):
@@ -223,7 +261,129 @@ def _many_to_many(manager, instances, querysets):
     return (*manager.get_prefetch_querysets(instances, [queryset]), _noop)
 
 
-def _get_prefetch_querysets(prefetcher, instances, querysets):
+async def _generic_foreign_key(descriptor, instances, querysets):
+    """Mirror GenericForeignKeyDescriptor without synchronous queries."""
+    field = descriptor.field
+    custom_querysets = {}
+    for queryset in querysets or ():
+        ct = await aget_for_model(
+            queryset.model,
+            using=queryset.db,
+            for_concrete_model=field.for_concrete_model,
+        )
+        if ct.pk in custom_querysets:
+            raise ValueError(
+                "Only one queryset is allowed for each content type."
+            )
+        custom_querysets[ct.pk] = queryset
+
+    ct_attname = field.model._meta.get_field(field.ct_field).attname
+    foreign_keys = defaultdict(set)
+    instance_by_type = {}
+    for instance in instances:
+        ct_id = getattr(instance, ct_attname)
+        fk = getattr(instance, field.fk_field)
+        if ct_id is not None and fk is not None:
+            foreign_keys[ct_id].add(fk)
+            instance_by_type[ct_id] = instance
+
+    models_by_type = {}
+    related_querysets = []
+    for ct_id, fkeys in foreign_keys.items():
+        instance = instance_by_type[ct_id]
+        ct = await aget_for_id(ct_id, using=instance._state.db)
+        models_by_type[ct_id] = ct.model_class()
+        queryset = custom_querysets.get(ct_id)
+        if queryset is None:
+            queryset = _async_queryset(
+                models_by_type[ct_id], using=instance._state.db
+            )
+        related_querysets.append(
+            queryset.filter(pk__in=fkeys).fetch_mode(
+                instances[0]._state.fetch_mode
+            )
+        )
+
+    async def related_objects():
+        # Like Django, let each target queryset perform its own nested
+        # prefetches. Different models may have different nested lookups.
+        for queryset in related_querysets:
+            async for obj in queryset:
+                yield obj
+
+    def instance_attr(obj):
+        ct_id = getattr(obj, ct_attname)
+        fk = getattr(obj, field.fk_field)
+        if ct_id is None or fk is None:
+            return None
+        return str(fk), models_by_type[ct_id]
+
+    return (
+        related_objects(),
+        lambda obj: (obj._meta.pk.value_to_string(obj), obj.__class__),
+        instance_attr,
+        True,
+        field.name,
+        False,
+        _noop,
+    )
+
+
+async def _generic_relation(manager, instances, querysets):
+    """Mirror GenericRelatedObjectManager.get_prefetch_querysets()."""
+    queryset = _single_queryset(querysets)
+    if queryset is None:
+        queryset = _async_queryset(
+            manager.model, using=manager._db, hints=manager._hints
+        )
+    queryset._add_hints(instance=instances[0])
+    queryset = queryset.using(queryset._db or manager._db)
+
+    content_types = {}
+    groups = defaultdict(set)
+    for instance in instances:
+        model = type(instance)
+        if model not in content_types:
+            content_types[model] = await aget_for_model(
+                model,
+                using=manager.instance._state.db,
+                for_concrete_model=manager.get_content_type.keywords[
+                    "for_concrete_model"
+                ],
+            )
+        groups[content_types[model].pk].add(instance.pk)
+
+    query = Q.create(
+        [
+            Q.create(
+                [
+                    (f"{manager.content_type_field_name}__pk", ct_id),
+                    (f"{manager.object_id_field_name}__in", pks),
+                ]
+            )
+            for ct_id, pks in groups.items()
+        ],
+        connector=Q.OR,
+    )
+    object_id_converter = instances[0]._meta.pk.to_python
+    ct_attname = manager.model._meta.get_field(
+        manager.content_type_field_name
+    ).attname
+    return (
+        queryset.filter(query),
+        lambda obj: (
+            object_id_converter(getattr(obj, manager.object_id_field_name)),
+            getattr(obj, ct_attname),
+        ),
+        lambda obj: (obj.pk, content_types[type(obj)].pk),
+        False,
+        manager.prefetch_cache_name,
+        False,
+        _noop,
+    )
+
+
+async def _get_prefetch_querysets(prefetcher, instances, querysets):
     """Build the related queryset for ``prefetcher`` without evaluating it.
 
     Return Django's ``get_prefetch_querysets()`` six-tuple plus a
@@ -237,13 +397,21 @@ def _get_prefetch_querysets(prefetcher, instances, querysets):
         return _reverse_one_to_one(prefetcher, instances, querysets)
 
     # Related managers are built by factories in related_descriptors, so the
-    # generated classes are the only reliable marker. Generic relation
-    # managers come from django.contrib.contenttypes.fields instead, and are
-    # rejected below together with GenericForeignKey.
+    # generated classes are the only reliable marker.
     if type(prefetcher).__module__ == RELATED_DESCRIPTORS_MODULE:
         if hasattr(prefetcher, "through"):
             return _many_to_many(prefetcher, instances, querysets)
         return _reverse_many_to_one(prefetcher, instances, querysets)
+
+    if apps.is_installed("django.contrib.contenttypes"):
+        from django.contrib.contenttypes.fields import (
+            GenericForeignKeyDescriptor,
+        )
+
+        if isinstance(prefetcher, GenericForeignKeyDescriptor):
+            return await _generic_foreign_key(prefetcher, instances, querysets)
+        if type(prefetcher).__module__ == CONTENTTYPES_MODULE:
+            return await _generic_relation(prefetcher, instances, querysets)
 
     return _unsupported(prefetcher)
 
@@ -266,7 +434,7 @@ async def prefetch_one_level(instances, prefetcher, lookup, level):
         cache_name,
         is_descriptor,
         post_evaluate,
-    ) = _get_prefetch_querysets(
+    ) = await _get_prefetch_querysets(
         prefetcher, instances, lookup.get_current_querysets(level)
     )
     # We have to handle the possibility that the QuerySet we just got back

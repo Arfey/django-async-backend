@@ -7,6 +7,7 @@ module:
     - "from django_async_backend.db.transaction import async_atomic"
     - "from django_async_backend.db.transaction import async_mark_for_rollback_on_error"
     - "from django_async_backend.db.models.prefetch import prefetch_one_level"
+    - "from django_async_backend.db.models.prefetch import get_prefetcher"
 
   import_aliases:
     # The async Collector lives in django_async_backend.db.models.deletion,
@@ -21,6 +22,12 @@ module:
         - func:
             name: prefetch_one_level
           to_await: true
+        - func:
+            name: get_prefetcher
+          to_await: true
+
+    get_prefetcher:
+      remove: true
 
     # The async prefetch_one_level() lives in
     # django_async_backend.db.models.prefetch, because it has to build and
@@ -140,8 +147,8 @@ module:
         prefetch_related:
           add_raw_top:
             - |
-              if any(
-                  lookup is not None and not isinstance(lookup, (str, Prefetch))
+              if lookups != (None,) and any(
+                  not isinstance(lookup, (str, Prefetch))
                   for lookup in lookups
               ):
                   raise TypeError(

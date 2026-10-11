@@ -3,7 +3,7 @@ import warnings
 from collections import deque
 from unittest import mock
 
-from django.core.exceptions import SynchronousOnlyOperation
+from django.contrib.contenttypes.models import ContentType
 from django.db import (
     DEFAULT_DB_ALIAS,
     NotSupportedError,
@@ -15,11 +15,14 @@ from django.db.models.fetch_modes import (
 )
 from test_app.models import (
     ChildModel,
+    GenericChildModel,
     GenericFkModel,
     GenericRelationModel,
     M2MOwnerModel,
     M2MTagModel,
     ParentModel,
+    SaveModel,
+    SaveProxyModel,
     SelectRelatedAuthorModel,
     SelectRelatedBookModel,
     SelectRelatedProfileModel,
@@ -35,6 +38,7 @@ from django_async_backend.test import (
     AsyncCaptureQueriesContext,
     AsyncioTestCase,
 )
+from django_async_backend.utils.contenttypes import aget_for_model
 
 
 class PrefetchRelatedTestCase(AsyncioTestCase):
@@ -126,6 +130,22 @@ class TestPrefetchRelatedQueryConstruction(PrefetchRelatedTestCase):
     async def test_prefetch_rejects_sync_queryset(self):
         with self.assertRaises(ValueError):
             Prefetch("books", queryset=SelectRelatedBookModel.objects.all())
+
+    async def test_rejects_invalid_lookup_types_eagerly(self):
+        for lookup in (42, object(), ["books"]):
+            with self.subTest(lookup=lookup):
+                with self.assertRaisesRegex(TypeError, "lookups must be"):
+                    SelectRelatedAuthorModel.async_objects.prefetch_related(
+                        lookup
+                    )
+                with self.assertRaisesRegex(TypeError, "must be strings"):
+                    Prefetch(lookup)
+
+    async def test_none_cannot_be_mixed_with_other_lookups(self):
+        with self.assertRaisesRegex(TypeError, "lookups must be"):
+            SelectRelatedAuthorModel.async_objects.prefetch_related(
+                "books", None
+            )
 
     async def test_rejects_django_prefetch_with_clear_error(self):
         msg = (
@@ -943,30 +963,269 @@ class TestPrefetchRelatedMultiTableInheritance(PrefetchRelatedTestCase):
         self.assertEqual(len(ctx.captured_queries), 2)
 
 
-class TestPrefetchRelatedUnsupported(PrefetchRelatedTestCase):
+class TestPrefetchRelatedGenericRelations(PrefetchRelatedTestCase):
 
-    async def test_generic_foreign_key_is_not_supported(self):
-        await GenericFkModel.async_objects.acreate(name="Generic")
-        queryset = GenericFkModel.async_objects.prefetch_related(
-            "content_object"
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        ContentType.objects.clear_cache()
+
+    async def asyncTearDown(self):
+        ContentType.objects.clear_cache()
+
+    async def generic_fk(self, target, **kwargs):
+        ct = await aget_for_model(type(target), using=target._state.db)
+        return await GenericFkModel.async_objects.using(
+            target._state.db
+        ).acreate(
+            name="Generic",
+            content_type_id=ct.pk,
+            object_id=target.pk,
+            **kwargs,
         )
 
-        with self.assertRaises(NotSupportedError) as ctx:
-            await self.evaluate(queryset)
+    async def generic_child(self, target, name="Child"):
+        ct = await aget_for_model(type(target), using=target._state.db)
+        return await GenericChildModel.async_objects.using(
+            target._state.db
+        ).acreate(name=name, content_type_id=ct.pk, object_id=target.pk)
 
-        self.assertIn("content_object", str(ctx.exception))
+    async def test_generic_foreign_key_groups_models_with_overlapping_pks(
+        self,
+    ):
+        author = await SelectRelatedAuthorModel.async_objects.acreate(
+            pk=100000, name="Generic author"
+        )
+        publisher = await SelectRelatedPublisherModel.async_objects.acreate(
+            pk=author.pk, name="Generic publisher"
+        )
+        for target in (author, publisher, author):
+            await self.generic_fk(target)
+        ContentType.objects.clear_cache()
 
-    async def test_generic_relation_is_not_supported(self):
-        """A GenericRelation never even reaches the prefetch dispatch: simply
-        building its related manager looks the ContentType up synchronously.
-        """
-        await GenericRelationModel.async_objects.acreate(name="Generic")
-        queryset = GenericRelationModel.async_objects.prefetch_related(
-            "children"
+        async with self.capture() as ctx:
+            objects = await self.evaluate(
+                GenericFkModel.async_objects.order_by("pk").prefetch_related(
+                    "content_object"
+                )
+            )
+            targets = [obj.content_object for obj in objects]
+
+        self.assertEqual(targets, [author, publisher, author])
+        self.assertIs(targets[0], targets[2])
+        # Primary query, two ContentTypes, and one query per target model.
+        self.assertEqual(len(ctx.captured_queries), 5)
+
+        async with self.capture() as ctx:
+            await aprefetch_related_objects(objects, "content_object")
+        self.assertEqual(len(ctx.captured_queries), 0)
+
+    async def test_generic_foreign_key_null_and_missing_targets(self):
+        ct = await aget_for_model(SelectRelatedAuthorModel)
+        for ct_id, object_id in (
+            (None, None),
+            (None, self.author1.pk),
+            (ct.pk, None),
+            (ct.pk, 999999),
+        ):
+            await GenericFkModel.async_objects.acreate(
+                name="Empty", content_type_id=ct_id, object_id=object_id
+            )
+
+        async with self.capture() as ctx:
+            objects = await self.evaluate(
+                GenericFkModel.async_objects.prefetch_related("content_object")
+            )
+            self.assertEqual(
+                [obj.content_object for obj in objects], [None] * 4
+            )
+        self.assertEqual(len(ctx.captured_queries), 2)
+
+    async def test_generic_foreign_key_custom_queryset_and_to_attr(self):
+        await self.generic_fk(self.author1)
+        await self.generic_fk(self.publisher1)
+        objects = await self.evaluate(
+            GenericFkModel.async_objects.order_by("pk").prefetch_related(
+                Prefetch(
+                    "content_object",
+                    queryset=SelectRelatedAuthorModel.async_objects.none(),
+                    to_attr="target",
+                )
+            )
         )
 
-        with self.assertRaises(SynchronousOnlyOperation):
-            await self.evaluate(queryset)
+        self.assertIsNone(objects[0].target)
+        self.assertEqual(objects[1].target, self.publisher1)
+        field = GenericFkModel._meta.get_field("content_object")
+        self.assertFalse(field.is_cached(objects[0]))
+
+    async def test_generic_foreign_key_nested_prefetch_and_fetch_mode(self):
+        await self.generic_fk(self.book1)
+        ContentType.objects.clear_cache()
+        books = SelectRelatedBookModel.async_objects.prefetch_related("author")
+        objects = await self.evaluate(
+            GenericFkModel.async_objects.fetch_mode(
+                FETCH_RAISE
+            ).prefetch_related(
+                Prefetch(
+                    "content_object",
+                    queryset=books,
+                )
+            )
+        )
+
+        async with self.capture() as ctx:
+            self.assertEqual(objects[0].content_object.author, self.author1)
+            self.assertEqual(
+                objects[0].content_object._state.fetch_mode, FETCH_RAISE
+            )
+        self.assertEqual(len(ctx.captured_queries), 0)
+
+    async def test_generic_foreign_key_nested_lookup(self):
+        await self.generic_fk(self.book1)
+        objects = await self.evaluate(
+            GenericFkModel.async_objects.prefetch_related(
+                "content_object__publisher"
+            )
+        )
+        self.assertEqual(objects[0].content_object.publisher, self.publisher1)
+
+    async def test_generic_foreign_key_proxy_targets(self):
+        proxy = await SaveProxyModel.async_objects.acreate(name="Proxy")
+        field = GenericFkModel._meta.get_field("content_object")
+        for for_concrete_model, expected_model in (
+            (True, SaveModel),
+            (False, SaveProxyModel),
+        ):
+            with self.subTest(for_concrete_model=for_concrete_model):
+                ct = await aget_for_model(
+                    SaveProxyModel, for_concrete_model=for_concrete_model
+                )
+                obj = await GenericFkModel.async_objects.acreate(
+                    name="Proxy reference",
+                    content_type_id=ct.pk,
+                    object_id=proxy.pk,
+                )
+                ContentType.objects.clear_cache()
+                with mock.patch.object(
+                    field, "for_concrete_model", for_concrete_model
+                ):
+                    await aprefetch_related_objects([obj], "content_object")
+                    self.assertIs(type(obj.content_object), expected_model)
+                    self.assertEqual(obj.content_object.pk, proxy.pk)
+
+    async def test_generic_foreign_key_uses_instance_database(self):
+        author = await SelectRelatedAuthorModel.async_objects.using(
+            "other"
+        ).acreate(name="Other")
+        await self.generic_fk(author)
+        ContentType.objects.clear_cache()
+
+        async with self.capture() as default_ctx, self.capture("other") as ctx:
+            objects = await self.evaluate(
+                GenericFkModel.async_objects.using("other").prefetch_related(
+                    "content_object"
+                )
+            )
+            self.assertEqual(objects[0].content_object, author)
+        self.assertEqual(len(default_ctx.captured_queries), 0)
+        self.assertEqual(len(ctx.captured_queries), 3)
+
+    async def test_generic_relation_with_cold_content_type_cache(self):
+        parent = await GenericRelationModel.async_objects.acreate(
+            name="Parent"
+        )
+        empty = await GenericRelationModel.async_objects.acreate(name="Empty")
+        child = await self.generic_child(parent)
+        # This unrelated child has the same object ID and a different type.
+        other_ct = await aget_for_model(SelectRelatedAuthorModel)
+        await GenericChildModel.async_objects.acreate(
+            name="Unrelated", content_type_id=other_ct.pk, object_id=parent.pk
+        )
+        ContentType.objects.clear_cache()
+
+        async with self.capture() as ctx:
+            parents = await self.evaluate(
+                GenericRelationModel.async_objects.order_by(
+                    "pk"
+                ).prefetch_related("children")
+            )
+            self.assertEqual(list(parents[0].children.all()), [child])
+            self.assertEqual(list(parents[1].children.all()), [])
+            self.assertEqual(parents[1], empty)
+        self.assertEqual(len(ctx.captured_queries), 3)
+
+        async with self.capture() as ctx:
+            await aprefetch_related_objects(parents, "children")
+            self.assertEqual(list(parents[0].children.all()), [child])
+        self.assertEqual(len(ctx.captured_queries), 0)
+
+    async def test_generic_relation_custom_queryset_and_to_attr(self):
+        parent = await GenericRelationModel.async_objects.acreate(
+            name="Parent"
+        )
+        child = await self.generic_child(parent, name="Selected")
+        await self.generic_child(parent, name="Excluded")
+        ContentType.objects.clear_cache()
+
+        parents = await self.evaluate(
+            GenericRelationModel.async_objects.prefetch_related(
+                Prefetch(
+                    "children",
+                    queryset=GenericChildModel.async_objects.filter(
+                        name="Selected"
+                    ),
+                    to_attr="selected_children",
+                )
+            )
+        )
+        self.assertEqual(parents[0].selected_children, [child])
+        self.assertNotIn("children", parents[0]._prefetched_objects_cache)
+
+    async def test_generic_relation_custom_queryset_nested_prefetch(self):
+        parent = await GenericRelationModel.async_objects.acreate(
+            name="Parent"
+        )
+        await self.generic_child(parent, name="A")
+        await self.generic_child(parent, name="B")
+        ContentType.objects.clear_cache()
+
+        parents = await self.evaluate(
+            GenericRelationModel.async_objects.prefetch_related(
+                Prefetch(
+                    "children",
+                    queryset=GenericChildModel.async_objects.order_by(
+                        "-name"
+                    ).prefetch_related("content_object"),
+                )
+            )
+        )
+        async with self.capture() as ctx:
+            children = list(parents[0].children.all())
+            self.assertEqual([child.name for child in children], ["B", "A"])
+            self.assertEqual(
+                [child.content_object for child in children], [parent, parent]
+            )
+        self.assertEqual(len(ctx.captured_queries), 0)
+
+    async def test_generic_relation_uses_instance_database(self):
+        parent = await GenericRelationModel.async_objects.using(
+            "other"
+        ).acreate(name="Other")
+        child = await self.generic_child(parent)
+        ContentType.objects.clear_cache()
+
+        async with self.capture() as default_ctx, self.capture("other") as ctx:
+            parents = await self.evaluate(
+                GenericRelationModel.async_objects.using(
+                    "other"
+                ).prefetch_related("children")
+            )
+            self.assertEqual(list(parents[0].children.all()), [child])
+        self.assertEqual(len(default_ctx.captured_queries), 0)
+        self.assertEqual(len(ctx.captured_queries), 3)
+
+
+class TestPrefetchRelatedInvalidLookups(PrefetchRelatedTestCase):
 
     async def test_unknown_lookup_is_rejected(self):
         queryset = SelectRelatedBookModel.async_objects.prefetch_related(

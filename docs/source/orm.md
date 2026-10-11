@@ -183,7 +183,7 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 | `Model.objects.difference`          | ✅        |          |
 | `Model.objects.select_related`      | ❌        |          |
 | `Model.objects.select_for_update`   | ✅        |          |
-| `Model.objects.prefetch_related`    | ⚠️        | `GenericForeignKey` and `GenericRelation` are not supported |
+| `Model.objects.prefetch_related`    | ✅        | Includes `GenericForeignKey` and `GenericRelation` |
 | `Model.objects.aaggregate`          | ❌        |          |
 | `Model.objects.annotate`            | ✅        |          |
 | `Model.objects.order_by`            | ✅        |          |
@@ -201,6 +201,11 @@ Legend: ✅ supported · ❌ not supported · ⚠️ supported with caveats
 | `Model.objects.datetimes`           | ✅        |          |
 | `Model.objects.alias`               | ✅        |          |
 | `Model.objects.aiterator`           | ❌        |          |
+
+`GenericForeignKey` prefetches run one target query per content type,
+sequentially on the task's connection. ContentType cache misses are resolved
+asynchronously. For custom prefetches, use
+`django_async_backend.db.models.query.Prefetch` with an async queryset.
 
 ### Dunder methods
 
