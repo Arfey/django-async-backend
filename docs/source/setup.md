@@ -74,7 +74,10 @@ async connection — and with [pooling](connections.md#connection-pooling)
 enabled the pool is eventually exhausted.
 ```
 
-On startup the app raises `ImproperlyConfigured` if the middleware is missing
-from `MIDDLEWARE`. If you release async connections some other way, set
-`ASYNC_BACKEND_DISABLE_MIDDLEWARE_CHECK = True` in `settings.py` to turn the
-check off.
+If the middleware is missing from `MIDDLEWARE`, Django's system checks report
+warning `django_async_backend.W001`. If you release async connections some
+other way, or don't run under ASGI, silence it:
+
+```python
+SILENCED_SYSTEM_CHECKS = ["django_async_backend.W001"]
+```
