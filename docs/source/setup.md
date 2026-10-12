@@ -58,7 +58,8 @@ INSTALLED_APPS = [
 ### Middleware
 
 Finally, add `close_async_connections` to `MIDDLEWARE` so async connections are
-released at the end of each request:
+released at the end of each request (for a `StreamingHttpResponse` with an async
+body, after the body has been sent):
 
 ```python
 MIDDLEWARE = [
@@ -72,6 +73,14 @@ This step is not optional under ASGI. Django's `request_finished` signal only
 closes *sync* connections, so without this middleware every request leaks its
 async connection — and with [pooling](connections.md#connection-pooling)
 enabled the pool is eventually exhausted.
+```
+
+```{note}
+Why a middleware and not a `request_finished` receiver? An async connection
+belongs to the task that created it and can only be used from that task.
+Django runs async signal receivers concurrently, each in its own subtask (via
+`asyncio.TaskGroup`), so a receiver can't use the request's connection. The
+middleware runs in the request's own task, so it can close it.
 ```
 
 On startup the app emits a warning if the middleware is missing from
