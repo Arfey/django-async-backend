@@ -107,7 +107,7 @@ MIDDLEWARE = [
 :::{tab-item} ORM
 ```python
 from django.db import models
-from django_async_backend.db import async_connections
+from django_async_backend.db import async_acquire
 from django_async_backend.db.models.base import AsyncModelMixin
 from django_async_backend.db.transaction import async_atomic
 
@@ -121,30 +121,29 @@ async def notify(book_id: int) -> None:
 
 
 async def main() -> None:
-    connection = async_connections["default"]
+    async with async_acquire() as connection:
+        async with async_atomic():
+            book = await Book.async_objects.acreate(name="Django")
 
-    async with async_atomic():
-        book = await Book.async_objects.acreate(name="Django")
+            # async callbacks are supported; runs only if the transaction commits
+            await connection.on_commit(lambda: notify(book.pk))
 
-        # async callbacks are supported; runs only if the transaction commits
-        await connection.on_commit(lambda: notify(book.pk))
+            book.name = "Django Async"
+            await book.async_save(update_fields=["name"])
 
-        book.name = "Django Async"
-        await book.async_save(update_fields=["name"])
+            async with async_atomic():  # savepoint
+                await Book.async_objects.filter(name="draft").adelete()
 
-        async with async_atomic():  # savepoint
-            await Book.async_objects.filter(name="draft").adelete()
+        print(await Book.async_objects.acount())
 
-    print(await Book.async_objects.acount())
-
-    async for row in Book.async_objects.order_by("name"):
-        print(row.pk, row.name)
+        async for row in Book.async_objects.order_by("name"):
+            print(row.pk, row.name)
 ```
 :::
 
 :::{tab-item} Cursor
 ```python
-from django_async_backend.db import async_connections
+from django_async_backend.db import async_acquire
 from django_async_backend.db.transaction import async_atomic
 
 
@@ -153,31 +152,30 @@ async def notify(book_id: int) -> None:
 
 
 async def main() -> None:
-    connection = async_connections["default"]
+    async with async_acquire() as connection:
+        async with async_atomic():
+            async with await connection.cursor() as cursor:
+                await cursor.execute(
+                    "INSERT INTO app_book (name) VALUES (%s) RETURNING id",
+                    ["Django"],
+                )
+                (book_id,) = await cursor.fetchone()
 
-    async with async_atomic():
+                # async callbacks are supported; runs only if the transaction commits
+                await connection.on_commit(lambda: notify(book_id))
+
+                await cursor.executemany(
+                    "INSERT INTO app_book (name) VALUES (%s)",
+                    [["a"], ["b"]],
+                )
+
         async with await connection.cursor() as cursor:
-            await cursor.execute(
-                "INSERT INTO app_book (name) VALUES (%s) RETURNING id",
-                ["Django"],
-            )
-            (book_id,) = await cursor.fetchone()
+            await cursor.execute("SELECT id, name FROM app_book ORDER BY name")
 
-            # async callbacks are supported; runs only if the transaction commits
-            await connection.on_commit(lambda: notify(book_id))
+            print(cursor.rowcount)
 
-            await cursor.executemany(
-                "INSERT INTO app_book (name) VALUES (%s)",
-                [["a"], ["b"]],
-            )
-
-    async with await connection.cursor() as cursor:
-        await cursor.execute("SELECT id, name FROM app_book ORDER BY name")
-
-        print(cursor.rowcount)
-
-        async for row in cursor:
-            print(row)
+            async for row in cursor:
+                print(row)
 ```
 :::
 

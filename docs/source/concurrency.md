@@ -60,6 +60,25 @@ whole thing costs about as long as the slowest query rather than the sum.
 Without `async_new_connection` all three would reach for the calling task's
 connection, and `gather()` would reject them with `RuntimeError`.
 
+If the same code also runs outside a fan-out, use
+[`async_acquire()`](connections.md#acquiring-a-connection) instead. It reuses
+the current task's connection when there is one, and opens a new one only
+inside a child task:
+
+```python
+from django_async_backend.db import async_acquire
+
+
+async def count(model):
+    async with async_acquire():
+        return await model.async_objects.acount()
+
+
+await count(Book)  # reuses the request's connection
+
+await asyncio.gather(count(Book), count(Author))  # one connection each
+```
+
 ```{warning}
 **Use this sparingly.** Every wrapped call opens a *real* database connection
 for as long as it runs. Fanning out inside a request multiplies your connection

@@ -131,13 +131,11 @@ You can register a callback to run after a successful transaction commit using
 `connection.on_commit`.
 
 ```python
-from django.db import DEFAULT_DB_ALIAS
-from django_async_backend.db import async_connections
+from django_async_backend.db import async_acquire
 
-connection = async_connections[DEFAULT_DB_ALIAS]
-
-async with async_atomic():
-    await connection.on_commit(callback)
+async with async_acquire() as connection:
+    async with async_atomic():
+        await connection.on_commit(callback)
 ```
 
 The callback may be **sync or async** — whatever it returns is awaited if it is

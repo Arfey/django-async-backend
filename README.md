@@ -88,7 +88,7 @@ MIDDLEWARE = [
 
 ```python
 from django.db import models
-from django_async_backend.db import async_connections
+from django_async_backend.db import async_acquire
 from django_async_backend.db.models.base import AsyncModelMixin
 from django_async_backend.db.transaction import async_atomic
 
@@ -102,24 +102,23 @@ async def notify(book_id: int) -> None:
 
 
 async def main() -> None:
-    connection = async_connections["default"]
+    async with async_acquire() as connection:
+        async with async_atomic():
+            book = await Book.async_objects.acreate(name="Django")
 
-    async with async_atomic():
-        book = await Book.async_objects.acreate(name="Django")
+            # async callbacks are supported; runs only if the transaction commits
+            await connection.on_commit(lambda: notify(book.pk))
 
-        # async callbacks are supported; runs only if the transaction commits
-        await connection.on_commit(lambda: notify(book.pk))
+            book.name = "Django Async"
+            await book.async_save(update_fields=["name"])
 
-        book.name = "Django Async"
-        await book.async_save(update_fields=["name"])
+            async with async_atomic():  # savepoint
+                await Book.async_objects.filter(name="draft").adelete()
 
-        async with async_atomic():  # savepoint
-            await Book.async_objects.filter(name="draft").adelete()
+        print(await Book.async_objects.acount())
 
-    print(await Book.async_objects.acount())
-
-    async for row in Book.async_objects.order_by("name"):
-        print(row.pk, row.name)
+        async for row in Book.async_objects.order_by("name"):
+            print(row.pk, row.name)
 ```
 
 Or drop to a raw async cursor:
@@ -143,9 +142,10 @@ async with await connection.cursor() as cursor:
 > onto it either: using it from another task — `asyncio.create_task()`,
 > `asyncio.gather()`, `asyncio.TaskGroup` — raises `RuntimeError`. Wrapping the
 > fan-out in a single `async_atomic()` block does **not** make it safe. To run
-> queries in parallel, give each task its own connection with
-> `async_new_connection` — sparingly, since each call opens a real connection
-> and a wide fan-out can exhaust the server's limit.
+> queries in parallel, wrap each task's work in `async_acquire()`, which opens
+> a connection for a task that doesn't own one. Do it sparingly, since each
+> such connection is a real one and a wide fan-out can exhaust the server's
+> limit.
 
 ## Supported methods
 
