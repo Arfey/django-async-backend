@@ -18,7 +18,7 @@ await Publisher.async_objects.acount()
 ```
 
 Nor can you fan the work out onto that connection to speed it up. It is owned
-by the task that first used it, so handing it to another task — via
+by the task that created it, so handing it to another task — via
 `asyncio.gather()`, `asyncio.create_task()` or `asyncio.TaskGroup` — raises
 `RuntimeError` rather than quietly interleaving commands on it:
 
@@ -59,6 +59,25 @@ whole thing costs about as long as the slowest query rather than the sum.
 
 Without `async_new_connection` all three would reach for the calling task's
 connection, and `gather()` would reject them with `RuntimeError`.
+
+If the same code also runs outside a fan-out, use
+[`async_acquire()`](connections.md#acquiring-a-connection) instead. It reuses
+the current task's connection when there is one, and opens a new one only
+inside a child task:
+
+```python
+from django_async_backend.db import async_acquire
+
+
+async def count(model):
+    async with async_acquire():
+        return await model.async_objects.acount()
+
+
+await count(Book)  # reuses the request's connection
+
+await asyncio.gather(count(Book), count(Author))  # one connection each
+```
 
 ```{warning}
 **Use this sparingly.** Every wrapped call opens a *real* database connection

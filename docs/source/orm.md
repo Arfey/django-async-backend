@@ -12,8 +12,8 @@ boilerplate:
   saving, deleting and reloading instances asynchronously.
 
 ```python
-from django.db import models, DEFAULT_DB_ALIAS
-from django_async_backend.db import async_connections
+from django.db import models
+from django_async_backend.db import async_acquire
 from django_async_backend.db.models.base import AsyncModelMixin
 
 
@@ -22,23 +22,22 @@ class Book(AsyncModelMixin, models.Model):
 
 
 async def main():
-    # create / save an instance
-    book = Book(name="Django")
-    await book.async_save()
+    async with async_acquire():
+        # create / save an instance
+        book = Book(name="Django")
+        await book.async_save()
 
-    # update via update_fields
-    book.name = "Django Async"
-    await book.async_save(update_fields=["name"])
+        # update via update_fields
+        book.name = "Django Async"
+        await book.async_save(update_fields=["name"])
 
-    # query through the async_objects manager
-    async for i in Book.async_objects.all():
-        print(i.id, i.name)
+        # query through the async_objects manager
+        async for i in Book.async_objects.all():
+            print(i.id, i.name)
 
-    # delete a single instance, or a whole queryset
-    await book.async_delete()
-    await Book.async_objects.filter(name="Django Async").adelete()
-
-    await async_connections[DEFAULT_DB_ALIAS].close()
+        # delete a single instance, or a whole queryset
+        await book.async_delete()
+        await Book.async_objects.filter(name="Django Async").adelete()
 ```
 
 :::{admonition} Why `async_save()` and not `asave()`?
@@ -107,8 +106,8 @@ If you prefer, you can attach an `AsyncManager` to a model explicitly instead
 of using `AsyncModelMixin`:
 
 ```python
-from django.db import models, DEFAULT_DB_ALIAS
-from django_async_backend.db import async_connections
+from django.db import models
+from django_async_backend.db import async_acquire
 from django_async_backend.db.models.manager import AsyncManager
 
 
@@ -120,10 +119,9 @@ class Book(models.Model):
 
 
 async def main():
-    async for i in Book.async_objects.all():
-        print(i.id)
-
-    await async_connections[DEFAULT_DB_ALIAS].close()
+    async with async_acquire():
+        async for i in Book.async_objects.all():
+            print(i.id)
 ```
 
 ## Content types

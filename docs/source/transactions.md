@@ -45,7 +45,7 @@ async with async_atomic():
 
 ## Transactions and asyncio tasks
 
-An async connection is owned by the task that first used it. Using it from a
+An async connection is owned by the task that created it. Using it from a
 **different** task — one spawned with `asyncio.create_task()`,
 `asyncio.gather()`, or `asyncio.TaskGroup` — is rejected. This applies to *every*
 operation on the connection, not just to opening a transaction: an ordinary
@@ -131,13 +131,11 @@ You can register a callback to run after a successful transaction commit using
 `connection.on_commit`.
 
 ```python
-from django.db import DEFAULT_DB_ALIAS
-from django_async_backend.db import async_connections
+from django_async_backend.db import async_acquire
 
-connection = async_connections[DEFAULT_DB_ALIAS]
-
-async with async_atomic():
-    await connection.on_commit(callback)
+async with async_acquire() as connection:
+    async with async_atomic():
+        await connection.on_commit(callback)
 ```
 
 The callback may be **sync or async** — whatever it returns is awaited if it is

@@ -11,11 +11,17 @@ things that are easy to get wrong.
   in that task takes turns on it, so awaiting queries in sequence costs the sum
   of their times. Fanning them out does not help either: `asyncio.gather()` and
   friends run each coroutine in its own task, which does not own the
-  connection, so those calls raise `RuntimeError`. To run queries in parallel
-  you must opt in explicitly with `async_new_connection`, which opens a real
-  connection per call — use it sparingly, since a wide fan-out can exhaust the
-  server's connection limit. Do not assume "django-async-backend" parallelizes
-  queries for you.
+  connection, so those calls raise `RuntimeError`. Do not assume
+  "django-async-backend" parallelizes queries for you. To run them in parallel
+  you must opt in explicitly; both options open a real connection per task, so
+  use them sparingly, since a wide fan-out can exhaust the server's connection
+  limit:
+  - `async_new_connection` always opens a fresh connection.
+  - `async_acquire` reuses the connection the current task owns, and opens one
+    only when the task owns none (e.g. inside `asyncio.gather()`). It raises if
+    the parent is inside `async_atomic()`, because the new connection can't see
+    that transaction's uncommitted data; pass `allow_outside_atomic=True` only
+    when that is intended.
 
 - **Part of the ORM is generated, not hand-written.** Some ORM modules are
   produced from Django's source by the `codemon` tool and committed to git, so
