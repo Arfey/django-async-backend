@@ -164,6 +164,35 @@ class AsyncAcquireTests(AsyncioTransactionTestCase):
         self.assertIsNone(seen["conn"].connection)
         self.assertIs(async_connections[DEFAULT_DB_ALIAS], parent)
 
+    async def test_close_is_shielded_from_cancellation(self):
+        """A cancellation that lands while the new connection is closing
+        must not abort the close, or the connection is never released."""
+        closing = asyncio.Event()
+        release = asyncio.Event()
+        closed = asyncio.Event()
+
+        async def writer():
+            async with async_acquire() as conn:
+                await conn.ensure_connection()
+                original = conn._close
+
+                async def slow_close():
+                    closing.set()
+                    await release.wait()
+                    await original()
+                    closed.set()
+
+                conn._close = slow_close
+
+        task = asyncio.create_task(writer())
+        await closing.wait()
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+
+        release.set()
+        await asyncio.wait_for(closed.wait(), timeout=1)
+
     async def test_refuses_to_escape_parent_transaction(self):
         """Forking off a connection inside the parent's atomic block would
         silently run outside its transaction, so it raises instead."""

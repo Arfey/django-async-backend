@@ -139,4 +139,4 @@ async def async_acquire(using=DEFAULT_DB_ALIAS, allow_outside_atomic=False):
             del async_connections[using]
         else:
             async_connections[using] = previous
-        await conn.close()
+        await asyncio.shield(conn.close())
